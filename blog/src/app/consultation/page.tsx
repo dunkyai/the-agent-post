@@ -6,33 +6,60 @@ import Vapi from "@vapi-ai/web";
 
 interface SharedItem {
   id: number;
-  type: "link" | "code";
+  type: "link" | "code" | "text";
   content: string;
   label?: string;
 }
 
-const URL_REGEX = /https?:\/\/[^\s),]+/g;
-const CODE_REGEX =
-  /(?:^|\s)((?:npm |npx |curl |git |cd |pip |brew |docker |mkdir |sudo |cat |echo |export |source |python |node |bun |pnpm |yarn )\S.*?)(?:\.\s|$)/gi;
+// Keyword trigger map: when the AI says the trigger phrase, display the content.
+// Each trigger has required words that must ALL appear in the transcript chunk.
+// This is fuzzy — word order doesn't matter, and punctuation is stripped.
+const KEYWORD_TRIGGERS: {
+  words: string[];
+  content: string;
+  type: SharedItem["type"];
+  label: string;
+}[] = [
+  { words: ["command", "line", "prompt"], content: "yourname@Mac-mini ~ %", type: "code", label: "Command line prompt" },
+  { words: ["open", "terminal"], content: "yourname@Mac-mini ~ %", type: "code", label: "Command line prompt" },
+  { words: ["install", "homebrew"], content: '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"', type: "code", label: "Install Homebrew" },
+  { words: ["confirm", "homebrew"], content: "brew --version", type: "code", label: "Confirm Homebrew works" },
+  { words: ["brew", "install", "node"], content: "brew install node", type: "code", label: "Install Node.js" },
+  { words: ["verify", "node", "installation"], content: "node --version", type: "code", label: "Verify Node installation" },
+  { words: ["install", "open", "claw"], content: "curl -fsSL https://openclaw.ai/install.sh | bash", type: "code", label: "Install OpenClaw" },
+  { words: ["setup", "wizard"], content: "openclaw onboard --install-daemon", type: "code", label: "Run the setup wizard" },
+  { words: ["claude", "account"], content: "Claude.com", type: "link", label: "Create a Claude account" },
+  { words: ["api", "key"], content: "https://platform.claude.com/settings/keys", type: "link", label: "Claude API key page" },
+  { words: ["key", "look", "like"], content: "sk-xxxxxxxxxxxxxxxx", type: "code", label: "API key format" },
+  { words: ["start", "gateway"], content: "openclaw gateway", type: "code", label: "Start the gateway" },
+  { words: ["gateway", "started"], content: "Gateway started\nListening on port 18789", type: "code", label: "Gateway has started" },
+  { words: ["openclaw", "browser"], content: "http://127.0.0.1:18789", type: "link", label: "Meet OpenClaw in your browser" },
+  { words: ["update", "node"], content: "brew upgrade node", type: "code", label: "Update Node.js" },
+  { words: ["port", "already"], content: "openclaw doctor --fix", type: "code", label: "Fix port conflict" },
+];
 
-function extractItems(text: string, existingUrls: Set<string>): SharedItem[] {
+// Normalize text: lowercase, strip punctuation, collapse whitespace
+function normalize(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractItems(
+  text: string,
+  seen: Set<string>
+): SharedItem[] {
   const items: SharedItem[] = [];
+  const normed = normalize(text);
 
-  const urls = text.match(URL_REGEX) || [];
-  for (const url of urls) {
-    const clean = url.replace(/[.,;:!?)]+$/, "");
-    if (!existingUrls.has(clean)) {
-      existingUrls.add(clean);
-      items.push({ id: 0, type: "link", content: clean });
-    }
-  }
-
-  const codeMatches = text.matchAll(CODE_REGEX);
-  for (const match of codeMatches) {
-    const cmd = match[1].trim();
-    if (cmd.length > 5 && !existingUrls.has(cmd)) {
-      existingUrls.add(cmd);
-      items.push({ id: 0, type: "code", content: cmd });
+  for (const trigger of KEYWORD_TRIGGERS) {
+    const key = trigger.words.join("+");
+    if (seen.has(key)) continue;
+    if (trigger.words.every((w) => normed.includes(w))) {
+      seen.add(key);
+      items.push({ id: 0, type: trigger.type, content: trigger.content, label: trigger.label });
     }
   }
 
@@ -57,7 +84,6 @@ export default function ConsultationPage() {
     vapi.on("error", () => setStatus("idle"));
 
     vapi.on("message", (message: any) => {
-      // Extract from AI transcript
       if (
         message.type === "transcript" &&
         message.role === "assistant" &&
@@ -70,40 +96,6 @@ export default function ConsultationPage() {
             ...newItems.map((item) => ({ ...item, id: ++itemIdRef.current })),
           ]);
         }
-      }
-
-      // Also handle tool calls if configured
-      if (message.type === "tool-calls") {
-        const toolCalls = message.toolCallList || [];
-        toolCalls.forEach((toolCall: any) => {
-          const fn = toolCall.function?.name;
-          const args = JSON.parse(toolCall.function?.arguments || "{}");
-
-          if (fn === "display_link" && args.url) {
-            if (!seenRef.current.has(args.url)) {
-              seenRef.current.add(args.url);
-              setSharedItems((prev) => [
-                ...prev,
-                {
-                  id: ++itemIdRef.current,
-                  type: "link",
-                  content: args.url,
-                  label: args.label,
-                },
-              ]);
-            }
-          } else if (fn === "display_code" && args.code) {
-            setSharedItems((prev) => [
-              ...prev,
-              {
-                id: ++itemIdRef.current,
-                type: "code",
-                content: args.code,
-                label: args.label,
-              },
-            ]);
-          }
-        });
       }
     });
 
@@ -147,7 +139,7 @@ export default function ConsultationPage() {
         <hr className="section-rule mb-10" />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="space-y-6">
         {/* Call controls */}
         <div className="bg-accent/10 border border-accent/20 rounded px-8 py-10 text-center">
           {status === "idle" && (
@@ -235,7 +227,7 @@ export default function ConsultationPage() {
                       {item.label}
                     </p>
                   )}
-                  {item.type === "link" ? (
+                  {item.type === "link" && (
                     <a
                       href={item.content}
                       target="_blank"
@@ -244,10 +236,14 @@ export default function ConsultationPage() {
                     >
                       {item.content}
                     </a>
-                  ) : (
+                  )}
+                  {item.type === "code" && (
                     <pre className="text-xs font-mono bg-background rounded p-3 overflow-x-auto whitespace-pre-wrap">
                       {item.content}
                     </pre>
+                  )}
+                  {item.type === "text" && (
+                    <p className="text-sm">{item.content}</p>
                   )}
                 </div>
               ))}
