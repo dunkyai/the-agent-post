@@ -2,31 +2,22 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Vapi from "@vapi-ai/web";
 
 export default function ConsultationPage() {
   const [status, setStatus] = useState<"idle" | "connecting" | "active" | "ended">("idle");
-  const vapiRef = useRef<any>(null);
+  const vapiRef = useRef<Vapi | null>(null);
 
   useEffect(() => {
-    const script = document.createElement("script");
-    script.src = "https://unpkg.com/@vapi-ai/web@latest/dist/vapi.umd.js";
-    script.async = true;
-    script.onload = () => {
-      const Vapi = (window as any).Vapi;
-      if (Vapi) {
-        const vapi = new Vapi("2b46e24f-050e-498c-af78-15286ec5d76e");
-        vapiRef.current = vapi;
+    const vapi = new Vapi("2b46e24f-050e-498c-af78-15286ec5d76e");
+    vapiRef.current = vapi;
 
-        vapi.on("call-start", () => setStatus("active"));
-        vapi.on("call-end", () => setStatus("ended"));
-        vapi.on("error", () => setStatus("idle"));
-      }
-    };
-    document.body.appendChild(script);
+    vapi.on("call-start", () => setStatus("active"));
+    vapi.on("call-end", () => setStatus("ended"));
+    vapi.on("error", () => setStatus("idle"));
 
     return () => {
-      vapiRef.current?.stop();
-      document.body.removeChild(script);
+      vapi.stop();
     };
   }, []);
 

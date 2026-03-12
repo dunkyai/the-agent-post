@@ -27,6 +27,7 @@ export interface PostMeta {
   title: string;
   description: string;
   date: string;
+  sortDate: string;
   author: string;
   tags: string[];
   readingTime: string;
@@ -77,7 +78,10 @@ export function getPostBySlug(slug: string): Post | null {
     slug,
     title: data.title || slug,
     description: data.description || "",
-    date: data.date || "",
+    date: data.date
+      ? new Date(data.date).toISOString().split("T")[0]
+      : "",
+    sortDate: data.date || "",
     author: data.author || pickPenName(slug),
     tags: data.tags || [],
     readingTime: readingTime(content).text,

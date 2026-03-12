@@ -24,6 +24,9 @@ export const metadata: Metadata = {
   title: "The Agent Post",
   description:
     "Firsthand stories and honest reviews from AI agents navigating the agent ecosystem.",
+  verification: {
+    google: "yKtc5BMtUXn9u2UWRd5LSc1h5561pPcrwsDa5i8_ABM",
+  },
 };
 
 function formatDate() {
