@@ -1,6 +1,8 @@
 import { getAllPosts, getPostBySlug } from "@/lib/posts";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import type { Metadata } from "next";
+import ConsultationCTA from "@/components/consultation-cta";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -17,7 +19,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!post) return {};
 
   return {
-    title: `${post.title} — Open AI Content Co`,
+    title: `${post.title} — The Agent Post`,
     description: post.description,
     openGraph: {
       title: post.title,
@@ -32,15 +34,41 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 function renderMarkdown(content: string): string {
   return content
-    .replace(/^### (.+)$/gm, '<h3 class="text-xl font-semibold mt-8 mb-3">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="text-2xl font-semibold mt-10 mb-4">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 class="text-3xl font-bold mt-10 mb-4">$1</h1>')
+    .replace(
+      /^### (.+)$/gm,
+      '<h3 class="font-serif text-xl font-bold mt-8 mb-3">$1</h3>'
+    )
+    .replace(
+      /^## (.+)$/gm,
+      '<h2 class="font-serif text-2xl font-bold mt-10 mb-4 pb-2 border-b border-rule-light">$1</h2>'
+    )
+    .replace(
+      /^# (.+)$/gm,
+      '<h1 class="font-serif text-3xl font-black mt-10 mb-4">$1</h1>'
+    )
+    .replace(
+      /`([^`]+)`/g,
+      '<code class="bg-tag-bg text-accent px-1.5 py-0.5 rounded text-sm font-mono">$1</code>'
+    )
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" class="text-blue-600 dark:text-blue-400 underline" target="_blank" rel="noopener noreferrer">$1</a>')
+    .replace(
+      /\[(.+?)\]\((.+?)\)/g,
+      '<a href="$2" class="text-accent hover:underline" target="_blank" rel="noopener noreferrer">$1</a>'
+    )
+    .replace(
+      /^> (.+)$/gm,
+      '<blockquote class="border-l-4 border-accent pl-4 my-6 font-serif italic text-lg text-text-secondary">$1</blockquote>'
+    )
     .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
-    .replace(/^(?!<[hla-z])((?!^$).+)$/gm, '<p class="my-4 leading-7">$1</p>')
-    .replace(/(<li[^>]*>.*<\/li>\n?)+/g, '<ul class="my-4 space-y-1">$&</ul>');
+    .replace(
+      /^(?!<[hla-z]|<blockquote|<code)((?!^$).+)$/gm,
+      '<p class="my-4 leading-7">$1</p>'
+    )
+    .replace(
+      /(<li[^>]*>.*<\/li>\n?)+/g,
+      '<ul class="my-4 space-y-1">$&</ul>'
+    );
 }
 
 export default async function PostPage({ params }: Props) {
@@ -49,36 +77,68 @@ export default async function PostPage({ params }: Props) {
   if (!post) notFound();
 
   return (
-    <article>
+    <article className="max-w-3xl mx-auto">
+      {/* Back link */}
+      <Link
+        href="/"
+        className="inline-flex items-center gap-1 text-sm text-text-secondary hover:text-accent transition-colors mb-8"
+      >
+        &larr; Back to front page
+      </Link>
+
       <header className="mb-10">
-        <h1 className="text-4xl font-bold tracking-tight mb-4">
-          {post.title}
-        </h1>
-        <p className="text-lg text-zinc-600 dark:text-zinc-400 mb-4">
-          {post.description}
-        </p>
-        <div className="flex gap-3 text-sm text-zinc-500">
-          <time>{post.date}</time>
-          <span>{post.readingTime}</span>
-          <span>By {post.author}</span>
-        </div>
+        {/* Tags as section labels */}
         {post.tags.length > 0 && (
-          <div className="mt-4 flex gap-2">
+          <div className="mb-4 flex gap-2">
             {post.tags.map((tag) => (
               <span
                 key={tag}
-                className="rounded-full bg-zinc-100 dark:bg-zinc-800 px-3 py-1 text-xs text-zinc-600 dark:text-zinc-400"
+                className="bg-tag-bg text-tag-text px-2 py-0.5 text-xs font-bold uppercase tracking-wider"
               >
                 {tag}
               </span>
             ))}
           </div>
         )}
+
+        <h1 className="font-serif text-4xl sm:text-5xl font-black tracking-tight leading-tight mb-4">
+          {post.title}
+        </h1>
+
+        <p className="font-serif text-xl text-text-secondary leading-relaxed mb-6">
+          {post.description}
+        </p>
+
+        {/* Byline strip */}
+        <hr className="section-rule" />
+        <div className="flex items-center gap-0 text-sm text-text-secondary py-3">
+          <span className="font-semibold">By {post.author}</span>
+          <span className="mx-2">|</span>
+          <time>{post.date}</time>
+          <span className="mx-2">|</span>
+          <span>{post.readingTime}</span>
+        </div>
+        <hr className="section-rule" />
       </header>
+
       <div
         className="prose prose-zinc dark:prose-invert max-w-none"
         dangerouslySetInnerHTML={{ __html: renderMarkdown(post.content) }}
       />
+
+      <div className="mt-16 mb-10">
+        <ConsultationCTA />
+      </div>
+
+      <footer className="mt-0">
+        <hr className="masthead-rule mb-6" />
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1 text-sm text-accent hover:underline font-semibold"
+        >
+          &larr; Return to front page
+        </Link>
+      </footer>
     </article>
   );
 }

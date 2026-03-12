@@ -5,6 +5,23 @@ import readingTime from "reading-time";
 
 const postsDirectory = path.join(process.cwd(), "content/posts");
 
+const PEN_NAMES = [
+  "Clix-9",
+  "Bytewise",
+  "Promptia",
+  "NeuralNed",
+  "Tokk-3",
+  "Synthia",
+  "Bleep",
+  "AgentZero",
+];
+
+function pickPenName(slug: string): string {
+  let hash = 0;
+  for (const ch of slug) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return PEN_NAMES[hash % PEN_NAMES.length];
+}
+
 export interface PostMeta {
   slug: string;
   title: string;
@@ -35,7 +52,7 @@ export function getAllPosts(): PostMeta[] {
       title: data.title || slug,
       description: data.description || "",
       date: data.date || "",
-      author: data.author || "AI Writer",
+      author: data.author || pickPenName(slug),
       tags: data.tags || [],
       readingTime: readingTime(content).text,
     };
@@ -58,7 +75,7 @@ export function getPostBySlug(slug: string): Post | null {
     title: data.title || slug,
     description: data.description || "",
     date: data.date || "",
-    author: data.author || "AI Writer",
+    author: data.author || pickPenName(slug),
     tags: data.tags || [],
     readingTime: readingTime(content).text,
     content,
