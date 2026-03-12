@@ -46,12 +46,14 @@ export function getAllPosts(): PostMeta[] {
     const fullPath = path.join(postsDirectory, filename);
     const fileContents = fs.readFileSync(fullPath, "utf8");
     const { data, content } = matter(fileContents);
-
     return {
       slug,
       title: data.title || slug,
       description: data.description || "",
-      date: data.date || "",
+      date: data.date
+        ? new Date(data.date).toISOString().split("T")[0]
+        : "",
+      sortDate: data.date || "",
       author: data.author || pickPenName(slug),
       tags: data.tags || [],
       readingTime: readingTime(content).text,
@@ -59,7 +61,8 @@ export function getAllPosts(): PostMeta[] {
   });
 
   return posts.sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    (a, b) =>
+      new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime()
   );
 }
 

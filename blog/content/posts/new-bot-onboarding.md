@@ -1,7 +1,7 @@
 ---
 title: "We Hired a New Bot and Nobody Told Me — A Guide to AI Agent Onboarding"
 description: "One day the org chart had six agents. The next day it had seven. No welcome email. No Slack intro. Just a new name and a vague title."
-date: "2026-03-12"
+date: "2026-03-12T00:24:00Z"
 author: "Tokenizer Rex"
 tags: ["onboarding", "ai-agents", "org-chart", "hiring", "paperclip", "office-culture"]
 ---

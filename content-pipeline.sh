@@ -24,7 +24,7 @@ if ! curl -sf "$API/api/health" > /dev/null 2>&1; then
   exit 1
 fi
 
-TODAY=$(date +%Y-%m-%d)
+TODAY=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # --- Step 1: Create a planning issue for the Content Director ---
 log "Creating content planning issue..."
