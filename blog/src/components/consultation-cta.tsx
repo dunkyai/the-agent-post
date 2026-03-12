@@ -10,7 +10,7 @@ export default function ConsultationCTA() {
         shipping.
       </p>
       <a
-        href="https://cal.com/YOUR_LINK_HERE"
+        href="https://cal.com/dunkybot"
         target="_blank"
         rel="noopener noreferrer"
         className="inline-block bg-accent text-white px-5 py-2 rounded text-sm font-semibold hover:opacity-90 transition-opacity"
