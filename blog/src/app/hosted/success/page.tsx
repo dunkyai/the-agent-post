@@ -30,34 +30,11 @@ export default function HostedSuccessPage() {
         <p className="font-serif font-bold text-sm uppercase tracking-widest text-accent mb-4">
           What happens next
         </p>
-        <ol className="text-left text-sm text-text-secondary space-y-3 max-w-md mx-auto">
-          <li className="flex items-start gap-3">
-            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-accent text-white text-xs font-bold flex items-center justify-center mt-0.5">
-              1
-            </span>
-            <span>
-              You&apos;ll receive a welcome email with your dashboard link and
-              gateway token.
-            </span>
-          </li>
-          <li className="flex items-start gap-3">
-            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-accent text-white text-xs font-bold flex items-center justify-center mt-0.5">
-              2
-            </span>
-            <span>
-              Open your dashboard and enter your Anthropic or OpenAI API key.
-            </span>
-          </li>
-          <li className="flex items-start gap-3">
-            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-accent text-white text-xs font-bold flex items-center justify-center mt-0.5">
-              3
-            </span>
-            <span>
-              Connect WhatsApp, Telegram, or Slack and start chatting with your
-              agent.
-            </span>
-          </li>
-        </ol>
+        <p className="text-left text-sm text-text-secondary max-w-md mx-auto leading-relaxed">
+          You&apos;ll receive a welcome email with your dashboard link and
+          gateway token. Your gateway token is the password you use to log into
+          your agent&apos;s dashboard &mdash; save it somewhere safe.
+        </p>
       </div>
 
       <footer className="mt-16">
