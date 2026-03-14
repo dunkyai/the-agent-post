@@ -139,7 +139,7 @@ async function sendReply(to: string, originalSubject: string, body: string): Pro
     });
 
     if (res.status === 403) {
-      console.log("Email send skipped (Tier 0 — upgrade to send replies)");
+      console.log("Email reply skipped (Tier 0 — upgrade to send replies)");
       return;
     }
 
@@ -213,8 +213,7 @@ export async function sendEmailMessage(to: string, subject: string, body: string
   });
 
   if (res.status === 403) {
-    console.log("Email send skipped (Tier 0)");
-    return;
+    throw new Error("LobsterMail sending requires a Tier 1+ API key. This inbox is receive-only. The user can upgrade on the Integrations page, or use Gmail Draft & Send instead.");
   }
 
   if (!res.ok) {

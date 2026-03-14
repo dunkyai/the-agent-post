@@ -24,7 +24,7 @@
       </div>
 
       <div class="card">
-        <p style="margin-bottom: 16px; font-size: 14px; color: var(--text);">Pick a brain (LLM) for your OpenClaw</p>
+        <p style="margin-bottom: 16px; font-size: 14px; color: var(--text);">Pick a brain (LLM) for your OpenClaw. Here's where to <a href="https://theagentpost.co/guides/find-your-api-key" target="_blank" style="color: var(--accent); text-decoration: underline;">find your API key</a></p>
         <div class="form-group">
           <label for="provider">Provider</label>
           <select id="provider" name="provider">
@@ -83,19 +83,17 @@
     ]
   };
 
-  var guideLink = ' <a href="https://theagentpost.co/guides/find-your-api-key" target="_blank" style="color: var(--accent); text-decoration: underline;">How to find your API key</a>';
-
   var hints = {
     anthropic: {
       placeholder: "<%= hasAnthropicKey ? '••••••••••••' : 'sk-ant-...' %>",
       saved: <%= hasAnthropicKey ? 'true' : 'false' %>,
-      text: 'An API key lets your agent talk to the AI. Get yours at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color: var(--accent); text-decoration: underline;">console.anthropic.com</a> under API Keys.' + guideLink,
+      text: 'Get yours at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color: var(--accent); text-decoration: underline;">console.anthropic.com</a> under API Keys.',
       savedText: "Key is saved. Enter a new value to replace it, or leave blank to keep."
     },
     openai: {
       placeholder: "<%= hasOpenaiKey ? '••••••••••••' : 'sk-...' %>",
       saved: <%= hasOpenaiKey ? 'true' : 'false' %>,
-      text: 'An API key lets your agent talk to the AI. Get yours at <a href="https://platform.openai.com/api-keys" target="_blank" style="color: var(--accent); text-decoration: underline;">platform.openai.com</a> under API Keys.' + guideLink,
+      text: 'Get yours at <a href="https://platform.openai.com/api-keys" target="_blank" style="color: var(--accent); text-decoration: underline;">platform.openai.com</a> under API Keys.',
       savedText: "Key is saved. Enter a new value to replace it, or leave blank to keep."
     }
   };

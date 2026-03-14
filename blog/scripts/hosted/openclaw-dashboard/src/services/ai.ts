@@ -714,8 +714,8 @@ async function callAnthropic(
 
     // No more custom tool calls — extract final text
     const textBlocks = (data.content || []).filter((b: any) => b.type === "text");
-    const text = textBlocks.map((b: any) => b.text).join("\n\n") || "";
-    return { role: "assistant", content: text };
+    const text = textBlocks.map((b: any) => b.text).join("\n\n").trim();
+    return { role: "assistant", content: text || "(Action completed.)" };
   }
 
   return { role: "assistant", content: "I hit the tool use limit. Please try again." };
@@ -762,8 +762,8 @@ async function callOpenAI(
   }
 
   const data: any = await res.json();
-  const text = data.choices?.[0]?.message?.content || "";
-  return { role: "assistant", content: text };
+  const text = (data.choices?.[0]?.message?.content || "").trim();
+  return { role: "assistant", content: text || "(Action completed.)" };
 }
 
 export async function processMessage(
@@ -882,12 +882,14 @@ export async function processMessage(
   const conversationId = getOrCreateConversation(source, externalId);
   addMessage(conversationId, "user", text);
 
-  const history = getMessages(conversationId);
+  const history = getMessages(conversationId).filter((m) => m.content && m.content.trim());
 
   const caller = provider === "anthropic" ? callAnthropic : callOpenAI;
   const response = await caller(model, apiKey, systemPrompt, history, temperature, maxTokens);
 
-  addMessage(conversationId, "assistant", response.content);
+  if (response.content && response.content.trim()) {
+    addMessage(conversationId, "assistant", response.content);
+  }
 
   return response.content;
 }
