@@ -1,7 +1,7 @@
 import {
   getSetting, getIntegration, getOrCreateConversation, addMessage, getMessages,
   getConversationsByType, createScheduledJob, getAllScheduledJobs, getScheduledJob,
-  deleteScheduledJob,
+  deleteScheduledJob, addMemory, getAllMemories, deleteMemory, getMemory,
 } from "./db";
 import { decrypt } from "./encryption";
 import { getNextRun, isValidCron, describeCron } from "./cron";
@@ -59,6 +59,59 @@ const SCHEDULING_TOOLS = [
     },
   },
 ];
+
+const MEMORY_TOOLS = [
+  {
+    name: "save_memory",
+    description: "Save an important fact, preference, or piece of information to long-term memory. Use this proactively when the user shares something worth remembering (preferences, facts about themselves, decisions, important context). Also use when they explicitly say 'remember this'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        content: { type: "string", description: "The fact or information to remember. Be concise but specific." },
+      },
+      required: ["content"],
+    },
+  },
+  {
+    name: "list_memories",
+    description: "List all saved memories. Use when the user asks what you remember about them.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "delete_memory",
+    description: "Delete a memory by its ID. Use when the user asks to forget something or when information is outdated.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        memory_id: { type: "number", description: "The ID of the memory to delete" },
+      },
+      required: ["memory_id"],
+    },
+  },
+];
+
+function executeMemoryTool(toolName: string, input: any): string {
+  switch (toolName) {
+    case "save_memory": {
+      const id = addMemory(input.content);
+      return JSON.stringify({ success: true, memory_id: id, content: input.content });
+    }
+    case "list_memories": {
+      const memories = getAllMemories();
+      return JSON.stringify({
+        memories: memories.map((m) => ({ id: m.id, content: m.content, created_at: m.created_at })),
+      });
+    }
+    case "delete_memory": {
+      const mem = getMemory(input.memory_id);
+      if (!mem) return JSON.stringify({ error: `Memory #${input.memory_id} not found.` });
+      deleteMemory(input.memory_id);
+      return JSON.stringify({ success: true, deleted: mem.content });
+    }
+    default:
+      return JSON.stringify({ error: `Unknown tool: ${toolName}` });
+  }
+}
 
 function executeSchedulingTool(toolName: string, input: any): string {
   switch (toolName) {
@@ -121,6 +174,7 @@ async function callAnthropic(
   const tools: any[] = [
     { type: "web_search_20250305", name: "web_search" },
     ...SCHEDULING_TOOLS,
+    ...MEMORY_TOOLS,
   ];
 
   const apiMessages: any[] = messages.map((m) => ({
@@ -166,7 +220,10 @@ async function callAnthropic(
       // Execute each tool and build results
       const toolResults: any[] = [];
       for (const toolBlock of customToolUseBlocks) {
-        const result = executeSchedulingTool(toolBlock.name, toolBlock.input);
+        const isMemoryTool = ["save_memory", "list_memories", "delete_memory"].includes(toolBlock.name);
+        const result = isMemoryTool
+          ? executeMemoryTool(toolBlock.name, toolBlock.input)
+          : executeSchedulingTool(toolBlock.name, toolBlock.input);
         toolResults.push({
           type: "tool_result",
           tool_use_id: toolBlock.id,
@@ -278,6 +335,19 @@ export async function processMessage(
 
         systemPrompt = systemPrompt ? `${systemPrompt}\n\n${emailContext}` : emailContext;
       }
+    }
+  } catch {}
+
+  // Inject long-term memories
+  try {
+    const memories = getAllMemories();
+    if (memories.length > 0) {
+      const memoryList = memories.map((m) => `- ${m.content}`).join("\n");
+      const memContext = `Your long-term memories (things you've been asked to remember or proactively saved):\n${memoryList}\n\nUse the save_memory tool to remember new important facts. Use delete_memory to remove outdated ones.`;
+      systemPrompt = systemPrompt ? `${systemPrompt}\n\n${memContext}` : memContext;
+    } else {
+      const memContext = "You have a long-term memory system. Use the save_memory tool to remember important facts, user preferences, and key information across conversations. Be proactive about saving things worth remembering.";
+      systemPrompt = systemPrompt ? `${systemPrompt}\n\n${memContext}` : memContext;
     }
   } catch {}
 

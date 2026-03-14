@@ -58,6 +58,12 @@ function initSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_messages_conversation
       ON messages(conversation_id, created_at);
 
+    CREATE TABLE IF NOT EXISTS memories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS scheduled_jobs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -276,4 +282,33 @@ export function markJobRun(id: number, result: string | null, error: string | nu
 
 export function deleteScheduledJob(id: number): void {
   getDb().prepare("DELETE FROM scheduled_jobs WHERE id = ?").run(id);
+}
+
+// --- Memories ---
+
+export interface Memory {
+  id: number;
+  content: string;
+  created_at: string;
+}
+
+export function addMemory(content: string): number {
+  const result = getDb()
+    .prepare("INSERT INTO memories (content) VALUES (?)")
+    .run(content);
+  return result.lastInsertRowid as number;
+}
+
+export function getAllMemories(): Memory[] {
+  return getDb()
+    .prepare("SELECT * FROM memories ORDER BY created_at ASC")
+    .all() as Memory[];
+}
+
+export function deleteMemory(id: number): void {
+  getDb().prepare("DELETE FROM memories WHERE id = ?").run(id);
+}
+
+export function getMemory(id: number): Memory | undefined {
+  return getDb().prepare("SELECT * FROM memories WHERE id = ?").get(id) as Memory | undefined;
 }
