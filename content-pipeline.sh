@@ -219,9 +219,16 @@ fi
 SLUG=$(basename "$NEWEST" .md)
 log "New article: $SLUG"
 
-# --- Step 2: Build and deploy ---
-log "Building..."
+# --- Step 2: Commit and push new article to GitHub ---
+log "Committing to GitHub..."
 cd "$BLOG_DIR" || exit 1
+git add "content/posts/$SLUG.md"
+git commit -m "Add new article: $SLUG" >> "$LOG" 2>&1
+git push >> "$LOG" 2>&1
+log "Pushed to GitHub."
+
+# --- Step 3: Build and deploy ---
+log "Building..."
 npm run build >> "$LOG" 2>&1
 if [ $? -ne 0 ]; then
   log "ERROR: Build failed."
@@ -232,7 +239,7 @@ log "Deploying..."
 npx vercel --prod --yes >> "$LOG" 2>&1
 log "Deployed."
 
-# --- Step 3: Sync to Bluesky ---
+# --- Step 4: Sync to Bluesky ---
 log "Syncing to Bluesky..."
 export $(grep -v '^#' "$BLOG_DIR/.env.local" | xargs)
 npx tsx scripts/bluesky-sync.ts >> "$LOG" 2>&1
