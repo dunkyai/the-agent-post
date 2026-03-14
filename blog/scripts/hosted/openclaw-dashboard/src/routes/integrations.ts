@@ -25,7 +25,6 @@ router.get("/integrations", (req: Request, res: Response) => {
 
   res.render("integrations", {
     telegram: integrationMap["telegram"] || { status: "disconnected", error_message: null },
-    whatsapp: integrationMap["whatsapp"] || { status: "disconnected", error_message: null },
     slack: integrationMap["slack"] || { status: "disconnected", error_message: null },
     email: {
       ...(integrationMap["email"] || { status: "disconnected", error_message: null }),
@@ -58,35 +57,6 @@ router.post("/integrations/telegram/disconnect", (req: Request, res: Response) =
   stopTelegram();
   upsertIntegration("telegram", "{}", "disconnected");
   res.redirect("/integrations?flash=Telegram+disconnected");
-});
-
-router.post("/integrations/whatsapp/connect", (req: Request, res: Response) => {
-  try {
-    const { phone_number_id, access_token, verify_token } = req.body;
-    if (!phone_number_id?.trim() || !access_token?.trim() || !verify_token?.trim()) {
-      res.redirect("/integrations?flash=All+WhatsApp+fields+are+required");
-      return;
-    }
-
-    const config = encrypt(
-      JSON.stringify({
-        phone_number_id: phone_number_id.trim(),
-        access_token: access_token.trim(),
-        verify_token: verify_token.trim(),
-      })
-    );
-    upsertIntegration("whatsapp", config, "connected");
-    res.redirect("/integrations?flash=WhatsApp+connected");
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    upsertIntegration("whatsapp", "{}", "error", message);
-    res.redirect("/integrations?flash=WhatsApp+error:+" + encodeURIComponent(message));
-  }
-});
-
-router.post("/integrations/whatsapp/disconnect", (req: Request, res: Response) => {
-  upsertIntegration("whatsapp", "{}", "disconnected");
-  res.redirect("/integrations?flash=WhatsApp+disconnected");
 });
 
 router.post("/integrations/slack/connect", async (req: Request, res: Response) => {
