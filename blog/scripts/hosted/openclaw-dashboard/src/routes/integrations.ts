@@ -4,6 +4,7 @@ import { encrypt, decrypt } from "../services/encryption";
 import { startTelegram, stopTelegram, isTelegramRunning } from "../services/telegram";
 import { startSlack, stopSlack, isSlackRunning } from "../services/slack";
 import { signupAndCreateInbox, createInbox, startEmail, stopEmail, isEmailRunning } from "../services/email";
+import { buildOAuthUrl, stopGoogle, isGoogleRunning } from "../services/google";
 
 const router = Router();
 
@@ -23,12 +24,28 @@ router.get("/integrations", (req: Request, res: Response) => {
     } catch {}
   }
 
+  let googleEmail: string | null = null;
+  let googleServices: string[] = [];
+  const googleIntegration = integrationMap["google"];
+  if (googleIntegration && googleIntegration.status === "connected") {
+    try {
+      const config = JSON.parse(decrypt(googleIntegration.config));
+      googleEmail = config.google_email || null;
+      googleServices = config.services || [];
+    } catch {}
+  }
+
   res.render("integrations", {
     telegram: integrationMap["telegram"] || { status: "disconnected", error_message: null },
     slack: integrationMap["slack"] || { status: "disconnected", error_message: null },
     email: {
       ...(integrationMap["email"] || { status: "disconnected", error_message: null }),
       email_address: emailAddress,
+    },
+    google: {
+      ...(integrationMap["google"] || { status: "disconnected", error_message: null }),
+      google_email: googleEmail,
+      services: googleServices,
     },
     flash: req.query.flash || null,
   });
@@ -122,6 +139,41 @@ router.post("/integrations/email/disconnect", (req: Request, res: Response) => {
   stopEmail();
   upsertIntegration("email", "{}", "disconnected");
   res.redirect("/integrations?flash=Email+disconnected");
+});
+
+router.post("/integrations/google/connect", (req: Request, res: Response) => {
+  try {
+    const services = req.body.services;
+    const serviceList = Array.isArray(services) ? services : services ? [services] : [];
+    if (serviceList.length === 0) {
+      res.redirect("/integrations?flash=Select+at+least+one+Google+service");
+      return;
+    }
+    const url = buildOAuthUrl(serviceList);
+    res.redirect(url);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.redirect("/integrations?flash=Google+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/google/disconnect", async (req: Request, res: Response) => {
+  // Revoke token at Google (fire-and-forget)
+  try {
+    const integration = getIntegration("google");
+    if (integration && integration.status === "connected") {
+      const config = JSON.parse(decrypt(integration.config));
+      if (config.refresh_token) {
+        fetch(`https://oauth2.googleapis.com/revoke?token=${config.refresh_token}`, {
+          method: "POST",
+        }).catch(() => {});
+      }
+    }
+  } catch {}
+
+  stopGoogle();
+  upsertIntegration("google", "{}", "disconnected");
+  res.redirect("/integrations?flash=Google+disconnected");
 });
 
 export default router;

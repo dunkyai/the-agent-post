@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
-import { getIntegration } from "../services/db";
-import { decrypt } from "../services/encryption";
+import { getIntegration, upsertIntegration } from "../services/db";
+import { encrypt, decrypt } from "../services/encryption";
+import { startGoogle } from "../services/google";
 
 const router = Router();
 
@@ -57,6 +58,37 @@ router.post("/webhook/email", async (req: Request, res: Response) => {
   }
 
   res.sendStatus(200);
+});
+
+// Google OAuth — provisioning API delivers tokens here after consent
+router.post("/webhook/google/tokens", async (req: Request, res: Response) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (token !== process.env.GATEWAY_TOKEN) {
+    res.sendStatus(401);
+    return;
+  }
+
+  try {
+    const { access_token, refresh_token, expires_in, services, google_email } = req.body;
+
+    const configData = {
+      access_token,
+      refresh_token,
+      token_expiry: new Date(Date.now() + expires_in * 1000).toISOString(),
+      services,
+      google_email,
+    };
+
+    const config = encrypt(JSON.stringify(configData));
+    upsertIntegration("google", config, "connected");
+    startGoogle(configData);
+
+    console.log(`Google connected for ${google_email} with services: ${services.join(", ")}`);
+    res.json({ ok: true });
+  } catch (err: unknown) {
+    console.error("Google token delivery error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Failed to store Google tokens" });
+  }
 });
 
 export default router;

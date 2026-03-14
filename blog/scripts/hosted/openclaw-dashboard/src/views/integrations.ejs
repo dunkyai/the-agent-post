@@ -97,6 +97,65 @@
         </form>
       <% } %>
     </div>
+
+    <!-- Google -->
+    <div class="card">
+      <div class="integration-header">
+        <h3>Google</h3>
+        <span class="status-badge status-<%= google.status %>"><%= google.status %></span>
+      </div>
+
+      <% if (google.error_message) { %>
+        <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= google.error_message %></p>
+      <% } %>
+
+      <% if (google.status === 'connected') { %>
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 13px; color: var(--muted);">Connected Account</label>
+          <div style="margin-top: 4px;">
+            <code style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px;"><%= google.google_email %></code>
+          </div>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 13px; color: var(--muted);">Connected Services</label>
+          <div style="margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap;">
+            <% for (const svc of google.services) { %>
+              <span class="status-badge status-connected"><%= svc.charAt(0).toUpperCase() + svc.slice(1) %></span>
+            <% } %>
+          </div>
+        </div>
+        <div class="hint" style="margin-bottom: 12px;">To change services, disconnect and reconnect with new selections.</div>
+        <form method="POST" action="/integrations/google/disconnect">
+          <button type="submit" class="btn btn-danger">Disconnect</button>
+        </form>
+      <% } else { %>
+        <form method="POST" action="/integrations/google/connect">
+          <div class="form-group">
+            <label>Select Google services to connect:</label>
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                <input type="checkbox" name="services" value="gmail" checked>
+                <strong>Gmail</strong> &mdash; Read, send, draft, and label emails
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                <input type="checkbox" name="services" value="calendar">
+                <strong>Calendar</strong> &mdash; View and create events
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                <input type="checkbox" name="services" value="drive">
+                <strong>Drive</strong> &mdash; Search, read, and create files
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                <input type="checkbox" name="services" value="contacts">
+                <strong>Contacts</strong> &mdash; Search and create contacts
+              </label>
+            </div>
+            <div class="hint" style="margin-top: 8px;">At least one service must be selected. Your agent will only access services you enable.</div>
+          </div>
+          <button type="submit" class="btn">Connect with Google</button>
+        </form>
+      <% } %>
+    </div>
   </div>
 </div>
 <%- include('partials/foot') %>

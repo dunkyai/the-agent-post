@@ -5,6 +5,13 @@ import {
 } from "./db";
 import { decrypt } from "./encryption";
 import { getNextRun, isValidCron, describeCron } from "./cron";
+import {
+  isGoogleRunning, getConnectedServices,
+  gmailSearch, gmailReadMessage, gmailSend, gmailCreateDraft, gmailAddLabel,
+  calendarListEvents, calendarCreateEvent, calendarUpdateEvent, calendarDeleteEvent,
+  driveSearch, driveReadFile, driveCreateFile,
+  contactsSearch, contactsCreate,
+} from "./google";
 
 interface AIResponse {
   role: string;
@@ -175,6 +182,240 @@ const MEMORY_TOOLS = [
   },
 ];
 
+// --- Google Tools ---
+
+const GOOGLE_GMAIL_TOOLS = [
+  {
+    name: "gmail_search",
+    description: "Search Gmail messages. Use Gmail search syntax: 'from:john@example.com', 'subject:invoice', 'is:unread', 'newer_than:7d'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Gmail search query" },
+        max_results: { type: "number", description: "Max results (default: 10, max: 20)" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "gmail_read_message",
+    description: "Read the full content of a Gmail message by ID. Use after gmail_search.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        message_id: { type: "string", description: "The Gmail message ID" },
+      },
+      required: ["message_id"],
+    },
+  },
+  {
+    name: "gmail_send",
+    description: "Send an email from the user's Gmail.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        to: { type: "string", description: "Recipient email" },
+        subject: { type: "string", description: "Subject line" },
+        body: { type: "string", description: "Email body (plain text)" },
+      },
+      required: ["to", "subject", "body"],
+    },
+  },
+  {
+    name: "gmail_create_draft",
+    description: "Create a draft email without sending it.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        to: { type: "string", description: "Recipient email" },
+        subject: { type: "string", description: "Subject line" },
+        body: { type: "string", description: "Email body (plain text)" },
+      },
+      required: ["to", "subject", "body"],
+    },
+  },
+  {
+    name: "gmail_label",
+    description: "Add a label to a Gmail message.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        message_id: { type: "string", description: "The Gmail message ID" },
+        label_name: { type: "string", description: "Label name (e.g., 'IMPORTANT', 'STARRED', or custom)" },
+      },
+      required: ["message_id", "label_name"],
+    },
+  },
+];
+
+const GOOGLE_CALENDAR_TOOLS = [
+  {
+    name: "calendar_list_events",
+    description: "List upcoming calendar events.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        time_min: { type: "string", description: "Start of range (ISO 8601). Defaults to now." },
+        time_max: { type: "string", description: "End of range (ISO 8601). Defaults to 7 days." },
+        max_results: { type: "number", description: "Max events (default: 10)" },
+      },
+    },
+  },
+  {
+    name: "calendar_create_event",
+    description: "Create a new calendar event.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        summary: { type: "string", description: "Event title" },
+        start: { type: "string", description: "Start time (ISO 8601)" },
+        end: { type: "string", description: "End time (ISO 8601)" },
+        description: { type: "string", description: "Event description" },
+        attendees: { type: "string", description: "Comma-separated attendee emails" },
+        location: { type: "string", description: "Event location" },
+      },
+      required: ["summary", "start", "end"],
+    },
+  },
+  {
+    name: "calendar_update_event",
+    description: "Update an existing calendar event.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        event_id: { type: "string", description: "Event ID" },
+        summary: { type: "string", description: "New title" },
+        start: { type: "string", description: "New start time" },
+        end: { type: "string", description: "New end time" },
+        description: { type: "string", description: "New description" },
+      },
+      required: ["event_id"],
+    },
+  },
+  {
+    name: "calendar_delete_event",
+    description: "Delete a calendar event.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        event_id: { type: "string", description: "Event ID to delete" },
+      },
+      required: ["event_id"],
+    },
+  },
+];
+
+const GOOGLE_DRIVE_TOOLS = [
+  {
+    name: "drive_search",
+    description: "Search Google Drive files by name.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Search query (file name keywords)" },
+        max_results: { type: "number", description: "Max files (default: 10)" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "drive_read_file",
+    description: "Read content of a Google Drive file. Supports Docs (text), Sheets (CSV), and text files.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        file_id: { type: "string", description: "Google Drive file ID" },
+      },
+      required: ["file_id"],
+    },
+  },
+  {
+    name: "drive_create_file",
+    description: "Create a new file in Google Drive.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "File name" },
+        content: { type: "string", description: "File content" },
+        mime_type: { type: "string", description: "MIME type. Use 'application/vnd.google-apps.document' for Docs, 'text/plain' for text." },
+        folder_id: { type: "string", description: "Parent folder ID (optional)" },
+      },
+      required: ["name", "content"],
+    },
+  },
+];
+
+const GOOGLE_CONTACTS_TOOLS = [
+  {
+    name: "contacts_search",
+    description: "Search Google Contacts by name, email, or phone.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Search query" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "contacts_create",
+    description: "Create a new Google Contact.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        given_name: { type: "string", description: "First name" },
+        family_name: { type: "string", description: "Last name" },
+        email: { type: "string", description: "Email address" },
+        phone: { type: "string", description: "Phone number" },
+      },
+      required: ["given_name"],
+    },
+  },
+];
+
+async function executeGoogleTool(toolName: string, input: any): Promise<string> {
+  if (!isGoogleRunning()) {
+    return JSON.stringify({ error: "Google is not connected. Ask the user to connect Google in the integrations page." });
+  }
+
+  try {
+    switch (toolName) {
+      case "gmail_search":
+        return await gmailSearch(input.query, input.max_results);
+      case "gmail_read_message":
+        return await gmailReadMessage(input.message_id);
+      case "gmail_send":
+        return await gmailSend(input.to, input.subject, input.body);
+      case "gmail_create_draft":
+        return await gmailCreateDraft(input.to, input.subject, input.body);
+      case "gmail_label":
+        return await gmailAddLabel(input.message_id, input.label_name);
+      case "calendar_list_events":
+        return await calendarListEvents(input.time_min, input.time_max, input.max_results);
+      case "calendar_create_event":
+        return await calendarCreateEvent(input);
+      case "calendar_update_event":
+        return await calendarUpdateEvent(input.event_id, input);
+      case "calendar_delete_event":
+        return await calendarDeleteEvent(input.event_id);
+      case "drive_search":
+        return await driveSearch(input.query, input.max_results);
+      case "drive_read_file":
+        return await driveReadFile(input.file_id);
+      case "drive_create_file":
+        return await driveCreateFile(input.name, input.content, input.mime_type, input.folder_id);
+      case "contacts_search":
+        return await contactsSearch(input.query);
+      case "contacts_create":
+        return await contactsCreate(input);
+      default:
+        return JSON.stringify({ error: `Unknown Google tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Google API call failed" });
+  }
+}
+
 function executeMemoryTool(toolName: string, input: any): string {
   switch (toolName) {
     case "save_memory": {
@@ -263,6 +504,15 @@ async function callAnthropic(
     ...CODE_EXECUTION_TOOLS,
   ];
 
+  // Conditionally add Google tools based on connected services
+  const googleServices = getConnectedServices();
+  if (googleServices) {
+    if (googleServices.includes("gmail")) tools.push(...GOOGLE_GMAIL_TOOLS);
+    if (googleServices.includes("calendar")) tools.push(...GOOGLE_CALENDAR_TOOLS);
+    if (googleServices.includes("drive")) tools.push(...GOOGLE_DRIVE_TOOLS);
+    if (googleServices.includes("contacts")) tools.push(...GOOGLE_CONTACTS_TOOLS);
+  }
+
   const apiMessages: any[] = messages.map((m) => ({
     role: m.role === "user" ? "user" : "assistant",
     content: m.content,
@@ -307,12 +557,20 @@ async function callAnthropic(
       const toolResults: any[] = [];
       const memoryTools = ["save_memory", "list_memories", "delete_memory"];
       const codeTools = ["run_command", "read_file", "write_file"];
+      const googleToolNames = [
+        "gmail_search", "gmail_read_message", "gmail_send", "gmail_create_draft", "gmail_label",
+        "calendar_list_events", "calendar_create_event", "calendar_update_event", "calendar_delete_event",
+        "drive_search", "drive_read_file", "drive_create_file",
+        "contacts_search", "contacts_create",
+      ];
       for (const toolBlock of customToolUseBlocks) {
         let result: string;
         if (memoryTools.includes(toolBlock.name)) {
           result = executeMemoryTool(toolBlock.name, toolBlock.input);
         } else if (codeTools.includes(toolBlock.name)) {
           result = await executeCodeTool(toolBlock.name, toolBlock.input);
+        } else if (googleToolNames.includes(toolBlock.name)) {
+          result = await executeGoogleTool(toolBlock.name, toolBlock.input);
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input);
         }
@@ -427,6 +685,21 @@ export async function processMessage(
 
         systemPrompt = systemPrompt ? `${systemPrompt}\n\n${emailContext}` : emailContext;
       }
+    }
+  } catch {}
+
+  // Inject Google context
+  try {
+    const googleIntegration = getIntegration("google");
+    if (googleIntegration && googleIntegration.status === "connected") {
+      const googleCfg = JSON.parse(decrypt(googleIntegration.config));
+      let googleContext = `You have access to the user's Google account (${googleCfg.google_email}).`;
+      const svcs = googleCfg.services as string[];
+      if (svcs.includes("gmail")) googleContext += " You can search, read, send, draft, and label Gmail messages.";
+      if (svcs.includes("calendar")) googleContext += " You can view, create, update, and delete Google Calendar events.";
+      if (svcs.includes("drive")) googleContext += " You can search, read, and create Google Drive files.";
+      if (svcs.includes("contacts")) googleContext += " You can search and create Google Contacts.";
+      systemPrompt = systemPrompt ? `${systemPrompt}\n\n${googleContext}` : googleContext;
     }
   } catch {}
 

@@ -45,6 +45,8 @@ export async function createContainer(opts: {
       `INSTANCE_ID=${opts.name}`,
       `PROVISIONING_URL=http://host.docker.internal:3500`,
       `NODE_ENV=production`,
+      `GOOGLE_CLIENT_ID=${process.env.GOOGLE_CLIENT_ID || ""}`,
+      `GOOGLE_CLIENT_SECRET=${process.env.GOOGLE_CLIENT_SECRET || ""}`,
     ],
     ExposedPorts: { "3000/tcp": {} },
     HostConfig: {

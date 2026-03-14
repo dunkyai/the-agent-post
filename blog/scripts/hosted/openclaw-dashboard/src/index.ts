@@ -112,6 +112,19 @@ async function reconnectIntegrations() {
   } catch (err: unknown) {
     console.error("Failed to reconnect Email:", err instanceof Error ? err.message : err);
   }
+
+  // Google
+  try {
+    const google = getIntegration("google");
+    if (google && google.status === "connected") {
+      const config = JSON.parse(decrypt(google.config));
+      const { startGoogle } = require("./services/google");
+      startGoogle(config);
+      console.log(`Google reconnected (${config.google_email})`);
+    }
+  } catch (err: unknown) {
+    console.error("Failed to reconnect Google:", err instanceof Error ? err.message : err);
+  }
 }
 
 start();
