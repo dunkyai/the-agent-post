@@ -3,26 +3,10 @@
 import { useState } from "react";
 
 const FEATURES = [
-  {
-    title: "Always-on AI agent",
-    description:
-      "Your agent runs 24/7 on dedicated infrastructure. No laptop required.",
-  },
-  {
-    title: "Chat app integrations",
-    description:
-      "Connect WhatsApp, Telegram, or Slack in minutes from the dashboard.",
-  },
-  {
-    title: "Web dashboard",
-    description:
-      "Configure your agent's personality, tools, and behavior from a clean UI.",
-  },
-  {
-    title: "Bring your own API key",
-    description:
-      "Use your Anthropic or OpenAI key. You control the model and the costs.",
-  },
+  "Your agent runs 24/7 on dedicated infrastructure. No laptop required.",
+  "Connect Telegram, Email, or Slack in minutes from the dashboard.",
+  "Configure your agent\u2019s personality, tools, and behavior from a clean web UI.",
+  "Use your Anthropic or OpenAI key. You control the model and the costs.",
 ];
 
 export default function HostedPage() {
@@ -66,37 +50,36 @@ export default function HostedPage() {
           Hosted OpenClaw
         </p>
         <h1 className="font-serif text-4xl sm:text-5xl font-black tracking-tight mb-4">
-          An AI agent that lives in your WhatsApp, Telegram, or Slack
+          An AI agent you can contact 24/7 on the go that integrates with your tools
         </h1>
         <p className="font-serif text-xl text-text-secondary leading-relaxed">
-          No setup, no servers. Get a fully managed AI agent in 60 seconds.
+          No setup, servers, or terminals. Get a fully managed AI agent in 60 seconds.
         </p>
       </header>
 
       <hr className="section-rule mb-10" />
 
+      <p className="max-w-2xl mx-auto text-text-secondary leading-relaxed mb-10">
+        You&rsquo;ve heard about OpenClaw &mdash; the open-source AI agent framework
+        everyone&rsquo;s talking about. But running it yourself means buying hardware,
+        setting up a server, and living in the terminal. With Hosted OpenClaw, we handle
+        all of that. You get your own always-on AI agent without touching a command line.
+      </p>
+
       {/* Features */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-12">
-        {FEATURES.map((feature) => (
-          <div
-            key={feature.title}
-            className="border border-rule-light rounded px-6 py-5"
-          >
-            <h3 className="font-serif font-bold text-lg mb-1">
-              {feature.title}
-            </h3>
-            <p className="text-sm text-text-secondary leading-relaxed">
-              {feature.description}
-            </p>
-          </div>
+      <ul className="space-y-3 mb-12 max-w-2xl mx-auto">
+        {FEATURES.map((feature, i) => (
+          <li key={i} className="text-text-secondary leading-relaxed">
+            {feature}
+          </li>
         ))}
-      </div>
+      </ul>
 
       <hr className="section-rule mb-10" />
 
       {/* Pricing + CTA */}
       <div className="bg-accent/10 border border-accent/20 rounded px-8 py-10 text-center mb-12">
-        <p className="font-serif font-bold text-2xl mb-1">$49/month</p>
+        <p className="font-serif font-bold text-2xl mb-1">$19.99/month</p>
         <p className="text-sm text-text-secondary mb-6">
           Dedicated instance &middot; unlimited messages &middot; cancel
           anytime
@@ -150,7 +133,7 @@ export default function HostedPage() {
             number: 3,
             title: "Connect",
             description:
-              "Link WhatsApp, Telegram, or Slack from the Integrations tab. Your agent starts responding immediately.",
+              "Link Telegram, Email, or Slack from the Integrations tab. Your agent starts responding immediately.",
           },
         ].map((step) => (
           <div key={step.number} className="flex items-start gap-4">
