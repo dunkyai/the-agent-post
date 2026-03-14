@@ -8,10 +8,13 @@ import { getNextRun, isValidCron, describeCron } from "./cron";
 import {
   isGoogleRunning, getConnectedServices,
   gmailSearch, gmailReadMessage, gmailSend, gmailCreateDraft, gmailAddLabel,
-  calendarListEvents, calendarCreateEvent, calendarUpdateEvent, calendarDeleteEvent,
-  driveSearch, driveReadFile, driveCreateFile,
-  contactsSearch, contactsCreate,
+  calendarListEvents, calendarCreateEvent, calendarUpdateEvent,
+  driveSearch, driveReadFile, extractDriveFileId,
+  contactsSearch,
 } from "./google";
+import { sendTelegramMessage, isTelegramRunning } from "./telegram";
+import { sendSlackMessage, isSlackRunning } from "./slack";
+import { sendEmailMessage, isEmailRunning, checkInbox } from "./email";
 
 interface AIResponse {
   role: string;
@@ -182,6 +185,141 @@ const MEMORY_TOOLS = [
   },
 ];
 
+// --- Messaging Tools (cross-channel) ---
+
+const TELEGRAM_MESSAGING_TOOLS = [
+  {
+    name: "send_telegram",
+    description: "Send a message to a Telegram chat. Use when the user asks you to message someone on Telegram, or when you need to proactively reach out via Telegram.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        chat_id: { type: "string", description: "The Telegram chat ID to send to" },
+        message: { type: "string", description: "The message text to send" },
+      },
+      required: ["chat_id", "message"],
+    },
+  },
+];
+
+const SLACK_MESSAGING_TOOLS = [
+  {
+    name: "send_slack",
+    description: "Send a message to a Slack channel. Use when the user asks you to message someone on Slack, or when you need to proactively reach out via Slack.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        channel: { type: "string", description: "The Slack channel ID to send to" },
+        message: { type: "string", description: "The message text to send" },
+      },
+      required: ["channel", "message"],
+    },
+  },
+];
+
+const EMAIL_MESSAGING_TOOLS = [
+  {
+    name: "check_lobstermail",
+    description: "Check your LobsterMail inbox for recent emails. Use when the user asks you to check email, see if anyone emailed, or review your inbox.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        max_results: { type: "number", description: "Max emails to return (default: 10)" },
+      },
+    },
+  },
+  {
+    name: "send_lobstermail",
+    description: "Send an email from your LobsterMail address. Use when the user asks you to email someone, or when you need to proactively reach out via email.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        to: { type: "string", description: "Recipient email address" },
+        subject: { type: "string", description: "Email subject line" },
+        body: { type: "string", description: "Email body (plain text)" },
+      },
+      required: ["to", "subject", "body"],
+    },
+  },
+];
+
+async function executeMessagingTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "send_telegram":
+        await sendTelegramMessage(input.chat_id, input.message);
+        return JSON.stringify({ success: true, channel: "telegram", chat_id: input.chat_id });
+      case "send_slack":
+        await sendSlackMessage(input.channel, input.message);
+        return JSON.stringify({ success: true, channel: "slack", channel_id: input.channel });
+      case "check_lobstermail":
+        return await checkInbox(input.max_results);
+      case "send_lobstermail":
+        await sendEmailMessage(input.to, input.subject, input.body);
+        return JSON.stringify({ success: true, channel: "email", to: input.to });
+      default:
+        return JSON.stringify({ error: `Unknown messaging tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to send message" });
+  }
+}
+
+// --- Public Google Doc Tool (no OAuth needed) ---
+
+const PUBLIC_GDOC_TOOLS = [
+  {
+    name: "open_google_doc",
+    description: "Open and read a publicly shared Google Docs, Sheets, or Slides URL. Works without Google OAuth — the document must be shared as 'Anyone with the link can view'. Use this when someone pastes a Google Doc link.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        url: { type: "string", description: "The Google Docs/Sheets/Slides URL" },
+      },
+      required: ["url"],
+    },
+  },
+];
+
+async function executePublicGDocTool(input: any): Promise<string> {
+  const url: string = input.url;
+  const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (!match) {
+    return JSON.stringify({ error: "Could not extract file ID from URL. Make sure it's a Google Docs, Sheets, or Slides link." });
+  }
+  const fileId = match[1];
+
+  // Determine export format from URL
+  let exportUrl: string;
+  if (url.includes("docs.google.com/document")) {
+    exportUrl = `https://docs.google.com/document/d/${fileId}/export?format=txt`;
+  } else if (url.includes("docs.google.com/spreadsheets")) {
+    exportUrl = `https://docs.google.com/spreadsheets/d/${fileId}/export?format=csv`;
+  } else if (url.includes("docs.google.com/presentation")) {
+    exportUrl = `https://docs.google.com/presentation/d/${fileId}/export?format=txt`;
+  } else {
+    // Generic Drive file — try text export
+    exportUrl = `https://drive.google.com/uc?id=${fileId}&export=download`;
+  }
+
+  try {
+    const res = await fetch(exportUrl, { redirect: "follow" });
+    if (res.status === 403 || res.status === 401) {
+      return JSON.stringify({ error: "This document is not publicly shared. The owner needs to set sharing to 'Anyone with the link can view', or you can connect Google OAuth on the Integrations page to access private documents." });
+    }
+    if (!res.ok) {
+      return JSON.stringify({ error: `Failed to fetch document (${res.status})` });
+    }
+    const text = await res.text();
+    if (text.includes("<!DOCTYPE html>") && text.includes("ServiceLogin")) {
+      return JSON.stringify({ error: "This document is not publicly shared. The owner needs to set sharing to 'Anyone with the link can view', or you can connect Google OAuth on the Integrations page to access private documents." });
+    }
+    return JSON.stringify({ content: text.slice(0, 50000) });
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to fetch document" });
+  }
+}
+
 // --- Google Tools ---
 
 const GOOGLE_GMAIL_TOOLS = [
@@ -209,19 +347,6 @@ const GOOGLE_GMAIL_TOOLS = [
     },
   },
   {
-    name: "gmail_send",
-    description: "Send an email from the user's Gmail.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        to: { type: "string", description: "Recipient email" },
-        subject: { type: "string", description: "Subject line" },
-        body: { type: "string", description: "Email body (plain text)" },
-      },
-      required: ["to", "subject", "body"],
-    },
-  },
-  {
     name: "gmail_create_draft",
     description: "Create a draft email without sending it.",
     input_schema: {
@@ -244,6 +369,22 @@ const GOOGLE_GMAIL_TOOLS = [
         label_name: { type: "string", description: "Label name (e.g., 'IMPORTANT', 'STARRED', or custom)" },
       },
       required: ["message_id", "label_name"],
+    },
+  },
+];
+
+const GOOGLE_GMAIL_SEND_TOOLS = [
+  {
+    name: "gmail_send",
+    description: "Send an email from the user's Gmail.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        to: { type: "string", description: "Recipient email" },
+        subject: { type: "string", description: "Subject line" },
+        body: { type: "string", description: "Email body (plain text)" },
+      },
+      required: ["to", "subject", "body"],
     },
   },
 ];
@@ -292,55 +433,42 @@ const GOOGLE_CALENDAR_TOOLS = [
       required: ["event_id"],
     },
   },
-  {
-    name: "calendar_delete_event",
-    description: "Delete a calendar event.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        event_id: { type: "string", description: "Event ID to delete" },
-      },
-      required: ["event_id"],
-    },
-  },
 ];
 
 const GOOGLE_DRIVE_TOOLS = [
   {
     name: "drive_search",
-    description: "Search Google Drive files by name.",
+    description: "Search Google Drive files by name or content. Searches Google Docs, Sheets, Slides, PDFs, and all other files. Use mime_type to filter by type.",
     input_schema: {
       type: "object" as const,
       properties: {
-        query: { type: "string", description: "Search query (file name keywords)" },
+        query: { type: "string", description: "Search query — matches file names and document content" },
         max_results: { type: "number", description: "Max files (default: 10)" },
+        mime_type: { type: "string", description: "Filter by MIME type. Common: 'application/vnd.google-apps.document' (Google Docs), 'application/vnd.google-apps.spreadsheet' (Sheets), 'application/vnd.google-apps.presentation' (Slides)" },
       },
       required: ["query"],
     },
   },
   {
     name: "drive_read_file",
-    description: "Read content of a Google Drive file. Supports Docs (text), Sheets (CSV), and text files.",
+    description: "Read the full text content of a Google Drive file by its ID. Google Docs and Slides are exported as plain text, Sheets as CSV. Use after drive_search to read a specific file.",
     input_schema: {
       type: "object" as const,
       properties: {
-        file_id: { type: "string", description: "Google Drive file ID" },
+        file_id: { type: "string", description: "Google Drive file ID (from drive_search results)" },
       },
       required: ["file_id"],
     },
   },
   {
-    name: "drive_create_file",
-    description: "Create a new file in Google Drive.",
+    name: "drive_open_url",
+    description: "Open and read a Google Docs, Sheets, Slides, or Drive URL. Use this when the user pastes a Google document link.",
     input_schema: {
       type: "object" as const,
       properties: {
-        name: { type: "string", description: "File name" },
-        content: { type: "string", description: "File content" },
-        mime_type: { type: "string", description: "MIME type. Use 'application/vnd.google-apps.document' for Docs, 'text/plain' for text." },
-        folder_id: { type: "string", description: "Parent folder ID (optional)" },
+        url: { type: "string", description: "The Google Docs/Sheets/Slides/Drive URL" },
       },
-      required: ["name", "content"],
+      required: ["url"],
     },
   },
 ];
@@ -355,20 +483,6 @@ const GOOGLE_CONTACTS_TOOLS = [
         query: { type: "string", description: "Search query" },
       },
       required: ["query"],
-    },
-  },
-  {
-    name: "contacts_create",
-    description: "Create a new Google Contact.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        given_name: { type: "string", description: "First name" },
-        family_name: { type: "string", description: "Last name" },
-        email: { type: "string", description: "Email address" },
-        phone: { type: "string", description: "Phone number" },
-      },
-      required: ["given_name"],
     },
   },
 ];
@@ -396,18 +510,17 @@ async function executeGoogleTool(toolName: string, input: any): Promise<string> 
         return await calendarCreateEvent(input);
       case "calendar_update_event":
         return await calendarUpdateEvent(input.event_id, input);
-      case "calendar_delete_event":
-        return await calendarDeleteEvent(input.event_id);
       case "drive_search":
-        return await driveSearch(input.query, input.max_results);
+        return await driveSearch(input.query, input.max_results, input.mime_type);
       case "drive_read_file":
         return await driveReadFile(input.file_id);
-      case "drive_create_file":
-        return await driveCreateFile(input.name, input.content, input.mime_type, input.folder_id);
+      case "drive_open_url": {
+        const fileId = extractDriveFileId(input.url);
+        if (!fileId) return JSON.stringify({ error: "Could not extract file ID from URL. Make sure it's a Google Docs, Sheets, Slides, or Drive link." });
+        return await driveReadFile(fileId);
+      }
       case "contacts_search":
         return await contactsSearch(input.query);
-      case "contacts_create":
-        return await contactsCreate(input);
       default:
         return JSON.stringify({ error: `Unknown Google tool: ${toolName}` });
     }
@@ -502,12 +615,21 @@ async function callAnthropic(
     ...SCHEDULING_TOOLS,
     ...MEMORY_TOOLS,
     ...CODE_EXECUTION_TOOLS,
+    ...PUBLIC_GDOC_TOOLS,
   ];
+
+  // Conditionally add messaging tools based on connected integrations
+  if (isTelegramRunning()) tools.push(...TELEGRAM_MESSAGING_TOOLS);
+  if (isSlackRunning()) tools.push(...SLACK_MESSAGING_TOOLS);
+  if (isEmailRunning()) tools.push(...EMAIL_MESSAGING_TOOLS);
 
   // Conditionally add Google tools based on connected services
   const googleServices = getConnectedServices();
   if (googleServices) {
-    if (googleServices.includes("gmail")) tools.push(...GOOGLE_GMAIL_TOOLS);
+    if (googleServices.includes("gmail")) {
+      tools.push(...GOOGLE_GMAIL_TOOLS);
+      if (googleServices.includes("gmail_send")) tools.push(...GOOGLE_GMAIL_SEND_TOOLS);
+    }
     if (googleServices.includes("calendar")) tools.push(...GOOGLE_CALENDAR_TOOLS);
     if (googleServices.includes("drive")) tools.push(...GOOGLE_DRIVE_TOOLS);
     if (googleServices.includes("contacts")) tools.push(...GOOGLE_CONTACTS_TOOLS);
@@ -559,16 +681,21 @@ async function callAnthropic(
       const codeTools = ["run_command", "read_file", "write_file"];
       const googleToolNames = [
         "gmail_search", "gmail_read_message", "gmail_send", "gmail_create_draft", "gmail_label",
-        "calendar_list_events", "calendar_create_event", "calendar_update_event", "calendar_delete_event",
-        "drive_search", "drive_read_file", "drive_create_file",
-        "contacts_search", "contacts_create",
+        "calendar_list_events", "calendar_create_event", "calendar_update_event",
+        "drive_search", "drive_read_file", "drive_open_url",
+        "contacts_search",
       ];
+      const messagingToolNames = ["send_telegram", "send_slack", "send_lobstermail", "check_lobstermail"];
       for (const toolBlock of customToolUseBlocks) {
         let result: string;
         if (memoryTools.includes(toolBlock.name)) {
           result = executeMemoryTool(toolBlock.name, toolBlock.input);
         } else if (codeTools.includes(toolBlock.name)) {
           result = await executeCodeTool(toolBlock.name, toolBlock.input);
+        } else if (toolBlock.name === "open_google_doc") {
+          result = await executePublicGDocTool(toolBlock.input);
+        } else if (messagingToolNames.includes(toolBlock.name)) {
+          result = await executeMessagingTool(toolBlock.name, toolBlock.input);
         } else if (googleToolNames.includes(toolBlock.name)) {
           result = await executeGoogleTool(toolBlock.name, toolBlock.input);
         } else {
@@ -688,6 +815,18 @@ export async function processMessage(
     }
   } catch {}
 
+  // Inject cross-channel messaging context
+  {
+    const channels: string[] = [];
+    if (isTelegramRunning()) channels.push("Telegram (use send_telegram tool)");
+    if (isSlackRunning()) channels.push("Slack (use send_slack tool)");
+    if (isEmailRunning()) channels.push("Email/LobsterMail (use check_lobstermail to check inbox, send_lobstermail to send)");
+    if (channels.length > 0) {
+      const msgContext = `You can send messages on the following channels at any time: ${channels.join(", ")}. Use these tools to proactively reach out or relay messages across channels when asked.`;
+      systemPrompt = systemPrompt ? `${systemPrompt}\n\n${msgContext}` : msgContext;
+    }
+  }
+
   // Inject Google context
   try {
     const googleIntegration = getIntegration("google");
@@ -695,10 +834,16 @@ export async function processMessage(
       const googleCfg = JSON.parse(decrypt(googleIntegration.config));
       let googleContext = `You have access to the user's Google account (${googleCfg.google_email}).`;
       const svcs = googleCfg.services as string[];
-      if (svcs.includes("gmail")) googleContext += " You can search, read, send, draft, and label Gmail messages.";
+      if (svcs.includes("gmail")) {
+        if (svcs.includes("gmail_send")) {
+          googleContext += " You can search, read, send, draft, and label Gmail messages.";
+        } else {
+          googleContext += " You can search, read, draft, and label Gmail messages. Sending is not enabled — use gmail_create_draft instead.";
+        }
+      }
       if (svcs.includes("calendar")) googleContext += " You can view, create, update, and delete Google Calendar events.";
-      if (svcs.includes("drive")) googleContext += " You can search, read, and create Google Drive files.";
-      if (svcs.includes("contacts")) googleContext += " You can search and create Google Contacts.";
+      if (svcs.includes("drive")) googleContext += " You can search and read Google Drive files including Google Docs, Sheets, and Slides.";
+      if (svcs.includes("contacts")) googleContext += " You can search Google Contacts.";
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${googleContext}` : googleContext;
     }
   } catch {}

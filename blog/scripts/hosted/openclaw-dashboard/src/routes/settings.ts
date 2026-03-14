@@ -18,18 +18,26 @@ router.get("/settings", (req: Request, res: Response) => {
   const anthropicKey = getSetting("anthropic_api_key");
   const openaiKey = getSetting("openai_api_key");
   const model = getSetting("model") || "claude-sonnet-4-20250514";
+  const agentName = getSetting("agent_name") || "";
+  const systemPrompt = getSetting("system_prompt") || "";
+  const temperature = getSetting("temperature") || "0.7";
+  const maxTokens = getSetting("max_tokens") || "1024";
 
   res.render("settings", {
     hasAnthropicKey: !!anthropicKey,
     hasOpenaiKey: !!openaiKey,
     model,
     models: MODELS,
+    agentName,
+    systemPrompt,
+    temperature,
+    maxTokens,
     flash: req.query.flash || null,
   });
 });
 
 router.post("/settings", (req: Request, res: Response) => {
-  const { anthropic_api_key, openai_api_key, model } = req.body;
+  const { anthropic_api_key, openai_api_key, model, agent_name, system_prompt, temperature, max_tokens } = req.body;
 
   // Only update API keys if a new value was provided (not empty/placeholder)
   if (anthropic_api_key && anthropic_api_key.trim() && !anthropic_api_key.startsWith("••••")) {
@@ -44,7 +52,28 @@ router.post("/settings", (req: Request, res: Response) => {
     setSetting("model", model);
   }
 
+  setSetting("agent_name", (agent_name || "").trim());
+  setSetting("system_prompt", system_prompt || "");
+
+  const temp = parseFloat(temperature);
+  if (!isNaN(temp) && temp >= 0 && temp <= 2) {
+    setSetting("temperature", String(temp));
+  }
+
+  const tokens = parseInt(max_tokens, 10);
+  if (!isNaN(tokens) && tokens > 0 && tokens <= 8192) {
+    setSetting("max_tokens", String(tokens));
+  }
+
   res.redirect("/settings?flash=Settings+saved");
+});
+
+// Redirect old /agent routes to /settings
+router.get("/agent", (_req: Request, res: Response) => {
+  res.redirect("/settings");
+});
+router.post("/agent", (_req: Request, res: Response) => {
+  res.redirect("/settings");
 });
 
 export default router;

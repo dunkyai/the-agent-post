@@ -120,7 +120,11 @@
           <label style="font-size: 13px; color: var(--muted);">Connected Services</label>
           <div style="margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap;">
             <% for (const svc of google.services) { %>
-              <span class="status-badge status-connected"><%= svc.charAt(0).toUpperCase() + svc.slice(1) %></span>
+              <% if (svc === 'gmail_send') { %>
+                <span class="status-badge status-connected">Gmail Send</span>
+              <% } else { %>
+                <span class="status-badge status-connected"><%= svc.charAt(0).toUpperCase() + svc.slice(1) %></span>
+              <% } %>
             <% } %>
           </div>
         </div>
@@ -135,7 +139,11 @@
             <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
               <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
                 <input type="checkbox" name="services" value="gmail" checked>
-                <strong>Gmail</strong> &mdash; Read, send, draft, and label emails
+                <strong>Gmail</strong> &mdash; Read, draft, and label emails
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; padding-left: 28px;">
+                <input type="checkbox" name="services" value="gmail_send">
+                <strong>Send</strong> &mdash; Allow sending emails (not just drafting)
               </label>
               <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
                 <input type="checkbox" name="services" value="calendar">
@@ -143,11 +151,11 @@
               </label>
               <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
                 <input type="checkbox" name="services" value="drive">
-                <strong>Drive</strong> &mdash; Search, read, and create files
+                <strong>Drive</strong> &mdash; Search and read files
               </label>
               <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
                 <input type="checkbox" name="services" value="contacts">
-                <strong>Contacts</strong> &mdash; Search and create contacts
+                <strong>Contacts</strong> &mdash; Search contacts
               </label>
             </div>
             <div class="hint" style="margin-top: 8px;">At least one service must be selected. Your agent will only access services you enable.</div>

@@ -19,18 +19,17 @@ const SCOPE_MAP: Record<string, string[]> = {
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.compose",
     "https://www.googleapis.com/auth/gmail.labels",
+  ],
+  gmail_send: [
     "https://www.googleapis.com/auth/gmail.send",
   ],
   calendar: [
-    "https://www.googleapis.com/auth/calendar",
     "https://www.googleapis.com/auth/calendar.events",
   ],
   drive: [
-    "https://www.googleapis.com/auth/drive.file",
     "https://www.googleapis.com/auth/drive.readonly",
   ],
   contacts: [
-    "https://www.googleapis.com/auth/contacts",
     "https://www.googleapis.com/auth/contacts.readonly",
   ],
 };
@@ -455,12 +454,21 @@ export async function calendarDeleteEvent(eventId: string): Promise<string> {
 
 // --- Drive API ---
 
-export async function driveSearch(query: string, maxResults = 10): Promise<string> {
-  const driveQuery = `name contains '${query.replace(/'/g, "\\'")}'`;
+export async function driveSearch(query: string, maxResults = 10, mimeType?: string): Promise<string> {
+  // Build query: try fullText first, fall back to name
+  const escaped = query.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  let driveQuery = `(name contains '${escaped}' or fullText contains '${escaped}')`;
+  if (mimeType) {
+    driveQuery += ` and mimeType = '${mimeType}'`;
+  }
+  // Exclude trashed files
+  driveQuery += " and trashed = false";
+
   const params = new URLSearchParams({
     q: driveQuery,
     pageSize: String(Math.min(maxResults, 20)),
     fields: "files(id,name,mimeType,modifiedTime,size,webViewLink)",
+    orderBy: "modifiedTime desc",
   });
 
   const res = await googleFetch(`https://www.googleapis.com/drive/v3/files?${params}`);
@@ -493,6 +501,8 @@ export async function driveReadFile(fileId: string): Promise<string> {
     contentUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/plain`;
   } else if (meta.mimeType === "application/vnd.google-apps.spreadsheet") {
     contentUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/csv`;
+  } else if (meta.mimeType === "application/vnd.google-apps.presentation") {
+    contentUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/plain`;
   } else {
     contentUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
   }
@@ -558,6 +568,12 @@ export async function driveCreateFile(
     name: result.name,
     webViewLink: result.webViewLink,
   });
+}
+
+export function extractDriveFileId(url: string): string | null {
+  // Matches: docs.google.com/document/d/{ID}, spreadsheets/d/{ID}, presentation/d/{ID}, drive.google.com/file/d/{ID}
+  const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : null;
 }
 
 // --- Contacts (People) API ---

@@ -165,6 +165,36 @@ export function isEmailRunning(): boolean {
   return pollInterval !== null;
 }
 
+export async function checkInbox(maxResults = 10): Promise<string> {
+  if (!emailConfig) return JSON.stringify({ error: "Email is not configured" });
+
+  try {
+    const params = new URLSearchParams({ limit: String(Math.min(maxResults, 20)) });
+    const res = await fetch(
+      `${LOBSTERMAIL_API}/v1/inboxes/${emailConfig.inboxId}/emails?${params}`,
+      { headers: { Authorization: `Bearer ${emailConfig.apiToken}` } }
+    );
+
+    if (!res.ok) {
+      return JSON.stringify({ error: `Failed to check inbox (${res.status})` });
+    }
+
+    const data: any = await res.json();
+    const emails = (data.data || data.emails || []).map((e: any) => ({
+      id: e.id,
+      from: e.from || e.sender || "unknown",
+      subject: e.subject || "",
+      preview: (e.preview || e.body?.text || e.body?.html || "").slice(0, 200),
+      date: e.receivedAt || e.createdAt || e.date || "",
+      read: !!e.read,
+    }));
+
+    return JSON.stringify({ inbox: emailConfig.emailAddress, emails, total: emails.length });
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to check inbox" });
+  }
+}
+
 export async function sendEmailMessage(to: string, subject: string, body: string): Promise<void> {
   if (!emailConfig) throw new Error("Email is not configured");
 

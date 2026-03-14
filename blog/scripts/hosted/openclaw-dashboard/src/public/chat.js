@@ -49,7 +49,13 @@
       body: JSON.stringify({ message: text }),
     })
       .then(function (res) {
-        return res.json().then(function (data) {
+        return res.text().then(function (text) {
+          if (!text) throw new Error("Empty response from server — the request may have timed out. Try again.");
+          try {
+            var data = JSON.parse(text);
+          } catch (e) {
+            throw new Error("Invalid response from server");
+          }
           if (!res.ok) throw new Error(data.error || "Request failed");
           return data;
         });

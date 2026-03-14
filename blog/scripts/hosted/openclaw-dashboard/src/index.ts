@@ -8,7 +8,6 @@ import { decrypt } from "./services/encryption";
 // Routes
 import loginRouter from "./routes/login";
 import settingsRouter from "./routes/settings";
-import agentConfigRouter from "./routes/agent-config";
 import integrationsRouter from "./routes/integrations";
 import chatRouter from "./routes/chat";
 import healthRouter from "./routes/health";
@@ -34,7 +33,6 @@ app.use(requireAuth);
 // Routes
 app.use(loginRouter);
 app.use(settingsRouter);
-app.use(agentConfigRouter);
 app.use(integrationsRouter);
 app.use(chatRouter);
 app.use(healthRouter);
