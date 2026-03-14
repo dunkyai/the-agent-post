@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { getOrCreateConversation, getMessages } from "../services/db";
+import { getOrCreateConversation, getMessages, deleteConversation } from "../services/db";
 import { processMessage } from "../services/ai";
 
 const router = Router();
@@ -28,6 +28,12 @@ router.post("/chat/message", async (req: Request, res: Response) => {
     console.error("Chat error:", message);
     res.status(500).json({ error: message });
   }
+});
+
+router.post("/chat/reset", (req: Request, res: Response) => {
+  const conversationId = getOrCreateConversation("dashboard", CHAT_EXTERNAL_ID);
+  deleteConversation(conversationId);
+  res.redirect("/chat");
 });
 
 export default router;

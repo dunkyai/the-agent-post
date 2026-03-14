@@ -177,6 +177,11 @@ export function getMessages(conversationId: string, limit = 50) {
     .all(conversationId, limit) as { role: string; content: string; created_at: string }[];
 }
 
+export function deleteConversation(conversationId: string): void {
+  getDb().prepare("DELETE FROM messages WHERE conversation_id = ?").run(conversationId);
+  getDb().prepare("DELETE FROM conversations WHERE id = ?").run(conversationId);
+}
+
 export function getConversationsByType(integrationType: string) {
   return getDb()
     .prepare(

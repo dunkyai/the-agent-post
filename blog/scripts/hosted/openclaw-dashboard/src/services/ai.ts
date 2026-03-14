@@ -230,7 +230,7 @@ const EMAIL_MESSAGING_TOOLS = [
   },
   {
     name: "send_lobstermail",
-    description: "Send an email from your LobsterMail address. Use when the user asks you to email someone, or when you need to proactively reach out via email.",
+    description: "Send an email from your LobsterMail address. Only works with a Tier 1+ LobsterMail API key. If this fails, suggest using gmail_send or gmail_create_draft instead (requires Google integration).",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -363,26 +363,26 @@ const GOOGLE_GMAIL_TOOLS = [
 const GOOGLE_GMAIL_SEND_TOOLS = [
   {
     name: "gmail_create_draft",
-    description: "Create a draft email without sending it.",
+    description: "Create a real draft email in the user's Gmail Drafts folder. The draft will appear in Gmail and can be reviewed and sent by the user. You MUST call this tool to actually create the draft — do not just write the email text in your response. If you don't know the recipient, ask the user.",
     input_schema: {
       type: "object" as const,
       properties: {
-        to: { type: "string", description: "Recipient email" },
-        subject: { type: "string", description: "Subject line" },
-        body: { type: "string", description: "Email body (plain text)" },
+        to: { type: "string", description: "Recipient email address" },
+        subject: { type: "string", description: "Email subject line" },
+        body: { type: "string", description: "Full email body (plain text)" },
       },
       required: ["to", "subject", "body"],
     },
   },
   {
     name: "gmail_send",
-    description: "Send an email from the user's Gmail.",
+    description: "Send an email immediately from the user's Gmail account. The email will be sent right away — use gmail_create_draft if you want to save it as a draft instead.",
     input_schema: {
       type: "object" as const,
       properties: {
-        to: { type: "string", description: "Recipient email" },
-        subject: { type: "string", description: "Subject line" },
-        body: { type: "string", description: "Email body (plain text)" },
+        to: { type: "string", description: "Recipient email address" },
+        subject: { type: "string", description: "Email subject line" },
+        body: { type: "string", description: "Full email body (plain text)" },
       },
       required: ["to", "subject", "body"],
     },
@@ -687,6 +687,7 @@ async function callAnthropic(
       ];
       const messagingToolNames = ["send_telegram", "send_slack", "send_lobstermail", "check_lobstermail"];
       for (const toolBlock of customToolUseBlocks) {
+        console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
         let result: string;
         if (memoryTools.includes(toolBlock.name)) {
           result = executeMemoryTool(toolBlock.name, toolBlock.input);
@@ -701,6 +702,7 @@ async function callAnthropic(
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input);
         }
+        console.log(`Tool result: ${toolBlock.name}`, result.slice(0, 300));
         toolResults.push({
           type: "tool_result",
           tool_use_id: toolBlock.id,
