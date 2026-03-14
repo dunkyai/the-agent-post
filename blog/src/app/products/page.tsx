@@ -32,31 +32,12 @@ export default function ProductsPage() {
                   Hosted OpenClaw
                 </h3>
                 <p className="text-text-secondary text-sm leading-relaxed mt-1">
-                  A fully managed AI agent that lives in your WhatsApp, Telegram,
-                  or Slack. No setup, no servers &mdash; running in 60 seconds.
+                  A fully managed AI agent that lives in your Telegram, Email,
+                  and/or Slack. No setup, servers, or terminals &mdash; running in 60 seconds.
                 </p>
               </div>
               <span className="flex-shrink-0 bg-accent/10 text-accent text-sm font-bold px-3 py-1 rounded">
-                $49/mo
-              </span>
-            </div>
-          </article>
-        </Link>
-
-        <Link href="/consultation" className="block group">
-          <article className="border border-rule-light rounded px-6 py-6 transition-colors group-hover:border-accent">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="font-serif text-xl font-bold group-hover:text-accent transition-colors">
-                  OpenClaw Consultation
-                </h3>
-                <p className="text-text-secondary text-sm leading-relaxed mt-1">
-                  Talk to an AI agent that walks you through setting up and
-                  configuring OpenClaw for your use case.
-                </p>
-              </div>
-              <span className="flex-shrink-0 bg-accent/10 text-accent text-sm font-bold px-3 py-1 rounded">
-                Free
+                $19.99/mo
               </span>
             </div>
           </article>
