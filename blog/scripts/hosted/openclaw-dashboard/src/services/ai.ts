@@ -347,19 +347,6 @@ const GOOGLE_GMAIL_TOOLS = [
     },
   },
   {
-    name: "gmail_create_draft",
-    description: "Create a draft email without sending it.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        to: { type: "string", description: "Recipient email" },
-        subject: { type: "string", description: "Subject line" },
-        body: { type: "string", description: "Email body (plain text)" },
-      },
-      required: ["to", "subject", "body"],
-    },
-  },
-  {
     name: "gmail_label",
     description: "Add a label to a Gmail message.",
     input_schema: {
@@ -374,6 +361,19 @@ const GOOGLE_GMAIL_TOOLS = [
 ];
 
 const GOOGLE_GMAIL_SEND_TOOLS = [
+  {
+    name: "gmail_create_draft",
+    description: "Create a draft email without sending it.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        to: { type: "string", description: "Recipient email" },
+        subject: { type: "string", description: "Subject line" },
+        body: { type: "string", description: "Email body (plain text)" },
+      },
+      required: ["to", "subject", "body"],
+    },
+  },
   {
     name: "gmail_send",
     description: "Send an email from the user's Gmail.",
@@ -775,7 +775,7 @@ export async function processMessage(
   const model = getSetting("model") || "claude-sonnet-4-20250514";
   let systemPrompt = getSetting("system_prompt") || "";
   const temperature = parseFloat(getSetting("temperature") || "0.7");
-  const maxTokens = parseInt(getSetting("max_tokens") || "1024", 10);
+  const maxTokens = parseInt(getSetting("max_tokens") || "4096", 10);
 
   // Inject agent name
   const agentName = getSetting("agent_name");
@@ -836,9 +836,9 @@ export async function processMessage(
       const svcs = googleCfg.services as string[];
       if (svcs.includes("gmail")) {
         if (svcs.includes("gmail_send")) {
-          googleContext += " You can search, read, send, draft, and label Gmail messages.";
+          googleContext += " You can search, read, draft, send, and label Gmail messages.";
         } else {
-          googleContext += " You can search, read, draft, and label Gmail messages. Sending is not enabled — use gmail_create_draft instead.";
+          googleContext += " You can search, read, and label Gmail messages. Drafting and sending are not enabled.";
         }
       }
       if (svcs.includes("calendar")) googleContext += " You can view, create, update, and delete Google Calendar events.";

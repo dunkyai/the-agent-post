@@ -17,10 +17,10 @@ export interface GoogleConfig {
 const SCOPE_MAP: Record<string, string[]> = {
   gmail: [
     "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/gmail.compose",
     "https://www.googleapis.com/auth/gmail.labels",
   ],
   gmail_send: [
+    "https://www.googleapis.com/auth/gmail.compose",
     "https://www.googleapis.com/auth/gmail.send",
   ],
   calendar: [

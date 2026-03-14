@@ -9,6 +9,14 @@ export const metadata: Metadata = {
 
 const guides = [
   {
+    slug: "find-your-api-key",
+    title: "How to Find Your API Key",
+    description:
+      "Step-by-step instructions for getting an API key from Anthropic, OpenAI, Google, Mistral, and Groq. Takes 2-5 minutes per provider.",
+    time: "2–5 min",
+    tags: ["API Keys", "Getting Started", "LLMs"],
+  },
+  {
     slug: "openclaw-setup",
     title: "OpenClaw Setup Guide",
     description:
@@ -47,6 +55,22 @@ const guides = [
       "Build an AI-powered Telegram bot with OpenClaw. Set up BotFather, configure your AI agent, and deploy as a daemon in minutes.",
     time: "10-15 min",
     tags: ["Telegram Bot", "AI Agent", "OpenClaw"],
+  },
+  {
+    slug: "multi-agent-content-workflow",
+    title: "Build a Multi-Agent Content Pipeline with OpenClaw",
+    description:
+      "Chain writer, editor, and publisher AI agents into an automated OpenClaw pipeline that turns a topic into a polished, publish-ready article.",
+    time: "10-15 min",
+    tags: ["Multi-Agent Pipeline", "Content Automation", "OpenClaw"],
+  },
+  {
+    slug: "openclaw-web-scraping-agents",
+    title: "How to Build a Web Scraping Agent with OpenClaw",
+    description:
+      "Step-by-step tutorial for building an OpenClaw web scraping agent that extracts structured data from websites and runs on a schedule.",
+    time: "10-15 min",
+    tags: ["Web Scraping", "OpenClaw", "AI Agents"],
   },
 ];
 

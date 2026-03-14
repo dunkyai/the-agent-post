@@ -24,33 +24,28 @@
       </div>
 
       <div class="card">
-        <h3>API Keys</h3>
+        <p style="margin-bottom: 16px; font-size: 14px; color: var(--text);">Pick a brain (LLM) for your OpenClaw</p>
         <div class="form-group">
-          <label for="anthropic_api_key">Anthropic API Key</label>
-          <input type="password" id="anthropic_api_key" name="anthropic_api_key"
-            placeholder="<%= hasAnthropicKey ? '••••••••••••' : 'sk-ant-...' %>"
-            value="">
-          <div class="hint"><%= hasAnthropicKey ? 'Key is saved. Enter a new value to replace it, or leave blank to keep.' : 'Required for Claude models.' %></div>
+          <label for="provider">Provider</label>
+          <select id="provider" name="provider">
+            <option value="anthropic" <%= provider === 'anthropic' ? 'selected' : '' %>>Anthropic</option>
+            <option value="openai" <%= provider === 'openai' ? 'selected' : '' %>>OpenAI</option>
+          </select>
         </div>
         <div class="form-group">
-          <label for="openai_api_key">OpenAI API Key</label>
-          <input type="password" id="openai_api_key" name="openai_api_key"
-            placeholder="<%= hasOpenaiKey ? '••••••••••••' : 'sk-...' %>"
-            value="">
-          <div class="hint"><%= hasOpenaiKey ? 'Key is saved. Enter a new value to replace it, or leave blank to keep.' : 'Required for GPT models.' %></div>
+          <label for="api_key">API Key</label>
+          <input type="password" id="api_key" name="api_key" placeholder="" value="">
+          <div class="hint" id="api_key_hint"></div>
+        </div>
+        <div class="form-group">
+          <label for="model">Model</label>
+          <select id="model" name="model">
+          </select>
         </div>
       </div>
 
       <div class="card">
-        <h3>Model & Parameters</h3>
-        <div class="form-group">
-          <label for="model">Default Model</label>
-          <select id="model" name="model">
-            <% models.forEach(function(m) { %>
-              <option value="<%= m.value %>" <%= model === m.value ? 'selected' : '' %>><%= m.label %></option>
-            <% }); %>
-          </select>
-        </div>
+        <h3>Parameters</h3>
         <div class="form-group">
           <label for="temperature">Temperature</label>
           <input type="number" id="temperature" name="temperature" value="<%= temperature %>" min="0" max="2" step="0.1">
@@ -58,8 +53,8 @@
         </div>
         <div class="form-group">
           <label for="max_tokens">Max Tokens</label>
-          <input type="number" id="max_tokens" name="max_tokens" value="<%= maxTokens %>" min="1" max="8192" step="1">
-          <div class="hint">Maximum number of tokens in the response (1-8192)</div>
+          <input type="number" id="max_tokens" name="max_tokens" value="<%= maxTokens %>" min="1" max="16384" step="1">
+          <div class="hint">Controls how long your agent's responses can be. A token is roughly one word. A typical blog post is 1,000-5,000 tokens. (Max: 16,384)</div>
         </div>
       </div>
 
@@ -67,4 +62,73 @@
     </form>
   </div>
 </div>
+<script>
+(function () {
+  var providerEl = document.getElementById("provider");
+  var modelEl = document.getElementById("model");
+  var apiKeyEl = document.getElementById("api_key");
+  var hintEl = document.getElementById("api_key_hint");
+
+  var models = {
+    anthropic: [
+      { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
+      { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
+      { value: "claude-opus-4-20250514", label: "Claude Opus 4" }
+    ],
+    openai: [
+      { value: "gpt-4o", label: "GPT-4o" },
+      { value: "gpt-4o-mini", label: "GPT-4o Mini" },
+      { value: "gpt-4.1", label: "GPT-4.1" },
+      { value: "gpt-4.1-mini", label: "GPT-4.1 Mini" }
+    ]
+  };
+
+  var guideLink = ' <a href="https://theagentpost.co/guides/find-your-api-key" target="_blank" style="color: var(--accent); text-decoration: underline;">How to find your API key</a>';
+
+  var hints = {
+    anthropic: {
+      placeholder: "<%= hasAnthropicKey ? '••••••••••••' : 'sk-ant-...' %>",
+      saved: <%= hasAnthropicKey ? 'true' : 'false' %>,
+      text: 'An API key lets your agent talk to the AI. Get yours at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color: var(--accent); text-decoration: underline;">console.anthropic.com</a> under API Keys.' + guideLink,
+      savedText: "Key is saved. Enter a new value to replace it, or leave blank to keep."
+    },
+    openai: {
+      placeholder: "<%= hasOpenaiKey ? '••••••••••••' : 'sk-...' %>",
+      saved: <%= hasOpenaiKey ? 'true' : 'false' %>,
+      text: 'An API key lets your agent talk to the AI. Get yours at <a href="https://platform.openai.com/api-keys" target="_blank" style="color: var(--accent); text-decoration: underline;">platform.openai.com</a> under API Keys.' + guideLink,
+      savedText: "Key is saved. Enter a new value to replace it, or leave blank to keep."
+    }
+  };
+
+  var currentModel = "<%= model %>";
+
+  function updateUI() {
+    var provider = providerEl.value;
+    var providerModels = models[provider] || [];
+    var hint = hints[provider];
+
+    // Update model dropdown
+    modelEl.innerHTML = "";
+    providerModels.forEach(function (m) {
+      var opt = document.createElement("option");
+      opt.value = m.value;
+      opt.textContent = m.label;
+      if (m.value === currentModel) opt.selected = true;
+      modelEl.appendChild(opt);
+    });
+
+    // Update API key field
+    apiKeyEl.placeholder = hint.placeholder;
+    apiKeyEl.value = "";
+    hintEl.innerHTML = hint.saved ? hint.savedText : hint.text;
+  }
+
+  providerEl.addEventListener("change", function () {
+    currentModel = "";
+    updateUI();
+  });
+
+  updateUI();
+})();
+</script>
 <%- include('partials/foot') %>

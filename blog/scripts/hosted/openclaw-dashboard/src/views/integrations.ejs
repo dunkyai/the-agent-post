@@ -121,7 +121,7 @@
           <div style="margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap;">
             <% for (const svc of google.services) { %>
               <% if (svc === 'gmail_send') { %>
-                <span class="status-badge status-connected">Gmail Send</span>
+                <span class="status-badge status-connected">Draft & Send</span>
               <% } else { %>
                 <span class="status-badge status-connected"><%= svc.charAt(0).toUpperCase() + svc.slice(1) %></span>
               <% } %>
@@ -139,11 +139,11 @@
             <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
               <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
                 <input type="checkbox" name="services" value="gmail" checked>
-                <strong>Gmail</strong> &mdash; Read, draft, and label emails
+                <strong>Gmail</strong> &mdash; Read and label emails
               </label>
               <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; padding-left: 28px;">
                 <input type="checkbox" name="services" value="gmail_send">
-                <strong>Send</strong> &mdash; Allow sending emails (not just drafting)
+                <strong>Draft &amp; Send</strong> &mdash; Create drafts and send emails
               </label>
               <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
                 <input type="checkbox" name="services" value="calendar">
