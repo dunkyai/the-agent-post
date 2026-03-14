@@ -7,17 +7,44 @@ const MEMORY_LIMIT = 1024 * 1024 * 1024; // 1GB
 const CPU_PERIOD = 100000;
 const CPU_QUOTA = 100000; // 1 vCPU
 
+export async function createNetwork(name: string): Promise<string> {
+  const network = await docker.createNetwork({
+    Name: `openclaw-net-${name}`,
+    Driver: "bridge",
+    Internal: false, // allows egress to internet (for API calls)
+    Options: {
+      "com.docker.network.bridge.enable_icc": "false",
+    },
+  });
+  return network.id;
+}
+
+export async function removeNetwork(name: string): Promise<void> {
+  try {
+    const network = docker.getNetwork(`openclaw-net-${name}`);
+    await network.remove();
+  } catch {
+    // Network may not exist
+  }
+}
+
 export async function createContainer(opts: {
   name: string;
   port: number;
   gatewayToken: string;
 }): Promise<string> {
+  // Create isolated network for this instance
+  await createNetwork(opts.name);
+
   const container = await docker.createContainer({
     Image: IMAGE,
     name: `openclaw-${opts.name}`,
     Env: [
       `PORT=3000`,
       `GATEWAY_TOKEN=${opts.gatewayToken}`,
+      `INSTANCE_ID=${opts.name}`,
+      `PROVISIONING_URL=http://host.docker.internal:3500`,
+      `NODE_ENV=production`,
     ],
     ExposedPorts: { "3000/tcp": {} },
     HostConfig: {
@@ -30,12 +57,18 @@ export async function createContainer(opts: {
       CpuQuota: CPU_QUOTA,
       RestartPolicy: { Name: "unless-stopped" },
       SecurityOpt: ["no-new-privileges:true"],
-      CapDrop: [
-        "ALL",
+      CapDrop: ["ALL"],
+      ReadonlyRootfs: true,
+      Tmpfs: {
+        "/tmp": "rw,noexec,nosuid,size=67108864",
+        "/run": "rw,noexec,nosuid,size=8388608",
+      },
+      Ulimits: [
+        { Name: "nofile", Soft: 1024, Hard: 2048 },
+        { Name: "nproc", Soft: 256, Hard: 512 },
       ],
-      CapAdd: [
-        "NET_BIND_SERVICE",
-      ],
+      NetworkMode: `openclaw-net-${opts.name}`,
+      ExtraHosts: ["host.docker.internal:host-gateway"],
     },
   });
 
@@ -60,7 +93,10 @@ export async function startContainer(containerId: string): Promise<void> {
   await container.start();
 }
 
-export async function removeContainer(containerId: string): Promise<void> {
+export async function removeContainer(
+  containerId: string,
+  instanceName?: string
+): Promise<void> {
   const container = docker.getContainer(containerId);
   try {
     await container.stop();
@@ -68,6 +104,9 @@ export async function removeContainer(containerId: string): Promise<void> {
     // Ignore — might already be stopped
   }
   await container.remove({ force: true });
+  if (instanceName) {
+    await removeNetwork(instanceName);
+  }
 }
 
 export async function getContainerStatus(
@@ -77,3 +116,5 @@ export async function getContainerStatus(
   const info = await container.inspect();
   return info.State.Status;
 }
+
+export { docker };

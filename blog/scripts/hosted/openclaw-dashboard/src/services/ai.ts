@@ -60,6 +60,91 @@ const SCHEDULING_TOOLS = [
   },
 ];
 
+// --- Code Execution Tools ---
+
+const CODE_EXECUTION_TOOLS = [
+  {
+    name: "run_command",
+    description: "Execute a shell command in a sandboxed environment. Use this to run code, install packages, process data, or perform computations. The sandbox has Node.js 22, Python 3, bash, curl, jq, and git available. Network access is disabled. Files persist in /workspace across calls within the same conversation.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        command: { type: "string", description: "The shell command to execute" },
+      },
+      required: ["command"],
+    },
+  },
+  {
+    name: "read_file",
+    description: "Read a file from the sandbox workspace.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: { type: "string", description: "File path relative to /workspace" },
+      },
+      required: ["path"],
+    },
+  },
+  {
+    name: "write_file",
+    description: "Write content to a file in the sandbox workspace.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        path: { type: "string", description: "File path relative to /workspace" },
+        content: { type: "string", description: "File content to write" },
+      },
+      required: ["path", "content"],
+    },
+  },
+];
+
+async function executeCodeTool(toolName: string, input: any): Promise<string> {
+  const provisioningUrl = process.env.PROVISIONING_URL;
+  const instanceId = process.env.INSTANCE_ID;
+  const gatewayToken = process.env.GATEWAY_TOKEN;
+
+  if (!provisioningUrl || !instanceId || !gatewayToken) {
+    return JSON.stringify({ error: "Code execution not configured on this instance" });
+  }
+
+  try {
+    let body: any;
+
+    switch (toolName) {
+      case "run_command":
+        body = { command: input.command };
+        break;
+      case "read_file":
+        body = { action: "read_file", path: input.path };
+        break;
+      case "write_file":
+        body = { action: "write_file", path: input.path, content: input.content };
+        break;
+      default:
+        return JSON.stringify({ error: `Unknown tool: ${toolName}` });
+    }
+
+    const res = await fetch(`${provisioningUrl}/instances/${instanceId}/sandbox/exec`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${gatewayToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const data: any = await res.json().catch(() => ({}));
+      return JSON.stringify({ error: data.error || `Sandbox error (${res.status})` });
+    }
+
+    return JSON.stringify(await res.json());
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Sandbox execution failed" });
+  }
+}
+
 const MEMORY_TOOLS = [
   {
     name: "save_memory",
@@ -175,6 +260,7 @@ async function callAnthropic(
     { type: "web_search_20250305", name: "web_search" },
     ...SCHEDULING_TOOLS,
     ...MEMORY_TOOLS,
+    ...CODE_EXECUTION_TOOLS,
   ];
 
   const apiMessages: any[] = messages.map((m) => ({
@@ -219,11 +305,17 @@ async function callAnthropic(
 
       // Execute each tool and build results
       const toolResults: any[] = [];
+      const memoryTools = ["save_memory", "list_memories", "delete_memory"];
+      const codeTools = ["run_command", "read_file", "write_file"];
       for (const toolBlock of customToolUseBlocks) {
-        const isMemoryTool = ["save_memory", "list_memories", "delete_memory"].includes(toolBlock.name);
-        const result = isMemoryTool
-          ? executeMemoryTool(toolBlock.name, toolBlock.input)
-          : executeSchedulingTool(toolBlock.name, toolBlock.input);
+        let result: string;
+        if (memoryTools.includes(toolBlock.name)) {
+          result = executeMemoryTool(toolBlock.name, toolBlock.input);
+        } else if (codeTools.includes(toolBlock.name)) {
+          result = await executeCodeTool(toolBlock.name, toolBlock.input);
+        } else {
+          result = executeSchedulingTool(toolBlock.name, toolBlock.input);
+        }
         toolResults.push({
           type: "tool_result",
           tool_use_id: toolBlock.id,

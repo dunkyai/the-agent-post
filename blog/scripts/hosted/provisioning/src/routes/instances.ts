@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { execSync } from "child_process";
 import * as store from "../services/store";
 import * as dockerService from "../services/docker";
+import * as sandboxService from "../services/sandbox";
 import { allocatePort } from "../services/port-manager";
 import type { CreateInstanceRequest } from "../types";
 
@@ -146,7 +147,7 @@ router.delete("/:id", async (req, res) => {
     }
 
     if (instance.containerId) {
-      await dockerService.removeContainer(instance.containerId);
+      await dockerService.removeContainer(instance.containerId, instance.id);
     }
 
     deregisterCaddyRoute(instance.subdomain);
@@ -157,6 +158,63 @@ router.delete("/:id", async (req, res) => {
   } catch (err) {
     console.error("Failed to delete instance:", err);
     res.status(500).json({ error: "Failed to delete instance" });
+  }
+});
+
+// POST /instances/:id/sandbox/exec — execute command in sandbox
+router.post("/:id/sandbox/exec", async (req, res) => {
+  try {
+    const instance = store.getInstance(req.params.id);
+    if (!instance) {
+      res.status(404).json({ error: "Instance not found" });
+      return;
+    }
+
+    // Auth: verify the request comes from the correct agent
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (token !== instance.gatewayToken) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const { command, action, path, content } = req.body;
+
+    if (action === "read_file" && path) {
+      const fileContent = await sandboxService.readSandboxFile({
+        instanceId: instance.id,
+        path,
+      });
+      res.json({ stdout: fileContent, stderr: "", exitCode: 0, timedOut: false });
+      return;
+    }
+
+    if (action === "write_file" && path && content !== undefined) {
+      await sandboxService.writeSandboxFile({
+        instanceId: instance.id,
+        path,
+        content,
+      });
+      res.json({ stdout: "File written", stderr: "", exitCode: 0, timedOut: false });
+      return;
+    }
+
+    if (!command) {
+      res.status(400).json({ error: "command is required" });
+      return;
+    }
+
+    const result = await sandboxService.executeInSandbox({
+      instanceId: instance.id,
+      command,
+      timeout: 30000,
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error("Sandbox exec error:", err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Sandbox execution failed",
+    });
   }
 });
 

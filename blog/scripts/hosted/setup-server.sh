@@ -32,8 +32,50 @@ if ! command -v docker &>/dev/null; then
   systemctl start docker
 fi
 
-# Pull OpenClaw image
-docker pull ghcr.io/openclaw/openclaw:latest
+# Docker daemon hardening
+echo "=== Hardening Docker daemon ==="
+cat > /etc/docker/daemon.json <<'DJSON'
+{
+  "icc": false,
+  "userland-proxy": false,
+  "no-new-privileges": true,
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+DJSON
+systemctl restart docker
+
+# Pull OpenClaw images
+docker pull ghcr.io/dunkyai/openclaw:latest
+docker pull ghcr.io/dunkyai/openclaw-sandbox:latest
+
+# --- gVisor (runsc) ---
+echo "=== Installing gVisor ==="
+if ! command -v runsc &>/dev/null; then
+  ARCH=$(uname -m)
+  URL="https://storage.googleapis.com/gvisor/releases/release/latest/${ARCH}"
+  wget -q "${URL}/runsc" -O /usr/local/bin/runsc
+  wget -q "${URL}/containerd-shim-runsc-v1" -O /usr/local/bin/containerd-shim-runsc-v1
+  chmod +x /usr/local/bin/runsc /usr/local/bin/containerd-shim-runsc-v1
+
+  # Register gVisor as Docker runtime
+  python3 -c "
+import json
+conf = {}
+try:
+    with open('/etc/docker/daemon.json') as f:
+        conf = json.load(f)
+except: pass
+conf.setdefault('runtimes', {})['runsc'] = {'path': '/usr/local/bin/runsc'}
+with open('/etc/docker/daemon.json', 'w') as f:
+    json.dump(conf, f, indent=2)
+"
+  systemctl restart docker
+  echo "gVisor installed and registered as Docker runtime 'runsc'"
+fi
 
 # --- Node.js 22 ---
 echo "=== Installing Node.js 22 ==="
