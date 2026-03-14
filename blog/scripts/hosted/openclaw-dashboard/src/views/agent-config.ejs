@@ -1,0 +1,44 @@
+<%- include('partials/head', { title: 'Agent' }) %>
+<div class="app">
+  <%- include('partials/nav', { active: 'agent' }) %>
+  <div class="main">
+    <h2>Agent Configuration</h2>
+    <%- include('partials/flash', { flash }) %>
+
+    <form method="POST" action="/agent">
+      <div class="card">
+        <h3>Identity</h3>
+        <div class="form-group">
+          <label for="agent_name">Agent Name</label>
+          <input type="text" id="agent_name" name="agent_name" value="<%= agentName %>" placeholder="e.g. Archie, Nova, Pepper...">
+          <div class="hint">Your agent will introduce itself with this name</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>System Prompt</h3>
+        <div class="form-group">
+          <label for="system_prompt">System prompt sent with every message</label>
+          <textarea id="system_prompt" name="system_prompt" rows="8" placeholder="You are a helpful assistant..."><%= systemPrompt %></textarea>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Parameters</h3>
+        <div class="form-group">
+          <label for="temperature">Temperature</label>
+          <input type="number" id="temperature" name="temperature" value="<%= temperature %>" min="0" max="2" step="0.1">
+          <div class="hint">0 = deterministic, 1 = creative, 2 = very random</div>
+        </div>
+        <div class="form-group">
+          <label for="max_tokens">Max Tokens</label>
+          <input type="number" id="max_tokens" name="max_tokens" value="<%= maxTokens %>" min="1" max="8192" step="1">
+          <div class="hint">Maximum number of tokens in the response (1-8192)</div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn">Save Configuration</button>
+    </form>
+  </div>
+</div>
+<%- include('partials/foot') %>

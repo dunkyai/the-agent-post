@@ -1,0 +1,188 @@
+<%- include('partials/head', { title: 'Scheduled Jobs' }) %>
+<div class="app">
+  <%- include('partials/nav', { active: 'jobs' }) %>
+  <div class="main">
+    <h2>Scheduled Jobs</h2>
+    <%- include('partials/flash', { flash }) %>
+
+    <!-- Create new job -->
+    <div class="card">
+      <h3>Create New Job</h3>
+      <form method="POST" action="/jobs">
+        <div class="form-group">
+          <label for="job_name">Name</label>
+          <input type="text" id="job_name" name="name" placeholder="e.g. Morning briefing" required>
+        </div>
+        <div class="form-group">
+          <label>Frequency</label>
+          <select id="job_freq" onchange="updateSchedule()" style="margin-bottom: 8px;">
+            <option value="every_n_min">Every N minutes</option>
+            <option value="hourly">Hourly</option>
+            <option value="daily" selected>Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="custom">Custom cron</option>
+          </select>
+        </div>
+        <div class="form-group" id="freq_minutes" style="display:none;">
+          <label for="job_every_min">Every</label>
+          <select id="job_every_min" onchange="updateSchedule()">
+            <option value="5">5 minutes</option>
+            <option value="10">10 minutes</option>
+            <option value="15">15 minutes</option>
+            <option value="30" selected>30 minutes</option>
+          </select>
+        </div>
+        <div class="form-group" id="freq_hour" style="display:none;">
+          <label for="job_at_minute">At minute</label>
+          <select id="job_at_minute" onchange="updateSchedule()">
+            <option value="0" selected>:00</option>
+            <option value="15">:15</option>
+            <option value="30">:30</option>
+            <option value="45">:45</option>
+          </select>
+        </div>
+        <div class="form-group" id="freq_time">
+          <label>Time</label>
+          <div style="display:flex; gap:8px;">
+            <select id="job_hour" onchange="updateSchedule()">
+              <% for (var h = 0; h < 24; h++) { %>
+                <option value="<%= h %>" <%= h === 9 ? 'selected' : '' %>><%= h.toString().padStart(2,'0') %></option>
+              <% } %>
+            </select>
+            <select id="job_minute" onchange="updateSchedule()">
+              <% for (var m = 0; m < 60; m += 5) { %>
+                <option value="<%= m %>"><%= m.toString().padStart(2,'0') %></option>
+              <% } %>
+            </select>
+          </div>
+        </div>
+        <div class="form-group" id="freq_dow" style="display:none;">
+          <label>Day of week</label>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <% ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(function(d, i) { %>
+              <label style="font-size:13px; display:flex; align-items:center; gap:3px;">
+                <input type="checkbox" class="job_dow" value="<%= i %>" onchange="updateSchedule()" <%= i >= 1 && i <= 5 ? 'checked' : '' %>>
+                <%= d %>
+              </label>
+            <% }); %>
+          </div>
+        </div>
+        <div class="form-group" id="freq_dom" style="display:none;">
+          <label for="job_dom">Day of month</label>
+          <select id="job_dom" onchange="updateSchedule()">
+            <% for (var d = 1; d <= 28; d++) { %>
+              <option value="<%= d %>"><%= d %></option>
+            <% } %>
+          </select>
+        </div>
+        <div class="form-group" id="freq_custom" style="display:none;">
+          <label for="job_custom_cron">Cron expression</label>
+          <input type="text" id="job_custom_cron" placeholder="0 9 * * 1-5" oninput="updateSchedule()">
+        </div>
+        <input type="hidden" id="job_schedule" name="schedule" value="0 9 * * *" required>
+        <div class="hint" id="schedule_preview" style="margin-bottom: 12px;">Preview: <code>0 9 * * *</code></div>
+        <script>
+        function updateSchedule() {
+          var freq = document.getElementById('job_freq').value;
+          document.getElementById('freq_minutes').style.display = freq === 'every_n_min' ? '' : 'none';
+          document.getElementById('freq_hour').style.display = freq === 'hourly' ? '' : 'none';
+          document.getElementById('freq_time').style.display = ['daily','weekly','monthly'].includes(freq) ? '' : 'none';
+          document.getElementById('freq_dow').style.display = freq === 'weekly' ? '' : 'none';
+          document.getElementById('freq_dom').style.display = freq === 'monthly' ? '' : 'none';
+          document.getElementById('freq_custom').style.display = freq === 'custom' ? '' : 'none';
+
+          var cron = '';
+          if (freq === 'every_n_min') {
+            cron = '*/' + document.getElementById('job_every_min').value + ' * * * *';
+          } else if (freq === 'hourly') {
+            cron = document.getElementById('job_at_minute').value + ' * * * *';
+          } else if (freq === 'daily') {
+            cron = document.getElementById('job_minute').value + ' ' + document.getElementById('job_hour').value + ' * * *';
+          } else if (freq === 'weekly') {
+            var days = [];
+            document.querySelectorAll('.job_dow:checked').forEach(function(cb) { days.push(cb.value); });
+            cron = document.getElementById('job_minute').value + ' ' + document.getElementById('job_hour').value + ' * * ' + (days.length ? days.join(',') : '*');
+          } else if (freq === 'monthly') {
+            cron = document.getElementById('job_minute').value + ' ' + document.getElementById('job_hour').value + ' ' + document.getElementById('job_dom').value + ' * *';
+          } else {
+            cron = document.getElementById('job_custom_cron').value || '';
+          }
+          document.getElementById('job_schedule').value = cron;
+          document.getElementById('schedule_preview').innerHTML = 'Preview: <code>' + (cron || '...') + '</code>';
+        }
+        updateSchedule();
+        </script>
+        <div class="form-group">
+          <label for="job_prompt">Prompt</label>
+          <textarea id="job_prompt" name="prompt" rows="3" placeholder="Give me a summary of today's news..." required></textarea>
+          <div class="hint">This prompt is sent to the AI each time the job runs</div>
+        </div>
+        <div class="form-group">
+          <label for="job_target">Deliver to</label>
+          <select id="job_target" name="target_source">
+            <option value="dashboard">Dashboard (log only)</option>
+            <option value="email">Email</option>
+            <option value="telegram">Telegram</option>
+            <option value="slack">Slack</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="job_target_id">Target ID</label>
+          <input type="text" id="job_target_id" name="target_external_id" placeholder="scheduler" value="scheduler">
+          <div class="hint">Chat ID (Telegram), channel:user (Slack), or email address</div>
+        </div>
+        <button type="submit" class="btn">Create Job</button>
+      </form>
+    </div>
+
+    <% if (jobs.length === 0) { %>
+      <div class="card">
+        <p style="color: var(--text-secondary); text-align: center;">
+          No scheduled jobs yet. Create one above or ask your agent to schedule one via chat.
+        </p>
+      </div>
+    <% } %>
+
+    <% jobs.forEach(function(job) { %>
+      <div class="card">
+        <div class="integration-header">
+          <h3><%= job.name %></h3>
+          <span class="status-badge status-<%= job.enabled ? 'connected' : 'disconnected' %>">
+            <%= job.enabled ? 'enabled' : 'disabled' %>
+          </span>
+        </div>
+
+        <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+          <div><strong>Schedule:</strong> <code><%= job.schedule %></code> &mdash; <%= job.schedule_description %></div>
+          <div><strong>Prompt:</strong> <%= job.prompt.length > 120 ? job.prompt.slice(0, 120) + '...' : job.prompt %></div>
+          <div><strong>Target:</strong> <%= job.target_source %> / <%= job.target_external_id %></div>
+          <div><strong>Created by:</strong> <%= job.created_by %></div>
+          <% if (job.next_run) { %>
+            <div><strong>Next run:</strong> <%= job.next_run %></div>
+          <% } %>
+          <% if (job.last_run) { %>
+            <div><strong>Last run:</strong> <%= job.last_run %></div>
+          <% } %>
+          <% if (job.last_error) { %>
+            <div style="color: var(--danger);"><strong>Last error:</strong> <%= job.last_error %></div>
+          <% } %>
+          <% if (job.last_result) { %>
+            <div><strong>Last result:</strong> <%= job.last_result.length > 100 ? job.last_result.slice(0, 100) + '...' : job.last_result %></div>
+          <% } %>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <form method="POST" action="/jobs/<%= job.id %>/toggle" style="display:inline;">
+            <button type="submit" class="btn"><%= job.enabled ? 'Disable' : 'Enable' %></button>
+          </form>
+          <form method="POST" action="/jobs/<%= job.id %>/delete" style="display:inline;"
+                onsubmit="return confirm('Delete this job?')">
+            <button type="submit" class="btn btn-danger">Delete</button>
+          </form>
+        </div>
+      </div>
+    <% }); %>
+  </div>
+</div>
+<%- include('partials/foot') %>

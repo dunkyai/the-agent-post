@@ -1,0 +1,17 @@
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <h1>OpenClaw</h1>
+  </div>
+  <ul class="sidebar-nav">
+    <li><a href="/settings" class="<%= typeof active !== 'undefined' && active === 'settings' ? 'active' : '' %>">Settings</a></li>
+    <li><a href="/integrations" class="<%= typeof active !== 'undefined' && active === 'integrations' ? 'active' : '' %>">Integrations</a></li>
+    <li><a href="/agent" class="<%= typeof active !== 'undefined' && active === 'agent' ? 'active' : '' %>">Agent</a></li>
+    <li><a href="/jobs" class="<%= typeof active !== 'undefined' && active === 'jobs' ? 'active' : '' %>">Jobs</a></li>
+    <li><a href="/chat" class="<%= typeof active !== 'undefined' && active === 'chat' ? 'active' : '' %>">Chat</a></li>
+  </ul>
+  <div class="sidebar-footer">
+    <form method="POST" action="/logout">
+      <button type="submit" class="btn-logout">Logout</button>
+    </form>
+  </div>
+</nav>

@@ -1,0 +1,20 @@
+<%- include('partials/head', { title: 'Login' }) %>
+<div class="login-page">
+  <div class="login-card">
+    <h1>OpenClaw</h1>
+    <p>Enter your gateway token to access the dashboard</p>
+
+    <% if (error) { %>
+      <div class="login-error"><%= error %></div>
+    <% } %>
+
+    <form method="POST" action="/login">
+      <div class="form-group">
+        <label for="token">Gateway Token</label>
+        <input type="password" id="token" name="token" placeholder="Enter your token" required autofocus>
+      </div>
+      <button type="submit" class="btn" style="width:100%">Login</button>
+    </form>
+  </div>
+</div>
+<%- include('partials/foot') %>

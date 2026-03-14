@@ -1,0 +1,43 @@
+<%- include('partials/head', { title: 'Settings' }) %>
+<div class="app">
+  <%- include('partials/nav', { active: 'settings' }) %>
+  <div class="main">
+    <h2>Settings</h2>
+    <%- include('partials/flash', { flash }) %>
+
+    <form method="POST" action="/settings">
+      <div class="card">
+        <h3>API Keys</h3>
+        <div class="form-group">
+          <label for="anthropic_api_key">Anthropic API Key</label>
+          <input type="password" id="anthropic_api_key" name="anthropic_api_key"
+            placeholder="<%= hasAnthropicKey ? '••••••••••••' : 'sk-ant-...' %>"
+            value="">
+          <div class="hint"><%= hasAnthropicKey ? 'Key is saved. Enter a new value to replace it, or leave blank to keep.' : 'Required for Claude models.' %></div>
+        </div>
+        <div class="form-group">
+          <label for="openai_api_key">OpenAI API Key</label>
+          <input type="password" id="openai_api_key" name="openai_api_key"
+            placeholder="<%= hasOpenaiKey ? '••••••••••••' : 'sk-...' %>"
+            value="">
+          <div class="hint"><%= hasOpenaiKey ? 'Key is saved. Enter a new value to replace it, or leave blank to keep.' : 'Required for GPT models.' %></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Model</h3>
+        <div class="form-group">
+          <label for="model">Default Model</label>
+          <select id="model" name="model">
+            <% models.forEach(function(m) { %>
+              <option value="<%= m.value %>" <%= model === m.value ? 'selected' : '' %>><%= m.label %></option>
+            <% }); %>
+          </select>
+        </div>
+      </div>
+
+      <button type="submit" class="btn">Save Settings</button>
+    </form>
+  </div>
+</div>
+<%- include('partials/foot') %>

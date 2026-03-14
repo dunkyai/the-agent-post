@@ -1,0 +1,137 @@
+<%- include('partials/head', { title: 'Integrations' }) %>
+<div class="app">
+  <%- include('partials/nav', { active: 'integrations' }) %>
+  <div class="main">
+    <h2>Integrations</h2>
+    <%- include('partials/flash', { flash }) %>
+
+    <!-- Telegram -->
+    <div class="card">
+      <div class="integration-header">
+        <h3>Telegram</h3>
+        <span class="status-badge status-<%= telegram.status %>"><%= telegram.status %></span>
+      </div>
+
+      <% if (telegram.error_message) { %>
+        <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= telegram.error_message %></p>
+      <% } %>
+
+      <% if (telegram.status === 'connected') { %>
+        <form method="POST" action="/integrations/telegram/disconnect">
+          <button type="submit" class="btn btn-danger">Disconnect</button>
+        </form>
+      <% } else { %>
+        <form method="POST" action="/integrations/telegram/connect">
+          <div class="form-group">
+            <label for="tg_bot_token">Bot Token</label>
+            <input type="password" id="tg_bot_token" name="bot_token" placeholder="123456:ABC-DEF1234..." required>
+            <div class="hint">Get this from @BotFather on Telegram</div>
+          </div>
+          <button type="submit" class="btn">Connect</button>
+        </form>
+      <% } %>
+    </div>
+
+    <!-- WhatsApp -->
+    <div class="card">
+      <div class="integration-header">
+        <h3>WhatsApp</h3>
+        <span class="status-badge status-<%= whatsapp.status %>"><%= whatsapp.status %></span>
+      </div>
+
+      <% if (whatsapp.error_message) { %>
+        <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= whatsapp.error_message %></p>
+      <% } %>
+
+      <% if (whatsapp.status === 'connected') { %>
+        <form method="POST" action="/integrations/whatsapp/disconnect">
+          <button type="submit" class="btn btn-danger">Disconnect</button>
+        </form>
+      <% } else { %>
+        <form method="POST" action="/integrations/whatsapp/connect">
+          <div class="form-group">
+            <label for="wa_phone_id">Phone Number ID</label>
+            <input type="text" id="wa_phone_id" name="phone_number_id" placeholder="1234567890" required>
+          </div>
+          <div class="form-group">
+            <label for="wa_access_token">Access Token</label>
+            <input type="password" id="wa_access_token" name="access_token" placeholder="EAAx..." required>
+          </div>
+          <div class="form-group">
+            <label for="wa_verify_token">Verify Token</label>
+            <input type="text" id="wa_verify_token" name="verify_token" placeholder="A secret string of your choice" required>
+            <div class="hint">Set this same value in your WhatsApp webhook configuration</div>
+          </div>
+          <button type="submit" class="btn">Connect</button>
+        </form>
+      <% } %>
+    </div>
+
+    <!-- Slack -->
+    <div class="card">
+      <div class="integration-header">
+        <h3>Slack</h3>
+        <span class="status-badge status-<%= slack.status %>"><%= slack.status %></span>
+      </div>
+
+      <% if (slack.error_message) { %>
+        <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= slack.error_message %></p>
+      <% } %>
+
+      <% if (slack.status === 'connected') { %>
+        <form method="POST" action="/integrations/slack/disconnect">
+          <button type="submit" class="btn btn-danger">Disconnect</button>
+        </form>
+      <% } else { %>
+        <form method="POST" action="/integrations/slack/connect">
+          <div class="form-group">
+            <label for="slack_bot_token">Bot Token</label>
+            <input type="password" id="slack_bot_token" name="bot_token" placeholder="xoxb-..." required>
+            <div class="hint">From your Slack app's OAuth & Permissions page</div>
+          </div>
+          <div class="form-group">
+            <label for="slack_app_token">App-Level Token</label>
+            <input type="password" id="slack_app_token" name="app_token" placeholder="xapp-..." required>
+            <div class="hint">From your Slack app's Basic Information page (Socket Mode)</div>
+          </div>
+          <button type="submit" class="btn">Connect</button>
+        </form>
+      <% } %>
+    </div>
+    <!-- Email (LobsterMail) -->
+    <div class="card">
+      <div class="integration-header">
+        <h3>Email</h3>
+        <span class="status-badge status-<%= email.status %>"><%= email.status %></span>
+      </div>
+
+      <% if (email.error_message) { %>
+        <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= email.error_message %></p>
+      <% } %>
+
+      <% if (email.status === 'connected') { %>
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 13px; color: var(--muted);">Agent Email Address</label>
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+            <code id="email-address" style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; flex: 1;"><%= email.email_address %></code>
+            <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('email-address').textContent).then(() => this.textContent = 'Copied!').catch(() => {}); setTimeout(() => this.textContent = 'Copy', 1500);" class="btn" style="padding: 6px 12px; font-size: 13px;">Copy</button>
+          </div>
+          <div class="hint" style="margin-top: 6px;">Send emails to this address and your agent will respond via AI. Replies require a Tier 1+ LobsterMail API key.</div>
+        </div>
+        <form method="POST" action="/integrations/email/disconnect">
+          <button type="submit" class="btn btn-danger">Disconnect</button>
+        </form>
+      <% } else { %>
+        <form method="POST" action="/integrations/email/connect">
+          <div class="form-group">
+            <label for="email_api_key">LobsterMail API Key <span style="color: var(--muted); font-weight: normal;">(optional)</span></label>
+            <input type="password" id="email_api_key" name="api_key" placeholder="lm_sk_live_...">
+            <div class="hint">Leave blank to auto-provision a free inbox (receive only). Paste a Tier 1+ key to enable replies.</div>
+          </div>
+          <button type="submit" class="btn">Connect Email</button>
+        </form>
+      <% } %>
+    </div>
+  </div>
+</div>
+<%- include('partials/foot') %>
