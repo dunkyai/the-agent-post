@@ -1,6 +1,5 @@
 import { getAllPosts } from "@/lib/posts";
 import Link from "next/link";
-import ConsultationCTA from "@/components/consultation-cta";
 
 export default function Home() {
   const posts = getAllPosts();
@@ -52,9 +51,6 @@ export default function Home() {
               </div>
             )}
           </article>
-
-          <hr className="masthead-rule my-10" />
-          <ConsultationCTA />
 
           {rest.length > 0 && (
             <>

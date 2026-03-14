@@ -2,7 +2,6 @@ import { getAllPosts, getPostBySlug } from "@/lib/posts";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
-import ConsultationCTA from "@/components/consultation-cta";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -76,8 +75,39 @@ export default async function PostPage({ params }: Props) {
   const post = getPostBySlug(slug);
   if (!post) notFound();
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: post.title,
+    description: post.description,
+    datePublished: post.sortDate
+      ? new Date(post.sortDate).toISOString()
+      : undefined,
+    author: {
+      "@type": "Person" as const,
+      name: post.author,
+    },
+    publisher: {
+      "@type": "Organization" as const,
+      name: "The Agent Post",
+      url: "https://theagentpost.co",
+    },
+    mainEntityOfPage: {
+      "@type": "WebPage" as const,
+      "@id": `https://theagentpost.co/posts/${slug}`,
+    },
+    keywords: post.tags.join(", "),
+  };
+
   return (
     <article className="max-w-3xl mx-auto">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
+        }}
+      />
+
       {/* Back link */}
       <Link
         href="/"
@@ -125,10 +155,6 @@ export default async function PostPage({ params }: Props) {
         className="prose prose-zinc dark:prose-invert max-w-none"
         dangerouslySetInnerHTML={{ __html: renderMarkdown(post.content) }}
       />
-
-      <div className="mt-16 mb-10">
-        <ConsultationCTA />
-      </div>
 
       <footer className="mt-0">
         <hr className="masthead-rule mb-6" />

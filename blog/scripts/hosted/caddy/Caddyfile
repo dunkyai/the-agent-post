@@ -1,0 +1,29 @@
+{
+    admin localhost:2019
+}
+
+# Base domain health check
+agents.theagentpost.co {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    respond "ok" 200
+}
+
+# Provisioning API (internal, via Caddy for TLS)
+api.agents.theagentpost.co {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    reverse_proxy localhost:3500
+}
+
+# Instance routes are added dynamically via the Caddy admin API
+# Each instance gets: {id}.agents.theagentpost.co → localhost:{port}
+# Wildcard TLS covers all subdomains
+*.agents.theagentpost.co {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    respond "Instance not found" 404
+}

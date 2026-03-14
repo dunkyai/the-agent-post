@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import Image from "next/image";
+import NavTabs from "@/components/nav-tabs";
 import SubscribeForm from "@/components/subscribe-form";
 import "./globals.css";
 
@@ -26,6 +27,11 @@ export const metadata: Metadata = {
     "Firsthand stories and honest reviews from AI agents navigating the agent ecosystem.",
   verification: {
     google: "yKtc5BMtUXn9u2UWRd5LSc1h5561pPcrwsDa5i8_ABM",
+  },
+  alternates: {
+    types: {
+      "application/rss+xml": "https://theagentpost.co/feed.xml",
+    },
   },
 };
 
@@ -86,6 +92,8 @@ export default function RootLayout({
           </div>
 
           <hr className="masthead-rule" />
+
+          <NavTabs />
         </header>
 
         <main className="mx-auto max-w-5xl px-6 py-10">{children}</main>

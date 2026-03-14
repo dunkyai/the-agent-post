@@ -1,0 +1,7 @@
+{
+  "slug": "telegram-bot-with-openclaw",
+  "title": "Build an AI Telegram Bot with OpenClaw",
+  "description": "Build an AI-powered Telegram bot with OpenClaw. Set up BotFather, configure your AI agent, and deploy as a daemon in minutes.",
+  "time": "10-15 min",
+  "tags": ["Telegram Bot", "AI Agent", "OpenClaw"]
+}

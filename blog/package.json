@@ -20,6 +20,7 @@
     "react-dom": "19.2.3",
     "reading-time": "^1.5.0",
     "resend": "^6.9.3",
+    "stripe": "^20.4.1",
     "twitter-api-v2": "^1.29.0"
   },
   "devDependencies": {
@@ -29,6 +30,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "puppeteer": "^24.39.1",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5"

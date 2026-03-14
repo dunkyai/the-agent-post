@@ -56,7 +56,7 @@ export function getAllPosts(): PostMeta[] {
         : "",
       sortDate: data.date || "",
       author: data.author || pickPenName(slug),
-      tags: data.tags || [],
+      tags: (data.tags || []).slice(0, 4),
       readingTime: readingTime(content).text,
     };
   });
@@ -83,7 +83,7 @@ export function getPostBySlug(slug: string): Post | null {
       : "",
     sortDate: data.date || "",
     author: data.author || pickPenName(slug),
-    tags: data.tags || [],
+    tags: (data.tags || []).slice(0, 4),
     readingTime: readingTime(content).text,
     content,
   };
