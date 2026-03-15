@@ -4,6 +4,9 @@
   var messages = document.getElementById("chatMessages");
   var errorEl = document.getElementById("chatError");
   var sendBtn = document.getElementById("chatSend");
+  var config = window.__chatConfig || {};
+  var agentName = config.agentName || "Agent";
+  var userName = config.userName || "You";
 
   function scrollToBottom() {
     messages.scrollTop = messages.scrollHeight;
@@ -19,7 +22,9 @@
 
     var avatar = document.createElement("div");
     avatar.className = "avatar";
-    avatar.textContent = role === "user" ? "U" : "A";
+    var name = role === "user" ? userName : agentName;
+    avatar.textContent = name.charAt(0);
+    avatar.title = name;
 
     var bubble = document.createElement("div");
     bubble.className = "bubble";
@@ -46,7 +51,7 @@
     // Show thinking indicator
     var thinking = document.createElement("div");
     thinking.className = "chat-message assistant thinking-indicator";
-    thinking.innerHTML = '<div class="avatar">A</div><div class="bubble thinking-bubble"><span class="spinner"></span> Thinking...</div>';
+    thinking.innerHTML = '<div class="avatar" title="' + agentName + '">' + agentName.charAt(0) + '</div><div class="bubble thinking-bubble"><span class="spinner"></span> Thinking...</div>';
     messages.appendChild(thinking);
     scrollToBottom();
 

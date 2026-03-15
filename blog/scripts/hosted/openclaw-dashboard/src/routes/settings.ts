@@ -14,6 +14,7 @@ router.get("/settings", (req: Request, res: Response) => {
   const openaiKey = getSetting("openai_api_key");
   const model = getSetting("model") || "claude-sonnet-4-20250514";
   const agentName = getSetting("agent_name") || "";
+  const userName = getSetting("user_name") || "";
   const systemPrompt = getSetting("system_prompt") || "";
   const temperature = getSetting("temperature") || "0.7";
   const maxTokens = getSetting("max_tokens") || "4096";
@@ -24,6 +25,7 @@ router.get("/settings", (req: Request, res: Response) => {
     model,
     provider: getProvider(model),
     agentName,
+    userName,
     systemPrompt,
     temperature,
     maxTokens,
@@ -32,7 +34,7 @@ router.get("/settings", (req: Request, res: Response) => {
 });
 
 router.post("/settings", (req: Request, res: Response) => {
-  const { provider, api_key, model, agent_name, system_prompt, temperature, max_tokens } = req.body;
+  const { provider, api_key, model, agent_name, user_name, system_prompt, temperature, max_tokens } = req.body;
 
   // Save API key to the correct provider setting
   if (api_key && api_key.trim() && !api_key.startsWith("••••")) {
@@ -45,6 +47,7 @@ router.post("/settings", (req: Request, res: Response) => {
   }
 
   setSetting("agent_name", (agent_name || "").trim());
+  setSetting("user_name", (user_name || "").trim());
   setSetting("system_prompt", system_prompt || "");
 
   const temp = parseFloat(temperature);

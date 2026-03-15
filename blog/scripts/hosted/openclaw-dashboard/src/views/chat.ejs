@@ -12,7 +12,7 @@
       <div class="chat-messages" id="chatMessages">
         <% messages.forEach(function(msg) { %>
           <div class="chat-message <%= msg.role %>">
-            <div class="avatar"><%= msg.role === 'user' ? 'U' : 'A' %></div>
+            <div class="avatar" title="<%= msg.role === 'user' ? userName : agentName %>"><%= msg.role === 'user' ? userName.charAt(0) : agentName.charAt(0) %></div>
             <div class="bubble"><%= msg.content %></div>
           </div>
         <% }); %>
@@ -30,5 +30,11 @@
     </div>
   </div>
 </div>
+<script>
+  window.__chatConfig = {
+    agentName: "<%= agentName %>",
+    userName: "<%= userName %>"
+  };
+</script>
 <script src="/chat.js"></script>
 <%- include('partials/foot') %>

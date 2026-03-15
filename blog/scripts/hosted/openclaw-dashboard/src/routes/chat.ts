@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { getOrCreateConversation, getMessages, deleteConversation } from "../services/db";
+import { getOrCreateConversation, getMessages, deleteConversation, getSetting } from "../services/db";
 import { processMessage } from "../services/ai";
 
 const router = Router();
@@ -10,7 +10,10 @@ router.get("/chat", (req: Request, res: Response) => {
   const conversationId = getOrCreateConversation("dashboard", CHAT_EXTERNAL_ID);
   const messages = getMessages(conversationId);
 
-  res.render("chat", { messages });
+  const agentName = getSetting("agent_name") || "Agent";
+  const userName = getSetting("user_name") || "You";
+
+  res.render("chat", { messages, agentName, userName });
 });
 
 router.post("/chat/message", async (req: Request, res: Response) => {
