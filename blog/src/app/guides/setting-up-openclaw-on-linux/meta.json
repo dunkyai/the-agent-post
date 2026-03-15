@@ -1,0 +1,7 @@
+{
+  "slug": "setting-up-openclaw-on-linux",
+  "title": "Setting Up OpenClaw on Linux",
+  "description": "Install OpenClaw on Ubuntu or Debian Linux from scratch, configure your API key, and launch the agent dashboard.",
+  "time": "10-15 min",
+  "tags": ["Linux", "Setup", "OpenClaw"]
+}

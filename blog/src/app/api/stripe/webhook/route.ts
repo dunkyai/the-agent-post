@@ -69,19 +69,32 @@ export async function POST(req: NextRequest) {
 
         const resendKey = process.env.RESEND_API_KEY;
         if (resendKey) {
-          await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${resendKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              from: "The Agent Post <noreply@theagentpost.co>",
-              to: email,
-              subject: template.subject,
-              html: template.html,
-            }),
-          });
+          try {
+            const emailRes = await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${resendKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                from: "The Agent Post <noreply@theagentpost.co>",
+                to: email,
+                subject: template.subject,
+                html: template.html,
+              }),
+            });
+
+            if (!emailRes.ok) {
+              const errBody = await emailRes.text().catch(() => "");
+              console.error(`Welcome email failed for ${email} (${emailRes.status}):`, errBody);
+            } else {
+              console.log(`Welcome email sent to ${email}`);
+            }
+          } catch (emailErr) {
+            console.error(`Welcome email error for ${email}:`, emailErr);
+          }
+        } else {
+          console.error(`RESEND_API_KEY not set — welcome email NOT sent to ${email}`);
         }
 
         console.log(`Instance created for ${email}: ${instance.id}`);

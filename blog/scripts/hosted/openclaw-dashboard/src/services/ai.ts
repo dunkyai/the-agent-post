@@ -615,7 +615,6 @@ async function callAnthropic(
     ...SCHEDULING_TOOLS,
     ...MEMORY_TOOLS,
     ...CODE_EXECUTION_TOOLS,
-    ...PUBLIC_GDOC_TOOLS,
   ];
 
   // Conditionally add messaging tools based on connected integrations
@@ -635,12 +634,17 @@ async function callAnthropic(
     if (googleServices.includes("contacts")) tools.push(...GOOGLE_CONTACTS_TOOLS);
   }
 
+  // Only add public Google Doc tool if Drive is not connected (Drive has full OAuth access)
+  if (!googleServices || !googleServices.includes("drive")) {
+    tools.push(...PUBLIC_GDOC_TOOLS);
+  }
+
   const apiMessages: any[] = messages.map((m) => ({
     role: m.role === "user" ? "user" : "assistant",
     content: m.content,
   }));
 
-  const MAX_TOOL_ROUNDS = 5;
+  const MAX_TOOL_ROUNDS = 15;
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",

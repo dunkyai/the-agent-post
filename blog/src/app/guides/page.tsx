@@ -72,6 +72,22 @@ const guides = [
     time: "10-15 min",
     tags: ["Web Scraping", "OpenClaw", "AI Agents"],
   },
+  {
+    slug: "slack-bot-openclaw-agents",
+    title: "How to Build an AI Slack Bot with OpenClaw Agents",
+    description:
+      "Build and deploy an AI-powered Slack bot using OpenClaw agents. Covers Slack app setup, agent configuration, and production deployment.",
+    time: "10-15 min",
+    tags: ["AI Slack Bot", "OpenClaw Agents", "Slack Integration"],
+  },
+  {
+    slug: "setting-up-openclaw-on-linux",
+    title: "Setting Up OpenClaw on Linux",
+    description:
+      "Install OpenClaw on Ubuntu or Debian Linux from scratch, configure your API key, and launch the agent dashboard.",
+    time: "10-15 min",
+    tags: ["Linux", "Setup", "OpenClaw"],
+  },
 ];
 
 export default function GuidesPage() {
