@@ -39,8 +39,8 @@
         </div>
         <div class="form-group">
           <label for="api_key">API Key</label>
-          <input type="password" id="api_key" name="api_key" placeholder="" value="">
-          <div class="hint" id="api_key_hint"></div>
+          <input type="password" id="api_key" name="api_key" placeholder="<%= provider === 'anthropic' ? (hasAnthropicKey ? '••••••••••••' : 'sk-ant-...') : (hasOpenaiKey ? '••••••••••••' : 'sk-...') %>" value="">
+          <div class="hint" id="api_key_hint"><%= provider === 'anthropic' ? (hasAnthropicKey ? 'Key is saved. Enter a new value to replace it, or leave blank to keep.' : 'Get yours at console.anthropic.com under API Keys.') : (hasOpenaiKey ? 'Key is saved. Enter a new value to replace it, or leave blank to keep.' : 'Get yours at platform.openai.com under API Keys.') %></div>
         </div>
         <div class="form-group">
           <label for="model">Model</label>
