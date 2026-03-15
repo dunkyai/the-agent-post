@@ -63,6 +63,20 @@
         </div>
       </div>
 
+      <div class="card">
+        <h3>Security</h3>
+        <div class="form-group">
+          <label for="session_expiry_days">Session Duration</label>
+          <select id="session_expiry_days" name="session_expiry_days">
+            <option value="1" <%= sessionExpiryDays === '1' ? 'selected' : '' %>>1 day</option>
+            <option value="7" <%= sessionExpiryDays === '7' ? 'selected' : '' %>>7 days</option>
+            <option value="30" <%= sessionExpiryDays === '30' || !sessionExpiryDays ? 'selected' : '' %>>30 days</option>
+            <option value="90" <%= sessionExpiryDays === '90' ? 'selected' : '' %>>90 days</option>
+          </select>
+          <div class="hint">How long you stay logged in before needing to sign in again</div>
+        </div>
+      </div>
+
       <button type="submit" class="btn">Save Settings</button>
     </form>
   </div>

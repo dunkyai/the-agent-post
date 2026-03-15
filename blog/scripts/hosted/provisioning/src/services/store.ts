@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import crypto from "crypto";
 import path from "path";
 import type { Instance } from "../types";
 
@@ -23,6 +24,15 @@ db.exec(`
     container_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS magic_link_tokens (
+    token TEXT PRIMARY KEY,
+    instance_id TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used INTEGER NOT NULL DEFAULT 0,
+    session_code TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
   CREATE TABLE IF NOT EXISTS slack_installations (
@@ -159,4 +169,57 @@ export function getSlackInstallationByTeam(teamId: string): SlackInstallation | 
 
 export function deleteSlackInstallationsByInstance(instanceId: string): void {
   db.prepare("DELETE FROM slack_installations WHERE instance_id = ?").run(instanceId);
+}
+
+// --- Magic Link Tokens ---
+
+export function createMagicLinkToken(instanceId: string): string {
+  const token = crypto.randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
+  db.prepare(
+    "INSERT INTO magic_link_tokens (token, instance_id, expires_at) VALUES (?, ?, ?)"
+  ).run(token, instanceId, expiresAt);
+  return token;
+}
+
+export function consumeMagicLinkToken(token: string): { instanceId: string; sessionCode: string } | null {
+  const row = db.prepare(
+    "SELECT * FROM magic_link_tokens WHERE token = ?"
+  ).get(token) as Record<string, unknown> | undefined;
+
+  if (!row) return null;
+  if (row.used === 1) return null;
+  if (new Date(row.expires_at as string) < new Date()) return null;
+
+  const sessionCode = crypto.randomBytes(32).toString("hex");
+  db.prepare(
+    "UPDATE magic_link_tokens SET used = 1, session_code = ? WHERE token = ?"
+  ).run(sessionCode, token);
+
+  return { instanceId: row.instance_id as string, sessionCode };
+}
+
+export function verifySessionCode(instanceId: string, code: string): boolean {
+  const row = db.prepare(
+    "SELECT * FROM magic_link_tokens WHERE instance_id = ? AND session_code = ? AND used = 1"
+  ).get(instanceId, code) as Record<string, unknown> | undefined;
+
+  if (!row) return false;
+
+  // Single-use: delete after verification
+  db.prepare("DELETE FROM magic_link_tokens WHERE token = ?").run(row.token);
+  return true;
+}
+
+export function cleanExpiredTokens(): number {
+  const result = db.prepare(
+    "DELETE FROM magic_link_tokens WHERE expires_at < datetime('now') OR (used = 1 AND session_code IS NULL)"
+  ).run();
+  return result.changes;
+}
+
+export function getRecentMagicLinkForInstance(instanceId: string): { created_at: string } | null {
+  return db.prepare(
+    "SELECT created_at FROM magic_link_tokens WHERE instance_id = ? ORDER BY created_at DESC LIMIT 1"
+  ).get(instanceId) as { created_at: string } | null;
 }

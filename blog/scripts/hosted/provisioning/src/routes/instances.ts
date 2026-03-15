@@ -251,6 +251,119 @@ router.post("/:id/browser/:action", async (req, res) => {
   }
 });
 
+// POST /instances/:id/magic-link — instance requests a magic link for its owner
+router.post("/:id/magic-link", async (req, res) => {
+  try {
+    const instance = store.getInstance(req.params.id);
+    if (!instance) {
+      res.status(404).json({ error: "Instance not found" });
+      return;
+    }
+
+    // Auth: verify the request comes from the correct agent
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (token !== instance.gatewayToken) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const { email } = req.body;
+    if (!email || typeof email !== "string") {
+      res.status(400).json({ error: "Email is required" });
+      return;
+    }
+
+    // Rate limit: 1 magic link per instance per minute
+    const recent = store.getRecentMagicLinkForInstance(instance.id);
+    if (recent) {
+      const elapsed = Date.now() - new Date(recent.created_at).getTime();
+      if (elapsed < 60_000) {
+        // Still return success to prevent enumeration
+        res.json({ message: "If you have an account, you will receive an email from us with your magic link." });
+        return;
+      }
+    }
+
+    // Only send if email matches the instance owner
+    if (email.trim().toLowerCase() === instance.email.toLowerCase()) {
+      const magicToken = store.createMagicLinkToken(instance.id);
+      const magicLink = `https://api.agents.theagentpost.co/auth/magic-link?token=${magicToken}`;
+
+      const resendKey = process.env.RESEND_API_KEY;
+      if (resendKey) {
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${resendKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: "The Agent Post <noreply@theagentpost.co>",
+            to: instance.email,
+            subject: "Sign in to your OpenClaw dashboard",
+            html: magicLinkEmailHtml(magicLink),
+          }),
+        });
+        console.log(`Magic link sent to ${instance.email} for instance ${instance.id}`);
+      } else {
+        console.error("RESEND_API_KEY not set — cannot send magic link email");
+      }
+    }
+
+    // Always return success to prevent email enumeration
+    res.json({ message: "If you have an account, you will receive an email from us with your magic link." });
+  } catch (err) {
+    console.error("Magic link error:", err);
+    res.status(500).json({ error: "Failed to send magic link" });
+  }
+});
+
+// POST /instances/:id/verify-session-code — instance verifies callback code
+router.post("/:id/verify-session-code", (req, res) => {
+  try {
+    const instance = store.getInstance(req.params.id);
+    if (!instance) {
+      res.status(404).json({ error: "Instance not found" });
+      return;
+    }
+
+    // Auth: verify the request comes from the correct agent
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (token !== instance.gatewayToken) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const { code } = req.body;
+    if (!code || typeof code !== "string") {
+      res.status(400).json({ error: "Code is required" });
+      return;
+    }
+
+    const valid = store.verifySessionCode(instance.id, code);
+    if (!valid) {
+      res.status(401).json({ error: "Invalid or expired code" });
+      return;
+    }
+
+    res.json({ valid: true });
+  } catch (err) {
+    console.error("Verify session code error:", err);
+    res.status(500).json({ error: "Verification failed" });
+  }
+});
+
+function magicLinkEmailHtml(link: string): string {
+  return `
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
+  <h2 style="color: #1a1a1a; font-size: 20px; margin-bottom: 16px;">Sign in to your OpenClaw dashboard</h2>
+  <p style="color: #444; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">Click the button below to sign in. This link can only be used once and expires in 10 minutes.</p>
+  <a href="${link}" style="display: inline-block; background: #6c5ce7; color: #fff; text-decoration: none; padding: 12px 32px; border-radius: 6px; font-size: 15px; font-weight: 500;">Sign in to OpenClaw</a>
+  <p style="color: #888; font-size: 13px; margin-top: 32px; line-height: 1.5;">If you didn't request this link, you can safely ignore this email.</p>
+  <p style="color: #bbb; font-size: 12px; margin-top: 24px;">— The Agent Post</p>
+</div>`;
+}
+
 // --- Caddy route management ---
 
 function registerCaddyRoute(subdomain: string, port: number): void {

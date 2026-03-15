@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 
@@ -57,6 +58,13 @@ function initSchema(): void {
 
     CREATE INDEX IF NOT EXISTS idx_messages_conversation
       ON messages(conversation_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_rotated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at TEXT NOT NULL
+    );
 
     CREATE TABLE IF NOT EXISTS memories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -316,4 +324,57 @@ export function deleteMemory(id: number): void {
 
 export function getMemory(id: number): Memory | undefined {
   return getDb().prepare("SELECT * FROM memories WHERE id = ?").get(id) as Memory | undefined;
+}
+
+// --- Sessions ---
+
+export function createSessionToken(): string {
+  const token = crypto.randomBytes(32).toString("hex");
+  const expiryDays = parseInt(getSetting("session_expiry_days") || "30", 10);
+  const expiresAt = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString();
+  getDb()
+    .prepare("INSERT INTO sessions (token, expires_at) VALUES (?, ?)")
+    .run(token, expiresAt);
+  return token;
+}
+
+export function validateSession(token: string): boolean {
+  if (!token) return false;
+  const row = getDb()
+    .prepare("SELECT * FROM sessions WHERE token = ?")
+    .get(token) as { token: string; expires_at: string; last_rotated_at: string } | undefined;
+  if (!row) return false;
+  if (new Date(row.expires_at) < new Date()) {
+    getDb().prepare("DELETE FROM sessions WHERE token = ?").run(token);
+    return false;
+  }
+  return true;
+}
+
+export function rotateSessionToken(oldToken: string): string | null {
+  const row = getDb()
+    .prepare("SELECT * FROM sessions WHERE token = ?")
+    .get(oldToken) as { token: string; last_rotated_at: string; expires_at: string } | undefined;
+  if (!row) return null;
+
+  // Only rotate if last rotation was >24h ago
+  const lastRotated = new Date(row.last_rotated_at).getTime();
+  if (Date.now() - lastRotated < 24 * 60 * 60 * 1000) return null;
+
+  const newToken = crypto.randomBytes(32).toString("hex");
+  getDb().prepare(
+    "UPDATE sessions SET token = ?, last_rotated_at = datetime('now') WHERE token = ?"
+  ).run(newToken, oldToken);
+  return newToken;
+}
+
+export function deleteSession(token: string): void {
+  getDb().prepare("DELETE FROM sessions WHERE token = ?").run(token);
+}
+
+export function cleanExpiredSessions(): number {
+  const result = getDb()
+    .prepare("DELETE FROM sessions WHERE expires_at < datetime('now')")
+    .run();
+  return result.changes;
 }

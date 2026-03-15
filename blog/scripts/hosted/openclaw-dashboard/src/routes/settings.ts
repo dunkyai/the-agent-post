@@ -18,6 +18,7 @@ router.get("/settings", (req: Request, res: Response) => {
   const systemPrompt = getSetting("system_prompt") || "";
   const temperature = getSetting("temperature") || "0.7";
   const maxTokens = getSetting("max_tokens") || "4096";
+  const sessionExpiryDays = getSetting("session_expiry_days") || "30";
 
   res.render("settings", {
     hasAnthropicKey: !!anthropicKey,
@@ -29,12 +30,13 @@ router.get("/settings", (req: Request, res: Response) => {
     systemPrompt,
     temperature,
     maxTokens,
+    sessionExpiryDays,
     flash: req.query.flash || null,
   });
 });
 
 router.post("/settings", (req: Request, res: Response) => {
-  const { provider, api_key, model, agent_name, user_name, system_prompt, temperature, max_tokens } = req.body;
+  const { provider, api_key, model, agent_name, user_name, system_prompt, temperature, max_tokens, session_expiry_days } = req.body;
 
   // Reject empty submissions — require at least the provider field from the form
   if (!provider) {
@@ -64,6 +66,11 @@ router.post("/settings", (req: Request, res: Response) => {
   const tokens = parseInt(max_tokens, 10);
   if (!isNaN(tokens) && tokens > 0 && tokens <= 16384) {
     setSetting("max_tokens", String(tokens));
+  }
+
+  const validExpiry = ["1", "7", "30", "90"];
+  if (validExpiry.includes(session_expiry_days)) {
+    setSetting("session_expiry_days", session_expiry_days);
   }
 
   res.redirect(303, "/settings?flash=Settings+saved");

@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 
 // Routes that handle their own auth via instance gateway token
-const SELF_AUTH_PATTERNS = [/\/sandbox\//, /\/browser\//];
+const SELF_AUTH_PATTERNS = [/\/sandbox\//, /\/browser\//, /\/magic-link/, /\/verify-session-code/];
 
 export function authMiddleware(
   req: Request,

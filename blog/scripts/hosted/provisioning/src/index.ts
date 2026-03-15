@@ -4,10 +4,13 @@ import { authMiddleware } from "./middleware/auth";
 import instancesRouter from "./routes/instances";
 import healthRouter from "./routes/health";
 import oauthRouter from "./routes/oauth";
+import authRouter from "./routes/auth";
 import slackEventsRouter from "./routes/slack-events";
 import { ensureBrowserService } from "./services/browser";
+import { cleanExpiredTokens } from "./services/store";
 
 const app = express();
+app.disable("x-powered-by");
 const PORT = parseInt(process.env.PORT || "3500", 10);
 
 app.use(cors());
@@ -23,11 +26,24 @@ app.use(healthRouter);
 // Public OAuth callbacks (Google/Slack redirect here, no auth needed)
 app.use("/oauth", oauthRouter);
 
+// Public auth routes (magic link callback)
+app.use("/auth", authRouter);
+
 // Protected routes
 app.use("/instances", authMiddleware, instancesRouter);
 
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Provisioning API running on 0.0.0.0:${PORT}`);
+
+  // Clean expired magic link tokens every hour
+  setInterval(() => {
+    try {
+      const cleaned = cleanExpiredTokens();
+      if (cleaned > 0) console.log(`Cleaned ${cleaned} expired magic link tokens`);
+    } catch (err) {
+      console.error("Token cleanup error:", err);
+    }
+  }, 60 * 60 * 1000);
 
   // Start browser service container if not already running
   try {
