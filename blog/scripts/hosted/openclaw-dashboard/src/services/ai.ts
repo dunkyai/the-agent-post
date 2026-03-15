@@ -759,7 +759,7 @@ async function callAnthropic(
     content: m.content,
   }));
 
-  const MAX_TOOL_ROUNDS = 15;
+  const MAX_TOOL_ROUNDS = 25;
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -842,7 +842,7 @@ async function callAnthropic(
     return { role: "assistant", content: text || "(Action completed.)" };
   }
 
-  return { role: "assistant", content: "I hit the tool use limit. Please try again." };
+  return { role: "assistant", content: "Hmmm...this was pretty complex and I hit a tool limit. Could you break this into smaller steps or ask again in a simpler way? For example, instead of asking me to do everything at once, try one piece at a time." };
 }
 
 async function callOpenAI(
@@ -989,6 +989,12 @@ export async function processMessage(
   {
     const browserContext = "You can browse the web using browser tools. Use browse_webpage to visit any URL, browser_screenshot to see interactive elements, browser_click and browser_type to interact with pages. This lets you fill forms, log into sites, research information, and interact with web applications on behalf of the user.";
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${browserContext}` : browserContext;
+  }
+
+  // Complexity guidance
+  {
+    const complexityHint = "Important: If a request involves many steps (e.g. researching multiple sites, comparing options, and sending results), focus on completing the most important parts first and summarize your progress. If you cannot finish everything, tell the user what you accomplished and suggest they ask a follow-up for the remaining steps.";
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${complexityHint}` : complexityHint;
   }
 
   // Inject scheduling context
