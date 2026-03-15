@@ -36,6 +36,12 @@ router.get("/settings", (req: Request, res: Response) => {
 router.post("/settings", (req: Request, res: Response) => {
   const { provider, api_key, model, agent_name, user_name, system_prompt, temperature, max_tokens } = req.body;
 
+  // Reject empty submissions — require at least the provider field from the form
+  if (!provider) {
+    res.redirect(303, "/settings?flash=Invalid+submission");
+    return;
+  }
+
   // Save API key to the correct provider setting
   if (api_key && api_key.trim() && !api_key.startsWith("••••")) {
     const keyName = provider === "anthropic" ? "anthropic_api_key" : "openai_api_key";
