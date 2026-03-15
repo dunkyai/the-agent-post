@@ -15,6 +15,7 @@ import webhookRouter from "./routes/webhook";
 import jobsRouter from "./routes/jobs";
 
 const app = express();
+app.disable("x-powered-by");
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
 // View engine
