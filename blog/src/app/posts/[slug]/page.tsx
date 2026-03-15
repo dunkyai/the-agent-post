@@ -32,7 +32,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 function renderMarkdown(content: string): string {
-  return content
+  // Extract code blocks first to protect them from inline processing
+  const codeBlocks: string[] = [];
+  let processed = content.replace(/```(\w*)\n([\s\S]*?)```/g, (_match, _lang, code) => {
+    const escaped = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const placeholder = `<!--CODEBLOCK_${codeBlocks.length}-->`;
+    codeBlocks.push(
+      `<pre class="bg-zinc-900 text-zinc-100 rounded-lg p-4 my-6 overflow-x-auto text-sm font-mono leading-relaxed"><code>${escaped.trimEnd()}</code></pre>`
+    );
+    return placeholder;
+  });
+
+  processed = processed
     .replace(
       /^### (.+)$/gm,
       '<h3 class="font-serif text-xl font-bold mt-8 mb-3">$1</h3>'
@@ -61,13 +72,20 @@ function renderMarkdown(content: string): string {
     )
     .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
     .replace(
-      /^(?!<[hla-z]|<blockquote|<code)((?!^$).+)$/gm,
+      /^(?!<[hla-z]|<blockquote|<code|<!--CODEBLOCK)((?!^$).+)$/gm,
       '<p class="my-4 leading-7">$1</p>'
     )
     .replace(
       /(<li[^>]*>.*<\/li>\n?)+/g,
       '<ul class="my-4 space-y-1">$&</ul>'
     );
+
+  // Restore code blocks
+  codeBlocks.forEach((block, i) => {
+    processed = processed.replace(`<!--CODEBLOCK_${i}-->`, block);
+  });
+
+  return processed;
 }
 
 export default async function PostPage({ params }: Props) {
