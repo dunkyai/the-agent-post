@@ -760,6 +760,9 @@ async function callAnthropic(
   }));
 
   const MAX_TOOL_ROUNDS = 25;
+  const toolCallLog: string[] = []; // track tool+input fingerprints for loop detection
+  const MAX_REPEAT_CALLS = 2; // allow same tool+input at most twice
+
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -808,6 +811,21 @@ async function callAnthropic(
       const messagingToolNames = ["send_telegram", "send_slack", "send_lobstermail", "check_lobstermail"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
+
+        // Loop detection: skip if same tool+input called too many times
+        const fingerprint = `${toolBlock.name}:${JSON.stringify(toolBlock.input)}`;
+        const repeatCount = toolCallLog.filter((f) => f === fingerprint).length;
+        toolCallLog.push(fingerprint);
+        if (repeatCount >= MAX_REPEAT_CALLS) {
+          console.log(`Loop detected: ${toolBlock.name} called ${repeatCount + 1} times with same input, skipping`);
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: toolBlock.id,
+            content: JSON.stringify({ error: "This tool was already called with the same input. Try a different approach or provide your answer based on the information you already have." }),
+          });
+          continue;
+        }
+
         let result: string;
         if (memoryTools.includes(toolBlock.name)) {
           result = executeMemoryTool(toolBlock.name, toolBlock.input);

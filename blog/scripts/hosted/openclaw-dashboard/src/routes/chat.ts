@@ -16,6 +16,8 @@ router.get("/chat", (req: Request, res: Response) => {
   res.render("chat", { messages, agentName, userName });
 });
 
+const REQUEST_TIMEOUT_MS = 120_000; // 2 minutes
+
 router.post("/chat/message", async (req: Request, res: Response) => {
   try {
     const { message } = req.body;
@@ -24,12 +26,23 @@ router.post("/chat/message", async (req: Request, res: Response) => {
       return;
     }
 
-    const reply = await processMessage("dashboard", CHAT_EXTERNAL_ID, message.trim());
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("__TIMEOUT__")), REQUEST_TIMEOUT_MS)
+    );
+    const reply = await Promise.race([
+      processMessage("dashboard", CHAT_EXTERNAL_ID, message.trim()),
+      timeout,
+    ]);
     res.json({ role: "assistant", content: reply });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("Chat error:", message);
-    res.status(500).json({ error: message });
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    if (msg === "__TIMEOUT__") {
+      console.error("Chat timeout: request exceeded 2 minutes");
+      res.status(504).json({ error: "That took longer than expected — could you try asking in a simpler way?" });
+      return;
+    }
+    console.error("Chat error:", msg);
+    res.status(500).json({ error: msg });
   }
 });
 

@@ -62,7 +62,7 @@
     })
       .then(function (res) {
         return res.text().then(function (text) {
-          if (!text) throw new Error("Empty response from server — the request may have timed out. Try again.");
+          if (!text) throw new Error("Oops — I can't seem to connect right now. Do you want me to try again?");
           try {
             var data = JSON.parse(text);
           } catch (e) {
