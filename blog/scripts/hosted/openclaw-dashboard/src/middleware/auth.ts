@@ -8,7 +8,7 @@ export function createSession(res: Response): void {
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     secure: true,
-    sameSite: "strict",
+    sameSite: "lax",
     maxAge: 90 * 24 * 60 * 60 * 1000, // max possible (90 days) — actual expiry enforced by DB
     path: "/",
   });
@@ -41,7 +41,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     res.cookie(COOKIE_NAME, newToken, {
       httpOnly: true,
       secure: true,
-      sameSite: "strict",
+      sameSite: "lax",
       maxAge: 90 * 24 * 60 * 60 * 1000,
       path: "/",
     });
