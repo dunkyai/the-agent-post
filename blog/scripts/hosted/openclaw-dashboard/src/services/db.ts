@@ -250,7 +250,7 @@ export function getAllScheduledJobs(): ScheduledJob[] {
 export function getDueJobs(): ScheduledJob[] {
   return getDb()
     .prepare(
-      "SELECT * FROM scheduled_jobs WHERE enabled = 1 AND next_run IS NOT NULL AND next_run <= datetime('now')"
+      "SELECT * FROM scheduled_jobs WHERE enabled = 1 AND next_run IS NOT NULL AND replace(replace(next_run, 'T', ' '), '.000Z', '') <= datetime('now')"
     )
     .all() as ScheduledJob[];
 }
