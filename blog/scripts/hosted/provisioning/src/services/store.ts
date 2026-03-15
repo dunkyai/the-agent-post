@@ -23,7 +23,16 @@ db.exec(`
     container_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-  )
+  );
+
+  CREATE TABLE IF NOT EXISTS slack_installations (
+    team_id TEXT PRIMARY KEY,
+    instance_id TEXT NOT NULL,
+    bot_user_id TEXT NOT NULL,
+    team_name TEXT,
+    installed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
+  );
 `);
 
 function rowToInstance(row: Record<string, unknown>): Instance {
@@ -101,4 +110,53 @@ export function updateInstance(id: string, updates: Partial<Pick<Instance, "stat
 
 export function deleteInstance(id: string): void {
   updateInstance(id, { status: "deleted" });
+}
+
+// --- Slack installations ---
+
+export interface SlackInstallation {
+  teamId: string;
+  instanceId: string;
+  botUserId: string;
+  teamName: string | null;
+  installedAt: string;
+}
+
+export function upsertSlackInstallation(installation: {
+  teamId: string;
+  instanceId: string;
+  botUserId: string;
+  teamName: string | null;
+}): void {
+  // Remove any prior installation for this instance (workspace switch)
+  db.prepare("DELETE FROM slack_installations WHERE instance_id = ?").run(installation.instanceId);
+  db.prepare(
+    `INSERT INTO slack_installations (team_id, instance_id, bot_user_id, team_name)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(team_id) DO UPDATE SET instance_id = ?, bot_user_id = ?, team_name = ?, installed_at = datetime('now')`
+  ).run(
+    installation.teamId,
+    installation.instanceId,
+    installation.botUserId,
+    installation.teamName,
+    installation.instanceId,
+    installation.botUserId,
+    installation.teamName
+  );
+}
+
+export function getSlackInstallationByTeam(teamId: string): SlackInstallation | null {
+  const row = db.prepare("SELECT * FROM slack_installations WHERE team_id = ?").get(teamId) as Record<string, unknown> | undefined;
+  if (!row) return null;
+  return {
+    teamId: row.team_id as string,
+    instanceId: row.instance_id as string,
+    botUserId: row.bot_user_id as string,
+    teamName: (row.team_name as string) || null,
+    installedAt: row.installed_at as string,
+  };
+}
+
+export function deleteSlackInstallationsByInstance(instanceId: string): void {
+  db.prepare("DELETE FROM slack_installations WHERE instance_id = ?").run(instanceId);
 }

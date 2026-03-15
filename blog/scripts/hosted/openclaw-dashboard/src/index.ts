@@ -87,8 +87,15 @@ async function reconnectIntegrations() {
     if (slack && slack.status === "connected") {
       const config = JSON.parse(decrypt(slack.config));
       const { startSlack } = require("./services/slack");
-      await startSlack(config.bot_token, config.app_token);
-      console.log("Slack bot reconnected");
+      if (config.bot_token && config.bot_user_id && config.team_id) {
+        startSlack(config);
+        console.log(`Slack reconnected (team: ${config.team_name})`);
+      } else {
+        // Legacy Socket Mode config — user needs to reconnect via OAuth
+        const { upsertIntegration } = require("./services/db");
+        upsertIntegration("slack", "{}", "disconnected");
+        console.log("Slack: legacy config detected, marked disconnected (user must reconnect via OAuth)");
+      }
     }
   } catch (err: unknown) {
     console.error("Failed to reconnect Slack:", err instanceof Error ? err.message : err);

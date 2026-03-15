@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { getIntegration, upsertIntegration, getAllIntegrations } from "../services/db";
 import { encrypt, decrypt } from "../services/encryption";
 import { startTelegram, stopTelegram, isTelegramRunning } from "../services/telegram";
-import { startSlack, stopSlack, isSlackRunning } from "../services/slack";
+import { buildSlackOAuthUrl, stopSlack, isSlackRunning } from "../services/slack";
 import { signupAndCreateInbox, createInbox, startEmail, stopEmail, isEmailRunning } from "../services/email";
 import { buildOAuthUrl, stopGoogle, isGoogleRunning } from "../services/google";
 
@@ -35,9 +35,21 @@ router.get("/integrations", (req: Request, res: Response) => {
     } catch {}
   }
 
+  let slackTeamName: string | null = null;
+  const slackIntegration = integrationMap["slack"];
+  if (slackIntegration && slackIntegration.status === "connected") {
+    try {
+      const config = JSON.parse(decrypt(slackIntegration.config));
+      slackTeamName = config.team_name || null;
+    } catch {}
+  }
+
   res.render("integrations", {
     telegram: integrationMap["telegram"] || { status: "disconnected", error_message: null },
-    slack: integrationMap["slack"] || { status: "disconnected", error_message: null },
+    slack: {
+      ...(integrationMap["slack"] || { status: "disconnected", error_message: null }),
+      team_name: slackTeamName,
+    },
     email: {
       ...(integrationMap["email"] || { status: "disconnected", error_message: null }),
       email_address: emailAddress,
@@ -76,32 +88,35 @@ router.post("/integrations/telegram/disconnect", (req: Request, res: Response) =
   res.redirect("/integrations?flash=Telegram+disconnected");
 });
 
-router.post("/integrations/slack/connect", async (req: Request, res: Response) => {
+router.post("/integrations/slack/connect", (req: Request, res: Response) => {
   try {
-    const { bot_token, app_token } = req.body;
-    if (!bot_token?.trim() || !app_token?.trim()) {
-      res.redirect("/integrations?flash=Both+Slack+tokens+are+required");
-      return;
-    }
-
-    const config = encrypt(
-      JSON.stringify({
-        bot_token: bot_token.trim(),
-        app_token: app_token.trim(),
-      })
-    );
-    await startSlack(bot_token.trim(), app_token.trim());
-    upsertIntegration("slack", config, "connected");
-    res.redirect("/integrations?flash=Slack+connected");
+    const url = buildSlackOAuthUrl();
+    res.redirect(url);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    upsertIntegration("slack", "{}", "error", message);
     res.redirect("/integrations?flash=Slack+error:+" + encodeURIComponent(message));
   }
 });
 
 router.post("/integrations/slack/disconnect", async (req: Request, res: Response) => {
-  await stopSlack();
+  // Revoke token at Slack (fire-and-forget)
+  try {
+    const integration = getIntegration("slack");
+    if (integration && integration.status === "connected") {
+      const config = JSON.parse(decrypt(integration.config));
+      if (config.bot_token) {
+        fetch("https://slack.com/api/auth.revoke", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Authorization: `Bearer ${config.bot_token}`,
+          },
+        }).catch(() => {});
+      }
+    }
+  } catch {}
+
+  stopSlack();
   upsertIntegration("slack", "{}", "disconnected");
   res.redirect("/integrations?flash=Slack+disconnected");
 });

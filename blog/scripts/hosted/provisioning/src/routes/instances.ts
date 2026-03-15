@@ -151,6 +151,7 @@ router.delete("/:id", async (req, res) => {
     }
 
     deregisterCaddyRoute(instance.subdomain);
+    store.deleteSlackInstallationsByInstance(instance.id);
     store.deleteInstance(instance.id);
 
     console.log(`Instance deleted: ${instance.id}`);

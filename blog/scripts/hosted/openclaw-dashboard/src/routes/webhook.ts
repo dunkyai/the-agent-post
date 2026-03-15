@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { getIntegration, upsertIntegration } from "../services/db";
 import { encrypt, decrypt } from "../services/encryption";
 import { startGoogle } from "../services/google";
+import { startSlack, handleSlackEvent } from "../services/slack";
 
 const router = Router();
 
@@ -88,6 +89,50 @@ router.post("/webhook/google/tokens", async (req: Request, res: Response) => {
   } catch (err: unknown) {
     console.error("Google token delivery error:", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "Failed to store Google tokens" });
+  }
+});
+
+// Slack OAuth — provisioning API delivers tokens here after consent
+router.post("/webhook/slack/tokens", async (req: Request, res: Response) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (token !== process.env.GATEWAY_TOKEN) {
+    res.sendStatus(401);
+    return;
+  }
+
+  try {
+    const { bot_token, bot_user_id, team_id, team_name } = req.body;
+
+    const configData = { bot_token, bot_user_id, team_id, team_name };
+    const config = encrypt(JSON.stringify(configData));
+    upsertIntegration("slack", config, "connected");
+    startSlack(configData);
+
+    console.log(`Slack connected for team ${team_name} (${team_id})`);
+    res.json({ ok: true });
+  } catch (err: unknown) {
+    console.error("Slack token delivery error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Failed to store Slack tokens" });
+  }
+});
+
+// Slack Events — gateway forwards events here
+router.post("/webhook/slack/events", async (req: Request, res: Response) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (token !== process.env.GATEWAY_TOKEN) {
+    res.sendStatus(401);
+    return;
+  }
+
+  // Respond immediately
+  res.sendStatus(200);
+
+  // Process asynchronously
+  const { event, event_id } = req.body;
+  try {
+    await handleSlackEvent(event, event_id);
+  } catch (err: unknown) {
+    console.error("Slack event handling error:", err instanceof Error ? err.message : err);
   }
 });
 
