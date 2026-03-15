@@ -67,25 +67,25 @@ router.post("/integrations/telegram/connect", async (req: Request, res: Response
   try {
     const { bot_token } = req.body;
     if (!bot_token || !bot_token.trim()) {
-      res.redirect("/integrations?flash=Bot+token+is+required");
+      res.redirect(303, "/integrations?flash=Bot+token+is+required");
       return;
     }
 
     const config = encrypt(JSON.stringify({ bot_token: bot_token.trim() }));
     startTelegram(bot_token.trim());
     upsertIntegration("telegram", config, "connected");
-    res.redirect("/integrations?flash=Telegram+connected");
+    res.redirect(303, "/integrations?flash=Telegram+connected");
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     upsertIntegration("telegram", "{}", "error", message);
-    res.redirect("/integrations?flash=Telegram+error:+" + encodeURIComponent(message));
+    res.redirect(303, "/integrations?flash=Telegram+error:+" + encodeURIComponent(message));
   }
 });
 
 router.post("/integrations/telegram/disconnect", (req: Request, res: Response) => {
   stopTelegram();
   upsertIntegration("telegram", "{}", "disconnected");
-  res.redirect("/integrations?flash=Telegram+disconnected");
+  res.redirect(303, "/integrations?flash=Telegram+disconnected");
 });
 
 router.post("/integrations/slack/connect", (req: Request, res: Response) => {
@@ -94,7 +94,7 @@ router.post("/integrations/slack/connect", (req: Request, res: Response) => {
     res.redirect(url);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    res.redirect("/integrations?flash=Slack+error:+" + encodeURIComponent(message));
+    res.redirect(303, "/integrations?flash=Slack+error:+" + encodeURIComponent(message));
   }
 });
 
@@ -118,7 +118,7 @@ router.post("/integrations/slack/disconnect", async (req: Request, res: Response
 
   stopSlack();
   upsertIntegration("slack", "{}", "disconnected");
-  res.redirect("/integrations?flash=Slack+disconnected");
+  res.redirect(303, "/integrations?flash=Slack+disconnected");
 });
 
 router.post("/integrations/email/connect", async (req: Request, res: Response) => {
@@ -142,18 +142,18 @@ router.post("/integrations/email/connect", async (req: Request, res: Response) =
     );
     startEmail(result);
     upsertIntegration("email", config, "connected");
-    res.redirect("/integrations?flash=Email+connected:+" + encodeURIComponent(result.emailAddress));
+    res.redirect(303, "/integrations?flash=Email+connected:+" + encodeURIComponent(result.emailAddress));
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     upsertIntegration("email", "{}", "error", message);
-    res.redirect("/integrations?flash=Email+error:+" + encodeURIComponent(message));
+    res.redirect(303, "/integrations?flash=Email+error:+" + encodeURIComponent(message));
   }
 });
 
 router.post("/integrations/email/disconnect", (req: Request, res: Response) => {
   stopEmail();
   upsertIntegration("email", "{}", "disconnected");
-  res.redirect("/integrations?flash=Email+disconnected");
+  res.redirect(303, "/integrations?flash=Email+disconnected");
 });
 
 router.post("/integrations/google/connect", (req: Request, res: Response) => {
@@ -161,14 +161,14 @@ router.post("/integrations/google/connect", (req: Request, res: Response) => {
     const services = req.body.services;
     const serviceList = Array.isArray(services) ? services : services ? [services] : [];
     if (serviceList.length === 0) {
-      res.redirect("/integrations?flash=Select+at+least+one+Google+service");
+      res.redirect(303, "/integrations?flash=Select+at+least+one+Google+service");
       return;
     }
     const url = buildOAuthUrl(serviceList);
     res.redirect(url);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    res.redirect("/integrations?flash=Google+error:+" + encodeURIComponent(message));
+    res.redirect(303, "/integrations?flash=Google+error:+" + encodeURIComponent(message));
   }
 });
 
@@ -188,7 +188,7 @@ router.post("/integrations/google/disconnect", async (req: Request, res: Respons
 
   stopGoogle();
   upsertIntegration("google", "{}", "disconnected");
-  res.redirect("/integrations?flash=Google+disconnected");
+  res.redirect(303, "/integrations?flash=Google+disconnected");
 });
 
 export default router;

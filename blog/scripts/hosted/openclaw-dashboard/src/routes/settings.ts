@@ -60,7 +60,7 @@ router.post("/settings", (req: Request, res: Response) => {
     setSetting("max_tokens", String(tokens));
   }
 
-  res.redirect("/settings?flash=Settings+saved");
+  res.redirect(303, "/settings?flash=Settings+saved");
 });
 
 // Redirect old /agent routes to /settings
@@ -68,7 +68,7 @@ router.get("/agent", (_req: Request, res: Response) => {
   res.redirect("/settings");
 });
 router.post("/agent", (_req: Request, res: Response) => {
-  res.redirect("/settings");
+  res.redirect(303, "/settings");
 });
 
 export default router;

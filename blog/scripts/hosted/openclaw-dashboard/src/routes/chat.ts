@@ -49,7 +49,7 @@ router.post("/chat/message", async (req: Request, res: Response) => {
 router.post("/chat/reset", (req: Request, res: Response) => {
   const conversationId = getOrCreateConversation("dashboard", CHAT_EXTERNAL_ID);
   deleteConversation(conversationId);
-  res.redirect("/chat");
+  res.redirect(303, "/chat");
 });
 
 export default router;

@@ -13,7 +13,7 @@ router.post("/login", (req: Request, res: Response) => {
   if (token === process.env.GATEWAY_TOKEN) {
     createSession(res);
     const agentName = getSetting("agent_name");
-    res.redirect(agentName ? "/settings" : "/agent");
+    res.redirect(303, "/settings");
   } else {
     res.render("login", { error: "Invalid token" });
   }
@@ -21,7 +21,7 @@ router.post("/login", (req: Request, res: Response) => {
 
 router.post("/logout", (_req: Request, res: Response) => {
   destroySession(res);
-  res.redirect("/login");
+  res.redirect(303, "/login");
 });
 
 export default router;

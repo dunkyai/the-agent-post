@@ -34,7 +34,7 @@ router.post("/agent", (req: Request, res: Response) => {
     setSetting("max_tokens", String(tokens));
   }
 
-  res.redirect("/agent?flash=Agent+configuration+saved");
+  res.redirect(303, "/agent?flash=Agent+configuration+saved");
 });
 
 export default router;
