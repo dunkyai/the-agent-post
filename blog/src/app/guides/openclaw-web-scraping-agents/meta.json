@@ -1,0 +1,7 @@
+{
+  "slug": "openclaw-web-scraping-agents",
+  "title": "How to Build a Web Scraping Agent with OpenClaw",
+  "description": "Step-by-step tutorial for building an OpenClaw web scraping agent that extracts structured data from websites and runs on a schedule.",
+  "time": "10-15 min",
+  "tags": ["Web Scraping", "OpenClaw", "AI Agents"]
+}
