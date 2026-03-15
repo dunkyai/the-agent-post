@@ -5,6 +5,7 @@ import instancesRouter from "./routes/instances";
 import healthRouter from "./routes/health";
 import oauthRouter from "./routes/oauth";
 import slackEventsRouter from "./routes/slack-events";
+import { ensureBrowserService } from "./services/browser";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3500", 10);
@@ -25,6 +26,14 @@ app.use("/oauth", oauthRouter);
 // Protected routes
 app.use("/instances", authMiddleware, instancesRouter);
 
-app.listen(PORT, "127.0.0.1", () => {
-  console.log(`Provisioning API running on 127.0.0.1:${PORT}`);
+app.listen(PORT, "0.0.0.0", async () => {
+  console.log(`Provisioning API running on 0.0.0.0:${PORT}`);
+
+  // Start browser service container if not already running
+  try {
+    await ensureBrowserService();
+  } catch (err) {
+    console.error("Failed to start browser service:", err instanceof Error ? err.message : err);
+    console.error("Browser tools will not be available until the browser service is running");
+  }
 });

@@ -155,6 +155,120 @@ async function executeCodeTool(toolName: string, input: any): Promise<string> {
   }
 }
 
+// --- Browser Automation Tools ---
+
+const BROWSER_TOOLS = [
+  {
+    name: "browse_webpage",
+    description: "Navigate to a URL and get the page content. Use this to visit websites, read articles, check information, or start interacting with a web page. Returns the page title, URL, and text content.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        url: { type: "string", description: "The URL to navigate to (must be http or https)" },
+      },
+      required: ["url"],
+    },
+  },
+  {
+    name: "browser_click",
+    description: "Click an element on the current page. Use a CSS selector (e.g., '#submit-btn', 'button[type=\"submit\"]') or text content (e.g., 'Sign In', 'Next'). Use browser_screenshot first to see available elements.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        selector: { type: "string", description: "CSS selector or visible text of the element to click" },
+      },
+      required: ["selector"],
+    },
+  },
+  {
+    name: "browser_type",
+    description: "Type text into an input field on the current page. Use a CSS selector (e.g., '#email', 'input[name=\"username\"]') or the field's placeholder/label text. Use browser_screenshot first to see available fields.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        selector: { type: "string", description: "CSS selector, placeholder text, or label text of the input field" },
+        text: { type: "string", description: "The text to type into the field" },
+      },
+      required: ["selector", "text"],
+    },
+  },
+  {
+    name: "browser_screenshot",
+    description: "Get a description of the current page including the title, URL, and all visible interactive elements (links, buttons, inputs, etc.) with their selectors. Use this to understand what's on the page before clicking or typing.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
+  {
+    name: "browser_get_content",
+    description: "Get the full text content of the current page. Use this after navigating or clicking to read the updated page content.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
+];
+
+async function executeBrowserTool(toolName: string, input: any): Promise<string> {
+  const provisioningUrl = process.env.PROVISIONING_URL;
+  const instanceId = process.env.INSTANCE_ID;
+  const gatewayToken = process.env.GATEWAY_TOKEN;
+
+  if (!provisioningUrl || !instanceId || !gatewayToken) {
+    return JSON.stringify({ error: "Browser automation not configured on this instance" });
+  }
+
+  try {
+    const actionMap: Record<string, string> = {
+      browse_webpage: "navigate",
+      browser_click: "click",
+      browser_type: "type",
+      browser_screenshot: "screenshot",
+      browser_get_content: "get_content",
+    };
+
+    const action = actionMap[toolName];
+    if (!action) {
+      return JSON.stringify({ error: `Unknown browser tool: ${toolName}` });
+    }
+
+    const body: any = {};
+    if (toolName === "browse_webpage") body.url = input.url;
+    if (toolName === "browser_click") body.selector = input.selector;
+    if (toolName === "browser_type") {
+      body.selector = input.selector;
+      body.text = input.text;
+    }
+
+    const res = await fetch(`${provisioningUrl}/instances/${instanceId}/browser/${action}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${gatewayToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const data: any = await res.json().catch(() => ({}));
+      const error = data.error || `Browser action failed (${res.status})`;
+      // Detect bot-blocked or timeout errors on navigate
+      if (toolName === "browse_webpage" && (error.includes("Timeout") || error.includes("ERR_HTTP2") || error.includes("ERR_CONNECTION") || error.includes("net::ERR_"))) {
+        return JSON.stringify({
+          error: `Could not access this website. The site likely blocks automated browsers (bot detection). This is common with major commercial sites like hotels, airlines, and banks. Try searching for the information using web_search instead, or try a different website that provides similar content.`,
+          original_error: error,
+        });
+      }
+      return JSON.stringify({ error });
+    }
+
+    return JSON.stringify(await res.json());
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Browser action failed" });
+  }
+}
+
 const MEMORY_TOOLS = [
   {
     name: "save_memory",
@@ -615,6 +729,7 @@ async function callAnthropic(
     ...SCHEDULING_TOOLS,
     ...MEMORY_TOOLS,
     ...CODE_EXECUTION_TOOLS,
+    ...BROWSER_TOOLS,
   ];
 
   // Conditionally add messaging tools based on connected integrations
@@ -689,6 +804,7 @@ async function callAnthropic(
         "drive_search", "drive_read_file", "drive_open_url",
         "contacts_search",
       ];
+      const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
       const messagingToolNames = ["send_telegram", "send_slack", "send_lobstermail", "check_lobstermail"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
@@ -699,6 +815,8 @@ async function callAnthropic(
           result = await executeCodeTool(toolBlock.name, toolBlock.input);
         } else if (toolBlock.name === "open_google_doc") {
           result = await executePublicGDocTool(toolBlock.input);
+        } else if (browserToolNames.includes(toolBlock.name)) {
+          result = await executeBrowserTool(toolBlock.name, toolBlock.input);
         } else if (messagingToolNames.includes(toolBlock.name)) {
           result = await executeMessagingTool(toolBlock.name, toolBlock.input);
         } else if (googleToolNames.includes(toolBlock.name)) {
@@ -866,6 +984,12 @@ export async function processMessage(
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${memContext}` : memContext;
     }
   } catch {}
+
+  // Inject browser context
+  {
+    const browserContext = "You can browse the web using browser tools. Use browse_webpage to visit any URL, browser_screenshot to see interactive elements, browser_click and browser_type to interact with pages. This lets you fill forms, log into sites, research information, and interact with web applications on behalf of the user.";
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${browserContext}` : browserContext;
+  }
 
   // Inject scheduling context
   try {

@@ -4,6 +4,7 @@ import { execSync } from "child_process";
 import * as store from "../services/store";
 import * as dockerService from "../services/docker";
 import * as sandboxService from "../services/sandbox";
+import * as browserService from "../services/browser";
 import { allocatePort } from "../services/port-manager";
 import type { CreateInstanceRequest } from "../types";
 
@@ -215,6 +216,37 @@ router.post("/:id/sandbox/exec", async (req, res) => {
     console.error("Sandbox exec error:", err);
     res.status(500).json({
       error: err instanceof Error ? err.message : "Sandbox execution failed",
+    });
+  }
+});
+
+// POST /instances/:id/browser/:action — forward browser action
+router.post("/:id/browser/:action", async (req, res) => {
+  try {
+    const instance = store.getInstance(req.params.id);
+    if (!instance) {
+      res.status(404).json({ error: "Instance not found" });
+      return;
+    }
+
+    // Auth: verify the request comes from the correct agent
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (token !== instance.gatewayToken) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const result = await browserService.forwardBrowserAction(
+      instance.id,
+      req.params.action,
+      req.body || {}
+    );
+
+    res.json(result);
+  } catch (err) {
+    console.error("Browser action error:", err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Browser action failed",
     });
   }
 });
