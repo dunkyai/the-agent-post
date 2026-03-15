@@ -137,6 +137,7 @@
     }
 
     .form-group input[type="text"],
+    .form-group input[type="email"],
     .form-group input[type="password"],
     .form-group input[type="number"],
     .form-group textarea,
@@ -180,6 +181,13 @@
       transition: background 0.15s;
     }
     .btn:hover { background: var(--accent-light); }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--rule-light);
+    }
+    .btn-secondary:hover { background: #F0ECE6; color: var(--fg); }
 
     .btn-danger {
       background: var(--danger);
@@ -255,9 +263,9 @@
     }
 
     .login-success {
-      background: var(--surface);
-      padding: 24px;
-      border-radius: 8px;
+      background: #F3E8FF;
+      padding: 28px 24px;
+      border-radius: 12px;
       text-align: center;
     }
 
