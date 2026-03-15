@@ -43,6 +43,13 @@
     sendBtn.textContent = "...";
     errorEl.textContent = "";
 
+    // Show thinking indicator
+    var thinking = document.createElement("div");
+    thinking.className = "chat-message assistant thinking-indicator";
+    thinking.innerHTML = '<div class="avatar">A</div><div class="bubble thinking-bubble"><span class="spinner"></span> Thinking...</div>';
+    messages.appendChild(thinking);
+    scrollToBottom();
+
     fetch("/chat/message", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -61,9 +68,13 @@
         });
       })
       .then(function (data) {
+        var t = messages.querySelector(".thinking-indicator");
+        if (t) t.remove();
         addMessage("assistant", data.content);
       })
       .catch(function (err) {
+        var t = messages.querySelector(".thinking-indicator");
+        if (t) t.remove();
         errorEl.textContent = err.message;
       })
       .finally(function () {
