@@ -15,6 +15,16 @@ const PORT = parseInt(process.env.PORT || "3500", 10);
 
 app.use(cors());
 
+// Security headers
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
+});
+
 // Slack events must be mounted before express.json() — needs raw body for signature verification
 app.use("/slack/events", slackEventsRouter);
 
