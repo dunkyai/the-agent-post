@@ -93,23 +93,28 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
 
   const channelId = event.channel;
   const userId = event.user || "unknown";
+  // Use thread_ts if replying in a thread, otherwise use message ts to start a new thread
+  const threadTs = event.thread_ts || event.ts;
   const externalId = `${channelId}:${userId}`;
 
   try {
     const reply = await processMessage("slack", externalId, text);
-    await sendSlackMessage(channelId, reply);
+    await sendSlackMessage(channelId, reply, threadTs);
   } catch (err: unknown) {
     const errMessage = err instanceof Error ? err.message : "Unknown error";
     console.error("Slack event processing error:", errMessage);
-    await sendSlackMessage(channelId, "Sorry, I encountered an error processing your message.").catch(() => {});
+    await sendSlackMessage(channelId, "Sorry, I encountered an error processing your message.", threadTs).catch(() => {});
   }
 }
 
 // --- Sending messages ---
 
-export async function sendSlackMessage(channelOrExternalId: string, text: string): Promise<void> {
+export async function sendSlackMessage(channelOrExternalId: string, text: string, threadTs?: string): Promise<void> {
   if (!slackConfig) throw new Error("Slack is not connected");
   const channelId = channelOrExternalId.split(":")[0];
+
+  const payload: any = { channel: channelId, text };
+  if (threadTs) payload.thread_ts = threadTs;
 
   const res = await fetch("https://slack.com/api/chat.postMessage", {
     method: "POST",
@@ -117,7 +122,7 @@ export async function sendSlackMessage(channelOrExternalId: string, text: string
       "Content-Type": "application/json",
       Authorization: `Bearer ${slackConfig.bot_token}`,
     },
-    body: JSON.stringify({ channel: channelId, text }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {

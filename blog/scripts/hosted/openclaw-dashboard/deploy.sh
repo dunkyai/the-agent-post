@@ -35,7 +35,7 @@ run_container() {
       -e PORT=3000 \\
       -e GATEWAY_TOKEN="$TOKEN" \\
       -e INSTANCE_ID="$ID" \\
-      -e PROVISIONING_URL=http://host.docker.internal:3456 \\
+      -e PROVISIONING_URL=http://host.docker.internal:3500 \\
       -e GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \\
       -e GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET" \\
       -e SLACK_CLIENT_ID="$SLACK_CLIENT_ID" \\

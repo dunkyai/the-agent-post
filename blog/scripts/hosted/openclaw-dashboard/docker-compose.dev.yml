@@ -10,7 +10,7 @@ services:
       - PORT=3000
       - GATEWAY_TOKEN=dev-token-local
       - INSTANCE_ID=dev-local
-      - PROVISIONING_URL=http://host.docker.internal:3456
+      - PROVISIONING_URL=http://host.docker.internal:3500
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - SLACK_CLIENT_ID=${SLACK_CLIENT_ID:-}
