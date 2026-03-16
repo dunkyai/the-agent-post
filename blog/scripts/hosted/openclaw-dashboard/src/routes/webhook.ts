@@ -19,6 +19,13 @@ function verifyLobsterMailSignature(rawBody: Buffer, signatureHeader: string, se
 
 // Email (LobsterMail) webhook
 router.post("/webhook/email", async (req: Request, res: Response) => {
+  // 1. Require GATEWAY_TOKEN (same as Slack/Google webhooks)
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (token !== process.env.GATEWAY_TOKEN) {
+    res.sendStatus(401);
+    return;
+  }
+
   const integration = getIntegration("email");
   if (!integration || integration.status !== "connected") {
     res.sendStatus(200);
@@ -34,7 +41,7 @@ router.post("/webhook/email", async (req: Request, res: Response) => {
     return;
   }
 
-  // 1. Verify HMAC signature if webhook secret is configured
+  // 2. Verify HMAC signature if webhook secret is also configured
   if (config.webhook_secret) {
     const signature = req.headers["x-lobstermail-signature"] as string | undefined;
     const rawBody = (req as any).rawBody as Buffer | undefined;
