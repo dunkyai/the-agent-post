@@ -1,5 +1,5 @@
 import { processMessage } from "./ai";
-import { getIntegration } from "./db";
+import { getIntegration, getSetting, setSetting } from "./db";
 import { decrypt } from "./encryption";
 
 const LOBSTERMAIL_API = "https://api.lobstermail.ai";
@@ -64,7 +64,7 @@ export function startEmail(config: {
   }
 
   emailConfig = config;
-  lastChecked = null;
+  lastChecked = getSetting("email_last_checked") || null;
 
   pollEmails();
   pollInterval = setInterval(() => pollEmails(), 30000);
@@ -119,6 +119,7 @@ async function pollEmails(): Promise<void> {
     }
 
     lastChecked = new Date().toISOString();
+    setSetting("email_last_checked", lastChecked);
   } catch (err: unknown) {
     console.error("Email poll error:", err instanceof Error ? err.message : err);
   }
