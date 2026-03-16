@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     "Learn how to install OpenClaw on Ubuntu or Debian Linux in under 15 minutes. Set up Node.js, configure your API key, and launch your first AI agent.",
 };
 
-const steps = [
+const steps: Record<string, any>[] = [
   {
     number: 1,
     title: "Open a terminal on Ubuntu or Debian",

@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     "Learn how to schedule your OpenClaw agents to run tasks automatically — daily reports, monitoring, content generation, data syncing, and more.",
 };
 
-const steps = [
+const steps: Record<string, any>[] = [
   {
     number: 1,
     title: "Why schedule agents",

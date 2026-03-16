@@ -5,6 +5,8 @@ import { startTelegram, stopTelegram, isTelegramRunning } from "../services/tele
 import { buildSlackOAuthUrl, stopSlack, isSlackRunning } from "../services/slack";
 import { signupAndCreateInbox, createInbox, startEmail, stopEmail, isEmailRunning } from "../services/email";
 import { buildOAuthUrl, stopGoogle, isGoogleRunning } from "../services/google";
+import { startSupabase, stopSupabase, testSupabaseConnection } from "../services/supabase";
+import { buildAirtableOAuthUrl, stopAirtable } from "../services/airtable";
 
 const router = Router();
 
@@ -54,6 +56,17 @@ router.get("/integrations", (req: Request, res: Response) => {
     } catch {}
   }
 
+  let supabaseProjectUrl: string | null = null;
+  let supabasePermissions: string[] = ["read"];
+  const supabaseIntegration = integrationMap["supabase"];
+  if (supabaseIntegration && supabaseIntegration.status === "connected") {
+    try {
+      const config = JSON.parse(decrypt(supabaseIntegration.config));
+      supabaseProjectUrl = config.project_url || null;
+      supabasePermissions = config.permissions || ["read"];
+    } catch {}
+  }
+
   res.render("integrations", {
     telegram: integrationMap["telegram"] || { status: "disconnected", error_message: null },
     slack: {
@@ -68,6 +81,12 @@ router.get("/integrations", (req: Request, res: Response) => {
       filter_addresses: emailFilterAddresses,
     },
     googleAccounts: googleAccountsList,
+    supabase: {
+      ...(integrationMap["supabase"] || { status: "disconnected", error_message: null }),
+      project_url: supabaseProjectUrl,
+      permissions: supabasePermissions,
+    },
+    airtable: integrationMap["airtable"] || { status: "disconnected", error_message: null },
     flash: req.query.flash || null,
   });
 });
@@ -239,6 +258,87 @@ router.post("/integrations/google/disconnect", async (req: Request, res: Respons
   stopGoogle(account);
   deleteIntegration(typeKey);
   res.redirect(303, "/integrations?flash=Google+disconnected");
+});
+
+router.post("/integrations/supabase/connect", async (req: Request, res: Response) => {
+  try {
+    const projectUrl = (req.body.project_url || "").trim();
+    const apiKey = (req.body.api_key || "").trim();
+
+    if (!projectUrl) {
+      res.redirect(303, "/integrations?flash=Project+URL+is+required");
+      return;
+    }
+    if (!apiKey) {
+      res.redirect(303, "/integrations?flash=API+key+is+required");
+      return;
+    }
+
+    // Parse permissions checkboxes (read is always included)
+    const rawPerms = req.body.permissions;
+    const permsList = Array.isArray(rawPerms) ? rawPerms : rawPerms ? [rawPerms] : [];
+    const permissions = ["read", ...permsList.filter((p: string) => ["insert", "update"].includes(p))];
+
+    // Test connection
+    await testSupabaseConnection(projectUrl, apiKey);
+
+    const config = encrypt(JSON.stringify({ project_url: projectUrl, api_key: apiKey, permissions }));
+    startSupabase({ projectUrl, apiKey, permissions });
+    upsertIntegration("supabase", config, "connected");
+    res.redirect(303, "/integrations?flash=Supabase+connected");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    upsertIntegration("supabase", "{}", "error", message);
+    res.redirect(303, "/integrations?flash=Supabase+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/supabase/disconnect", (req: Request, res: Response) => {
+  stopSupabase();
+  upsertIntegration("supabase", "{}", "disconnected");
+  res.redirect(303, "/integrations?flash=Supabase+disconnected");
+});
+
+router.post("/integrations/supabase/permissions", (req: Request, res: Response) => {
+  try {
+    const integration = getIntegration("supabase");
+    if (!integration || integration.status !== "connected") {
+      res.redirect(303, "/integrations?flash=Supabase+not+connected");
+      return;
+    }
+
+    const config = JSON.parse(decrypt(integration.config));
+    const rawPerms = req.body.permissions;
+    const permsList = Array.isArray(rawPerms) ? rawPerms : rawPerms ? [rawPerms] : [];
+    config.permissions = ["read", ...permsList.filter((p: string) => ["insert", "update"].includes(p))];
+
+    const encrypted = encrypt(JSON.stringify(config));
+    upsertIntegration("supabase", encrypted, "connected");
+
+    // Restart with updated permissions
+    startSupabase({ projectUrl: config.project_url, apiKey: config.api_key, permissions: config.permissions });
+
+    res.redirect(303, "/integrations?flash=Supabase+permissions+saved");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.redirect(303, "/integrations?flash=Permission+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/airtable/connect", (req: Request, res: Response) => {
+  try {
+    const url = buildAirtableOAuthUrl();
+    res.redirect(url);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.redirect(303, "/integrations?flash=Airtable+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/airtable/disconnect", async (req: Request, res: Response) => {
+  stopAirtable();
+  upsertIntegration("airtable", "{}", "disconnected");
+  res.redirect(303, "/integrations?flash=Airtable+disconnected");
 });
 
 export default router;

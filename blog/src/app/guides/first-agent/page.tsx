@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     "Step-by-step guide to creating, configuring, and deploying your first AI agent with OpenClaw. From agent creation to dashboard in 5 minutes.",
 };
 
-const steps = [
+const steps: Record<string, any>[] = [
   {
     number: 1,
     title: "Make sure OpenClaw is running",

@@ -15,6 +15,14 @@ import {
 import { sendTelegramMessage, isTelegramRunning } from "./telegram";
 import { sendSlackMessage, isSlackRunning, getChannelMembers } from "./slack";
 import { sendEmailMessage, isEmailRunning, checkInbox } from "./email";
+import {
+  isSupabaseRunning, getSupabaseProjectUrl, getSupabasePermissions,
+  supabaseListTables, supabaseQuery, supabaseInsert, supabaseUpdate,
+} from "./supabase";
+import {
+  isAirtableRunning,
+  airtableListBases, airtableListTables, airtableListRecords, airtableCreateRecords, airtableUpdateRecords,
+} from "./airtable";
 
 interface AIResponse {
   role: string;
@@ -389,6 +397,208 @@ async function executeMessagingTool(toolName: string, input: any): Promise<strin
     }
   } catch (err) {
     return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to send message" });
+  }
+}
+
+// --- Supabase Tools ---
+
+const SUPABASE_READ_TOOLS = [
+  {
+    name: "supabase_list_tables",
+    description: "List all tables in the connected Supabase database.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "supabase_query",
+    description: "Query records from a Supabase table. Use PostgREST filter syntax for filters, e.g. {\"id\": \"eq.5\"}, {\"name\": \"ilike.*john*\"}, {\"age\": \"gte.18\"}.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        table: { type: "string", description: "Table name" },
+        select: { type: "string", description: "Columns to return (comma-separated), e.g. 'id,name,email'. Default: all columns." },
+        filters: {
+          type: "object",
+          description: "PostgREST filters as key-value pairs. Keys are column names, values use operators like eq.value, neq.value, gt.value, gte.value, lt.value, lte.value, like.pattern, ilike.pattern, in.(a,b,c), is.null, is.true.",
+          additionalProperties: { type: "string" },
+        },
+        limit: { type: "number", description: "Max records to return (default: 100)" },
+      },
+      required: ["table"],
+    },
+  },
+];
+
+const SUPABASE_INSERT_TOOLS = [
+  {
+    name: "supabase_insert",
+    description: "Insert one or more records into a Supabase table.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        table: { type: "string", description: "Table name" },
+        records: {
+          type: "array",
+          description: "Array of objects to insert. Each object's keys are column names.",
+          items: { type: "object" },
+        },
+      },
+      required: ["table", "records"],
+    },
+  },
+];
+
+const SUPABASE_UPDATE_TOOLS = [
+  {
+    name: "supabase_update",
+    description: "Update records in a Supabase table matching the given filters.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        table: { type: "string", description: "Table name" },
+        match: {
+          type: "object",
+          description: "PostgREST filters to match records to update, e.g. {\"id\": \"eq.5\"}",
+          additionalProperties: { type: "string" },
+        },
+        data: {
+          type: "object",
+          description: "Fields to update with their new values",
+        },
+      },
+      required: ["table", "match", "data"],
+    },
+  },
+];
+
+async function executeSupabaseTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "supabase_list_tables":
+        return await supabaseListTables();
+      case "supabase_query":
+        return await supabaseQuery(input.table, input.select, input.filters, input.limit);
+      case "supabase_insert":
+        return await supabaseInsert(input.table, input.records);
+      case "supabase_update":
+        return await supabaseUpdate(input.table, input.match, input.data);
+      default:
+        return JSON.stringify({ error: `Unknown Supabase tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Supabase operation failed" });
+  }
+}
+
+// --- Airtable Tools ---
+
+const AIRTABLE_TOOLS = [
+  {
+    name: "airtable_list_bases",
+    description: "List all Airtable bases (workspaces) you have access to.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "airtable_list_tables",
+    description: "List all tables and their fields in a specific Airtable base.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        base_id: { type: "string", description: "The Airtable base ID (starts with 'app')" },
+      },
+      required: ["base_id"],
+    },
+  },
+  {
+    name: "airtable_list_records",
+    description: "List records from an Airtable table. Supports filtering, sorting, and pagination.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        base_id: { type: "string", description: "The Airtable base ID" },
+        table: { type: "string", description: "Table name or ID" },
+        view: { type: "string", description: "View name or ID (optional)" },
+        filter_by_formula: { type: "string", description: "Airtable formula to filter records, e.g. \"{Status} = 'Active'\"" },
+        sort_field: { type: "string", description: "Field name to sort by" },
+        sort_direction: { type: "string", description: "'asc' or 'desc'" },
+        max_records: { type: "number", description: "Maximum records to return (default: 100)" },
+      },
+      required: ["base_id", "table"],
+    },
+  },
+  {
+    name: "airtable_create_records",
+    description: "Create one or more records in an Airtable table.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        base_id: { type: "string", description: "The Airtable base ID" },
+        table: { type: "string", description: "Table name or ID" },
+        records: {
+          type: "array",
+          description: "Array of records to create. Each record has a 'fields' object with field names as keys.",
+          items: {
+            type: "object",
+            properties: {
+              fields: { type: "object", description: "Field name to value mapping" },
+            },
+            required: ["fields"],
+          },
+        },
+      },
+      required: ["base_id", "table", "records"],
+    },
+  },
+  {
+    name: "airtable_update_records",
+    description: "Update one or more existing records in an Airtable table by their record IDs.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        base_id: { type: "string", description: "The Airtable base ID" },
+        table: { type: "string", description: "Table name or ID" },
+        records: {
+          type: "array",
+          description: "Array of records to update. Each must include 'id' (record ID starting with 'rec') and 'fields' object.",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "Record ID (starts with 'rec')" },
+              fields: { type: "object", description: "Field name to new value mapping" },
+            },
+            required: ["id", "fields"],
+          },
+        },
+      },
+      required: ["base_id", "table", "records"],
+    },
+  },
+];
+
+async function executeAirtableTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "airtable_list_bases":
+        return await airtableListBases();
+      case "airtable_list_tables":
+        return await airtableListTables(input.base_id);
+      case "airtable_list_records": {
+        const sort = input.sort_field ? [{ field: input.sort_field, direction: input.sort_direction }] : undefined;
+        return await airtableListRecords(input.base_id, input.table, {
+          view: input.view,
+          filterByFormula: input.filter_by_formula,
+          sort,
+          maxRecords: input.max_records,
+        });
+      }
+      case "airtable_create_records":
+        return await airtableCreateRecords(input.base_id, input.table, input.records);
+      case "airtable_update_records":
+        return await airtableUpdateRecords(input.base_id, input.table, input.records);
+      default:
+        return JSON.stringify({ error: `Unknown Airtable tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Airtable operation failed" });
   }
 }
 
@@ -777,6 +987,13 @@ async function callAnthropic(
   if (isTelegramRunning()) tools.push(...TELEGRAM_MESSAGING_TOOLS);
   if (isSlackRunning()) tools.push(...SLACK_MESSAGING_TOOLS);
   if (isEmailRunning()) tools.push(...EMAIL_MESSAGING_TOOLS);
+  if (isSupabaseRunning()) {
+    const perms = getSupabasePermissions();
+    tools.push(...SUPABASE_READ_TOOLS);
+    if (perms.includes("insert")) tools.push(...SUPABASE_INSERT_TOOLS);
+    if (perms.includes("update")) tools.push(...SUPABASE_UPDATE_TOOLS);
+  }
+  if (isAirtableRunning()) tools.push(...AIRTABLE_TOOLS);
 
   // Conditionally add Google tools based on connected services
   const googleServices = getConnectedServices();
@@ -850,6 +1067,8 @@ async function callAnthropic(
       ];
       const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
       const messagingToolNames = ["send_telegram", "send_slack", "slack_channel_members", "send_lobstermail", "check_lobstermail"];
+      const supabaseToolNames = ["supabase_list_tables", "supabase_query", "supabase_insert", "supabase_update"];
+      const airtableToolNames = ["airtable_list_bases", "airtable_list_tables", "airtable_list_records", "airtable_create_records", "airtable_update_records"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
 
@@ -880,6 +1099,10 @@ async function callAnthropic(
           result = await executeMessagingTool(toolBlock.name, toolBlock.input);
         } else if (googleToolNames.includes(toolBlock.name)) {
           result = await executeGoogleTool(toolBlock.name, toolBlock.input);
+        } else if (supabaseToolNames.includes(toolBlock.name)) {
+          result = await executeSupabaseTool(toolBlock.name, toolBlock.input);
+        } else if (airtableToolNames.includes(toolBlock.name)) {
+          result = await executeAirtableTool(toolBlock.name, toolBlock.input);
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input);
         }
@@ -1035,6 +1258,23 @@ export async function processMessage(
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${googleContext}` : googleContext;
     }
   } catch {}
+
+  // Inject Supabase context
+  if (isSupabaseRunning()) {
+    const projectUrl = getSupabaseProjectUrl();
+    const perms = getSupabasePermissions();
+    const abilities = ["list tables and query records"];
+    if (perms.includes("insert")) abilities.push("insert new records");
+    if (perms.includes("update")) abilities.push("update existing records");
+    const supabaseContext = `You are connected to a Supabase database${projectUrl ? ` (${projectUrl})` : ""}. You can ${abilities.join(", ")} using the supabase_* tools. Use PostgREST filter syntax for queries (e.g. eq.value, gt.value, ilike.*pattern*).`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${supabaseContext}` : supabaseContext;
+  }
+
+  // Inject Airtable context
+  if (isAirtableRunning()) {
+    const airtableContext = "You are connected to Airtable. You can list bases, list tables, and read/create/update records using the airtable_* tools. Use airtable_list_bases first to discover available bases, then airtable_list_tables to see table schemas.";
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${airtableContext}` : airtableContext;
+  }
 
   // Inject long-term memories
   try {

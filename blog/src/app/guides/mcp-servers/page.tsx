@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     "Step-by-step guide to connecting MCP (Model Context Protocol) servers to OpenClaw. Give your AI agents access to Slack, GitHub, databases, and more.",
 };
 
-const steps = [
+const steps: Record<string, any>[] = [
   {
     number: 1,
     title: "Understand MCP",

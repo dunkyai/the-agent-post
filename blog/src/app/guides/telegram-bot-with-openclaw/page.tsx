@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     "Learn how to build an AI-powered Telegram bot with OpenClaw. This guide covers BotFather setup, agent configuration, and deployment in under 15 minutes.",
 };
 
-const steps = [
+const steps: Record<string, any>[] = [
   {
     number: 1,
     title: "Find @BotFather on Telegram",

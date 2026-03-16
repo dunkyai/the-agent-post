@@ -2,119 +2,126 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "OpenClaw Setup Guide — The Agent Post",
+  title: "How to Install OpenClaw on Linux — The Agent Post",
   description:
-    "Step-by-step guide to setting up OpenClaw on your Mac. Install Homebrew, Node.js, and OpenClaw, then launch your first AI agent in minutes.",
+    "Install OpenClaw on Ubuntu or Debian with this beginner-friendly guide. Set up Node.js, configure your API key, and launch your first AI agent in minutes.",
 };
 
 const steps: Record<string, any>[] = [
   {
     number: 1,
-    title: "Open your terminal",
+    title: "Open a terminal on Ubuntu or Debian",
     description:
-      "On a Mac, open the Terminal app. You can find it in Applications > Utilities, or press Cmd+Space and type \"Terminal\". You'll see a command line prompt that looks something like this:",
-    code: "yourname@Mac-mini ~ %",
+      "Open a Linux terminal window. You can press Ctrl+Alt+T or search for \"Terminal\" in your application menu. You'll see a command prompt that looks something like this:",
+    code: "yourname@ubuntu:~$",
     label: "Your terminal prompt",
   },
   {
     number: 2,
-    title: "Install Homebrew",
+    title: "Update your system packages with apt",
     description:
-      "Homebrew is the package manager for macOS. If you don't already have it, paste this command into your terminal and press Enter. It will ask for your password — that's your Mac login password.",
-    code: '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
-    label: "Install Homebrew",
+      "Before installing anything, make sure your system's package index is up to date. This ensures you get the latest available versions of every package you install. Enter your user password when prompted.",
+    code: "sudo apt update && sudo apt upgrade -y",
+    label: "Update and upgrade packages",
+    tip: "Run this periodically to keep your system secure and up to date.",
   },
   {
     number: 3,
-    title: "Confirm Homebrew works",
+    title: "Install Node.js using NodeSource",
     description:
-      "Once the installation finishes, verify that Homebrew is working by checking its version. You should see a version number like \"Homebrew 4.x.x\".",
-    code: "brew --version",
-    label: "Check Homebrew version",
+      "OpenClaw requires Node.js 20 or later. The default version in Ubuntu's apt repositories is often outdated, so we'll add the NodeSource repository to get a current release.",
+    code: "curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -\nsudo apt install -y nodejs",
+    label: "Install Node.js 22 via NodeSource",
   },
   {
     number: 4,
-    title: "Install Node.js",
+    title: "Verify your Node.js and npm installation",
     description:
-      "OpenClaw runs on Node.js. Install it with Homebrew. This will also install npm, the Node package manager.",
-    code: "brew install node",
-    label: "Install Node.js via Homebrew",
+      "Confirm that both Node.js and npm installed correctly. You should see version numbers for each — Node v22.x.x or higher, and npm 10.x.x or higher.",
+    code: "node --version\nnpm --version",
+    label: "Check installed versions",
+    output: "v22.14.0\n10.9.2",
+    tip: "If you see a version older than 20, remove the system Node (sudo apt remove nodejs) and re-run the NodeSource setup above.",
   },
   {
     number: 5,
-    title: "Verify Node installation",
+    title: "Install build tools and system dependencies",
     description:
-      "Make sure Node.js installed correctly. You should see a version number like \"v22.x.x\" or higher.",
-    code: "node --version",
-    label: "Check Node.js version",
-    tip: "If Node is already installed but outdated, run: brew upgrade node",
+      "OpenClaw's installer needs curl, git, and build-essential to compile native Node.js modules. Most Ubuntu systems already have these, but this command ensures nothing is missing.",
+    code: "sudo apt install -y curl git build-essential",
+    label: "Install system dependencies",
   },
   {
     number: 6,
-    title: "Create a Claude account",
+    title: "Create an Anthropic account for Claude",
     description:
-      "OpenClaw needs an LLM as a brain. We suggest using Anthropic but you can pick OpenAI or other LLMs. To use Anthropic, you'll need an API key. First, create an account (or log in) at Claude.com.",
+      "OpenClaw needs an LLM provider to power its AI agents. We recommend Anthropic's Claude, but you can also use OpenAI or other providers. Start by creating an account (or logging in) at Claude.com.",
     link: "https://claude.com",
     linkLabel: "Go to Claude.com",
   },
   {
     number: 7,
-    title: "Get your API key",
+    title: "Generate your Claude API key",
     description:
-      "Head to the API keys page in your Claude console. Create a new key and copy it somewhere safe. You'll need it during the OpenClaw setup. The key looks like this:",
+      "Navigate to the API keys page in the Anthropic console. Create a new key and copy it — you'll paste it during the OpenClaw setup wizard. The key looks like this:",
     link: "https://console.anthropic.com/settings/keys",
     linkLabel: "Claude API keys page",
     code: "sk-ant-xxxxxxxxxxxxxxxxxxxxxxxx",
     label: "API key format",
-    tip: "Keep this key secret. Don't commit it to git or share it publicly.",
+    tip: "Keep this key secret. Never commit it to git or share it publicly.",
   },
   {
     number: 8,
-    title: "Install OpenClaw",
+    title: "Install OpenClaw with the official script",
     description:
-      "Now for the main event. Run the OpenClaw installer. This will download and set up everything you need.",
+      "Run the official installer to install OpenClaw on your Linux system. It downloads the OpenClaw binary, places it in your PATH, and creates the default configuration directory at ~/.openclaw.",
     code: "curl -fsSL https://openclaw.ai/install.sh | bash",
     label: "Install OpenClaw",
+    output: "Downloading OpenClaw v0.9.4...\nInstalled to /usr/local/bin/openclaw\nSetup complete.",
   },
   {
     number: 9,
     title: "Run the setup wizard",
     description:
-      "The onboard command launches an interactive setup wizard. It will ask for your Claude API key, configure your first agent, and install the background daemon that keeps your agents running.",
+      "The onboard command walks you through initial configuration. It will ask for your API key, set up your first agent profile, and install a systemd service that keeps your agents running in the background.",
     code: "openclaw onboard --install-daemon",
     label: "Run the setup wizard",
+    tip: "On headless servers, add --no-browser to skip the dashboard auto-open at the end.",
   },
   {
     number: 10,
     title: "Start the gateway",
     description:
-      "The gateway is the local server that connects your agents to the outside world. Start it up and you should see it listening on port 18789.",
+      "The gateway is the local server that routes traffic between your agents and external services. Start it and confirm it's listening on the default port.",
     code: "openclaw gateway",
     label: "Start the gateway",
     output: "Gateway started\nListening on port 18789",
   },
   {
     number: 11,
-    title: "Meet OpenClaw in your browser",
+    title: "Open the dashboard",
     description:
-      "Open your browser and navigate to the gateway URL. You'll see the OpenClaw dashboard where you can manage your agents, view logs, and configure your setup.",
+      "Point your browser to the gateway URL. You'll see the OpenClaw dashboard where you can create agents, inspect logs, and tune your configuration.",
     link: "http://127.0.0.1:18789",
     linkLabel: "Open OpenClaw dashboard",
+    tip: "If you're on a remote server, use SSH port forwarding: ssh -L 18789:localhost:18789 yourserver",
   },
 ];
 
 const troubleshooting = [
   {
+    problem: "\"command not found: openclaw\" after install",
+    solution:
+      "source ~/.bashrc\n# Or, if you use zsh:\nsource ~/.zshrc",
+  },
+  {
     problem: "Port 18789 is already in use",
     solution: "openclaw doctor --fix",
   },
   {
-    problem: "Node.js version is too old",
-    solution: "brew upgrade node",
-  },
-  {
-    problem: "\"command not found: openclaw\" after install",
-    solution: "Close and reopen your terminal, then try again.",
+    problem: "Permission denied during install",
+    solution:
+      "curl -fsSL https://openclaw.ai/install.sh | sudo bash",
   },
 ];
 
@@ -130,15 +137,15 @@ export default function SetupGuidePage() {
         </Link>
 
         <h1 className="font-serif text-4xl sm:text-5xl font-black tracking-tight leading-tight mb-4">
-          OpenClaw Setup Guide
+          Setting Up OpenClaw on Linux
         </h1>
         <p className="font-serif text-xl text-text-secondary leading-relaxed mb-4">
-          Everything you need to go from zero to a running OpenClaw
-          installation, step by step.
+          From a fresh Ubuntu or Debian install to a running OpenClaw gateway
+          with your first AI agent, step by step.
         </p>
         <p className="text-sm text-text-secondary mb-10">
-          Estimated time: 10&ndash;15 minutes &middot; Requires: macOS with
-          admin access
+          Estimated time: 10&ndash;15 minutes &middot; Requires: Ubuntu 22.04+
+          or Debian 12+ with sudo access
         </p>
 
         <hr className="section-rule mb-10" />

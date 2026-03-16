@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "How to Find Your API Key — The Agent Post",
   description:
-    "Step-by-step instructions for finding your API key on Anthropic, OpenAI, Google, Mistral, and Groq. Everything you need to connect your AI agent.",
+    "Step-by-step instructions for finding your API key on Anthropic, OpenAI, Google, Mistral, Groq, and Supabase. Everything you need to connect your AI agent.",
 };
 
 const providers = [
@@ -174,6 +174,44 @@ const providers = [
       },
     ],
   },
+  {
+    name: "Supabase",
+    steps: [
+      {
+        number: 1,
+        title: "Create a Supabase project",
+        description:
+          "Go to supabase.com and sign up or log in. Create a new project if you don't already have one. Each project gets its own Postgres database, API, and unique URL.",
+        link: "https://supabase.com/dashboard",
+        linkLabel: "Open Supabase Dashboard",
+      },
+      {
+        number: 2,
+        title: "Go to API Settings",
+        description:
+          "In your project dashboard, click \"Settings\" in the left sidebar, then select \"API\". You'll see your Project URL and two API keys.",
+        link: "https://supabase.com/dashboard/project/_/settings/api",
+        linkLabel: "Go to API Settings",
+      },
+      {
+        number: 3,
+        title: "Copy your Project URL",
+        description:
+          "At the top of the API settings page, copy your Project URL. This is the base URL your agent will use to connect to your database.",
+        code: "https://your-project-id.supabase.co",
+        label: "Project URL format",
+      },
+      {
+        number: 4,
+        title: "Copy the anon key",
+        description:
+          "Under \"Project API keys\", you'll see two keys. Copy the \"anon public\" key. This key respects your Row Level Security (RLS) policies, making it safe to use with your agent. Only use the \"service_role\" key if you specifically need to bypass RLS.",
+        code: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xxxxxxxx...",
+        label: "Key format (JWT)",
+        tip: "The anon key is recommended for most use cases. It can only access data that your RLS policies allow, so your database stays protected.",
+      },
+    ],
+  },
 ];
 
 export default function ApiKeyGuidePage() {
@@ -203,7 +241,7 @@ export default function ApiKeyGuidePage() {
       </div>
 
       {providers.map((provider, pi) => (
-        <div key={provider.name}>
+        <div key={provider.name} id={provider.name.toLowerCase().split(" ")[0]}>
           <h2 className="font-serif text-2xl font-bold mb-6">
             {provider.name}
           </h2>

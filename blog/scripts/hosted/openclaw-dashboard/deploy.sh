@@ -39,6 +39,7 @@ run_container() {
       -e GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \\
       -e GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET" \\
       -e SLACK_CLIENT_ID="$SLACK_CLIENT_ID" \\
+      -e AIRTABLE_CLIENT_ID="$AIRTABLE_CLIENT_ID" \\
       -p "$PORT:3000" \\
       --add-host=host.docker.internal:host-gateway \\
       --restart unless-stopped \\

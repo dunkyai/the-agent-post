@@ -5,6 +5,7 @@ import { encrypt, decrypt } from "../services/encryption";
 import { startGoogle } from "../services/google";
 import { startSlack, handleSlackEvent } from "../services/slack";
 import { isEmailAllowed, sanitizeEmailContent } from "../services/email";
+import { startAirtable } from "../services/airtable";
 
 const router = Router();
 
@@ -202,6 +203,35 @@ router.post("/webhook/slack/events", async (req: Request, res: Response) => {
     await handleSlackEvent(event, event_id);
   } catch (err: unknown) {
     console.error("Slack event handling error:", err instanceof Error ? err.message : err);
+  }
+});
+
+// Airtable OAuth — provisioning API delivers tokens here after consent
+router.post("/webhook/airtable/tokens", async (req: Request, res: Response) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (token !== process.env.GATEWAY_TOKEN) {
+    res.sendStatus(401);
+    return;
+  }
+
+  try {
+    const { access_token, refresh_token, expires_in } = req.body;
+
+    const configData = {
+      access_token,
+      refresh_token,
+      token_expiry: new Date(Date.now() + expires_in * 1000).toISOString(),
+    };
+
+    const config = encrypt(JSON.stringify(configData));
+    upsertIntegration("airtable", config, "connected");
+    startAirtable(configData);
+
+    console.log("Airtable connected via OAuth");
+    res.json({ ok: true });
+  } catch (err: unknown) {
+    console.error("Airtable token delivery error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Failed to store Airtable tokens" });
   }
 });
 

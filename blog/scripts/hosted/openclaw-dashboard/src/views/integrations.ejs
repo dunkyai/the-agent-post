@@ -207,6 +207,115 @@
         </div>
       </div>
     </details>
+    <!-- Supabase -->
+    <details class="card card-collapsible">
+      <summary class="integration-toggle">
+        <div class="integration-header">
+          <h3>Supabase</h3>
+          <span class="status-badge status-<%= supabase.status %>"><%= supabase.status %></span>
+        </div>
+        <span class="toggle-arrow"></span>
+      </summary>
+      <div class="integration-body">
+        <% if (supabase.error_message) { %>
+          <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= supabase.error_message %></p>
+        <% } %>
+
+        <% if (supabase.status === 'connected') { %>
+          <div style="margin-bottom: 12px;">
+            <label style="font-size: 13px; color: var(--muted);">Project URL</label>
+            <div style="margin-top: 4px;">
+              <code style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px;"><%= supabase.project_url %></code>
+            </div>
+          </div>
+          <form method="POST" action="/integrations/supabase/permissions" style="margin-bottom: 12px; padding-top: 12px; border-top: 1px solid var(--rule-light);">
+            <div class="form-group">
+              <label>Agent Permissions</label>
+              <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                  <input type="checkbox" name="permissions" value="read" checked disabled>
+                  <strong>Read</strong> &mdash; Query and list tables
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                  <input type="checkbox" name="permissions" value="insert" <%= supabase.permissions.includes('insert') ? 'checked' : '' %>>
+                  <strong>Insert</strong> &mdash; Add new records
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                  <input type="checkbox" name="permissions" value="update" <%= supabase.permissions.includes('update') ? 'checked' : '' %>>
+                  <strong>Update</strong> &mdash; Modify existing records
+                </label>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-sm">Save Permissions</button>
+          </form>
+          <form method="POST" action="/integrations/supabase/disconnect">
+            <button type="submit" class="btn btn-danger">Disconnect</button>
+          </form>
+        <% } else { %>
+          <form method="POST" action="/integrations/supabase/connect">
+            <p style="font-size: 14px; margin-bottom: 12px;">Connect your Supabase project so your agent can query your database. Here's where to <a href="https://theagentpost.co/guides/find-your-api-key#supabase" target="_blank" style="color: var(--accent); text-decoration: underline;">find your Project URL and API key</a></p>
+            <div class="form-group">
+              <label for="supabase_project_url">Project URL</label>
+              <input type="url" id="supabase_project_url" name="project_url" placeholder="https://your-project.supabase.co" required>
+              <div class="hint">Find this in your Supabase dashboard under Settings &rarr; API</div>
+            </div>
+            <div class="form-group">
+              <label for="supabase_api_key">API Key</label>
+              <input type="password" id="supabase_api_key" name="api_key" placeholder="eyJhbGciOiJIUzI1NiIs..." required>
+              <div class="hint">Use the <code>anon</code> key for read-only, or <code>service_role</code> key if you want insert/update access</div>
+            </div>
+            <div class="form-group">
+              <label>Agent Permissions</label>
+              <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                  <input type="checkbox" name="permissions" value="read" checked disabled>
+                  <strong>Read</strong> &mdash; Query and list tables
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                  <input type="checkbox" name="permissions" value="insert">
+                  <strong>Insert</strong> &mdash; Add new records
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                  <input type="checkbox" name="permissions" value="update">
+                  <strong>Update</strong> &mdash; Modify existing records
+                </label>
+              </div>
+            </div>
+            <button type="submit" class="btn">Connect</button>
+          </form>
+        <% } %>
+      </div>
+    </details>
+
+    <!-- Airtable -->
+    <details class="card card-collapsible">
+      <summary class="integration-toggle">
+        <div class="integration-header">
+          <h3>Airtable</h3>
+          <span class="status-badge status-<%= airtable.status %>"><%= airtable.status %></span>
+        </div>
+        <span class="toggle-arrow"></span>
+      </summary>
+      <div class="integration-body">
+        <% if (airtable.error_message) { %>
+          <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= airtable.error_message %></p>
+        <% } %>
+
+        <% if (airtable.status === 'connected') { %>
+          <div style="margin-bottom: 12px;">
+            <p style="font-size: 14px;">Your Airtable account is connected. Your agent can list bases, read and write records.</p>
+          </div>
+          <form method="POST" action="/integrations/airtable/disconnect">
+            <button type="submit" class="btn btn-danger">Disconnect</button>
+          </form>
+        <% } else { %>
+          <form method="POST" action="/integrations/airtable/connect">
+            <p style="font-size: 14px; margin-bottom: 12px;">Connect your Airtable account so your agent can read and write to your bases.</p>
+            <button type="submit" class="btn">Connect to Airtable</button>
+          </form>
+        <% } %>
+      </div>
+    </details>
   </div>
 </div>
 <script>

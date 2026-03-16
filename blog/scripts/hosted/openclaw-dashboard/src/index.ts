@@ -156,6 +156,32 @@ async function reconnectIntegrations() {
     }
   } catch {}
 
+  // Supabase
+  try {
+    const supabase = getIntegration("supabase");
+    if (supabase && supabase.status === "connected") {
+      const config = JSON.parse(decrypt(supabase.config));
+      const { startSupabase } = require("./services/supabase");
+      startSupabase({ projectUrl: config.project_url, apiKey: config.api_key, permissions: config.permissions });
+      console.log("Supabase reconnected");
+    }
+  } catch (err: unknown) {
+    console.error("Failed to reconnect Supabase:", err instanceof Error ? err.message : err);
+  }
+
+  // Airtable
+  try {
+    const airtable = getIntegration("airtable");
+    if (airtable && airtable.status === "connected") {
+      const config = JSON.parse(decrypt(airtable.config));
+      const { startAirtable } = require("./services/airtable");
+      startAirtable(config);
+      console.log("Airtable reconnected");
+    }
+  } catch (err: unknown) {
+    console.error("Failed to reconnect Airtable:", err instanceof Error ? err.message : err);
+  }
+
   try {
     const googleRows = getGoogleIntegrations();
     for (const row of googleRows) {

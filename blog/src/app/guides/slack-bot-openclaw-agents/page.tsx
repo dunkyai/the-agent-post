@@ -2,133 +2,138 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "How to Build an AI Slack Bot with OpenClaw — The Agent Post",
+  title:
+    "How to Build an AI Slack Bot with OpenClaw — The Agent Post",
   description:
-    "Learn how to build an AI-powered Slack bot with OpenClaw agents in this step-by-step guide. Set up a Slack app, connect your agent, and deploy to production.",
+    "Learn how to build an AI-powered Slack bot with OpenClaw agents. This step-by-step guide covers setup, configuration, and deployment in under 15 minutes.",
 };
 
-const steps = [
+const steps: Record<string, any>[] = [
   {
     number: 1,
-    title: "Create a new Slack app from scratch",
+    title: "Create a new Slack app",
     description:
-      "Head to the Slack API portal and click \"Create New App\". Choose \"From scratch\", name your bot something like \"OpenClaw Bot\", and select the Slack workspace you want to install it to.",
+      "Head to the Slack API dashboard and click \"Create New App.\" Choose \"From scratch,\" give your bot a name like \"OpenClaw Bot,\" and select the workspace you want to install it in. This creates the container that holds your bot's permissions and event subscriptions.",
     link: "https://api.slack.com/apps",
-    linkLabel: "Slack API portal",
+    linkLabel: "Slack API dashboard",
   },
   {
     number: 2,
-    title: "Configure Slack bot OAuth scopes",
+    title: "Add Slack bot token scopes",
     description:
-      "In your Slack app settings, go to OAuth & Permissions. Under \"Bot Token Scopes\", add the permissions your bot needs. At minimum, add these scopes for reading and sending messages:",
-    code: "app_mentions:read\nchat:write\nchannels:history\nim:history\nim:write",
+      "In your app settings, navigate to \"OAuth & Permissions\" and scroll to \"Bot Token Scopes.\" Add the scopes listed below. These give your bot permission to read messages in channels it's invited to and post replies.",
+    code: "app_mentions:read\nchat:write\nchannels:history\ngroups:history\nim:history\nim:write",
     label: "Required bot token scopes",
-    tip: "Only request scopes your bot actually needs. You can always add more later.",
+    tip: "Start with the minimum scopes. You can add more later if your agent needs to upload files, manage channels, or add reactions.",
   },
   {
     number: 3,
-    title: "Enable Slack Event Subscriptions",
+    title: "Enable Slack Socket Mode",
     description:
-      "Go to Event Subscriptions in your Slack app settings and toggle it on. Under \"Subscribe to bot events\", add app_mention and message.im. This tells Slack to send your bot a notification whenever someone @mentions it or sends it a direct message. Leave the Request URL blank for now — we'll fill it in after starting the gateway.",
+      "Go to \"Socket Mode\" in the left sidebar and toggle it on. Socket Mode lets your bot receive events over a WebSocket connection instead of requiring a public URL — perfect for local development. Slack will prompt you to generate an app-level token. Name it something like \"openclaw-socket\" and copy the token.",
+    code: "xapp-x-xxxxxxxxxxxx-xxxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxx",
+    label: "App-level token format",
+    tip: "Socket Mode is ideal for development and small teams. For high-traffic production bots, you can switch to the HTTP Events API later.",
+  },
+  {
+    number: 4,
+    title: "Subscribe to Slack bot events",
+    description:
+      "Go to \"Event Subscriptions\" in the sidebar and toggle it on. Under \"Subscribe to bot events,\" add the two events below. These tell Slack to notify your bot whenever someone @mentions it or sends it a direct message.",
     code: "app_mention\nmessage.im",
     label: "Bot events to subscribe to",
   },
   {
-    number: 4,
-    title: "Install the Slack app and get your bot token",
+    number: 5,
+    title: "Install the Slack app to your workspace",
     description:
-      "Go to \"Install App\" in the sidebar and click \"Install to Workspace\". Slack will ask you to authorize the bot permissions. After installing, you'll see a Bot User OAuth Token that starts with xoxb-. Copy this token — you'll need it in the next step.",
+      "Click \"Install App\" in the sidebar, then \"Install to Workspace.\" Slack will ask you to authorize the permissions you configured. After approving, you'll see a Bot User OAuth Token — copy it and keep it safe.",
     code: "xoxb-xxxxxxxxxxxx-xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxx",
     label: "Bot token format",
-    tip: "Keep this token secret. Treat it like a password.",
-  },
-  {
-    number: 5,
-    title: "Store your Slack bot token and signing secret",
-    description:
-      "Back in your terminal, save your Slack bot token and signing secret as OpenClaw secrets. The signing secret is found under \"Basic Information\" in your Slack app settings. OpenClaw encrypts these credentials and makes them available to your agent at runtime.",
-    code: "openclaw secrets set SLACK_BOT_TOKEN xoxb-your-token-here\nopenclaw secrets set SLACK_SIGNING_SECRET your-signing-secret",
-    label: "Store Slack credentials",
   },
   {
     number: 6,
-    title: "Create an OpenClaw agent with the Slack template",
+    title: "Store your Slack tokens in OpenClaw",
     description:
-      "Use the OpenClaw CLI to generate a new AI agent preconfigured for Slack. This creates an agent directory with the Slack integration, a default system prompt, and the event handler wiring already in place.",
-    code: "openclaw agent create slack-bot --template slack",
-    label: "Scaffold a Slack bot agent",
-    output: "Created agent: slack-bot\n  → agents/slack-bot/agent.yaml\n  → agents/slack-bot/prompt.md\n  → agents/slack-bot/hooks/slack_events.js",
+      "Back in your terminal, use the OpenClaw secrets manager to store both tokens. This keeps them encrypted and out of your source code. OpenClaw injects them into your agent's environment at runtime.",
+    code: "openclaw secrets set SLACK_BOT_TOKEN xoxb-your-bot-token-here\nopenclaw secrets set SLACK_APP_TOKEN xapp-your-app-token-here",
+    label: "Store Slack credentials securely",
+    tip: "Never paste tokens directly into config files or commit them to git. Always use openclaw secrets for credentials.",
   },
   {
     number: 7,
-    title: "Customize your AI agent's system prompt",
+    title: "Scaffold a Slack bot agent with the OpenClaw CLI",
     description:
-      "Open the generated prompt file and tailor it to your bot's personality and purpose. This is the system prompt your agent uses when responding to Slack messages. Be specific about tone, what topics the bot should help with, and any boundaries.",
-    code: "open agents/slack-bot/prompt.md",
-    label: "Open the prompt file",
-    tip: "Keep the prompt concise. A focused 5-10 line prompt usually outperforms a long, overly detailed one.",
+      "Use the OpenClaw CLI to generate a new AI agent project with the built-in Slack bot template. This creates a directory with the agent definition, a system prompt, and the Slack connector already wired up.",
+    code: "openclaw create agent slack-bot --template slack\ncd slack-bot",
+    label: "Create agent from Slack template",
+    output:
+      "Created agent \"slack-bot\" from template slack\n  → agent.yaml\n  → system-prompt.md\n  → connectors/slack.yaml\n  → README.md",
   },
   {
     number: 8,
-    title: "Start the OpenClaw gateway for Slack",
+    title: "Configure the OpenClaw agent",
     description:
-      "Launch the OpenClaw gateway with the Slack integration enabled. The gateway handles incoming webhook events from Slack, verifies request signatures, and routes messages to your AI agent.",
-    code: "openclaw gateway --integration slack",
-    label: "Start the gateway",
-    output: "Gateway started\nSlack integration: enabled\nListening on port 18789\nWebhook endpoint: http://127.0.0.1:18789/slack/events",
+      "Open agent.yaml in your editor. This is where you configure your AI agent's model, temperature, and available tools. The Slack bot template comes with sensible defaults, but you should customize the name and description for your use case.",
+    code: "# agent.yaml\nname: slack-bot\nmodel: claude-sonnet-4-6\ntemperature: 0.3\nsystem_prompt: ./system-prompt.md\nconnectors:\n  - ./connectors/slack.yaml\ntools:\n  - web_search\n  - calculator",
+    label: "agent.yaml",
+    tip: "Use a low temperature (0.2–0.4) for factual Q&A bots. Bump it to 0.7+ for creative or conversational bots.",
   },
   {
     number: 9,
-    title: "Expose your local server with a public tunnel URL",
+    title: "Write the bot's system prompt",
     description:
-      "Slack needs a public URL to send events to. OpenClaw has a built-in tunnel command that creates a secure public URL pointing to your local gateway. Copy the HTTPS URL it gives you.",
-    code: "openclaw tunnel",
-    label: "Start the tunnel",
-    output: "Tunnel established\nPublic URL: https://abc123.tunnel.openclaw.ai\nForwarding to: http://127.0.0.1:18789",
+      "Open system-prompt.md and write the instructions that define how your Slack bot behaves. Be specific about its role, tone, what it should and shouldn't do, and how it should format responses for Slack.",
+    code: "You are a helpful assistant in our team's Slack workspace.\n\nRules:\n- Answer questions concisely and accurately.\n- If you don't know something, say so — don't guess.\n- Use thread replies when responding to channel messages.\n- Never share API keys, passwords, or internal credentials.\n- Format code with Slack-compatible markdown.",
+    label: "system-prompt.md example",
   },
   {
     number: 10,
-    title: "Set the Slack Event Subscriptions Request URL",
+    title: "Test your Slack bot locally",
     description:
-      "Go back to your Slack app's Event Subscriptions page. Paste your tunnel URL with the /slack/events path into the Request URL field. Slack will send a challenge request to verify it — if the gateway is running, it will respond automatically and you'll see a green checkmark.",
-    code: "https://abc123.tunnel.openclaw.ai/slack/events",
-    label: "Request URL to paste in Slack",
-    tip: "If verification fails, make sure both the gateway and tunnel are running. Check the gateway logs for errors.",
+      "Run the agent in development mode. This starts a local instance that connects to Slack via Socket Mode. Once you see \"Connected,\" go to your Slack workspace and mention your bot in any channel it's been invited to.",
+    code: "openclaw dev",
+    label: "Start the agent in dev mode",
+    output:
+      "Loading agent \"slack-bot\"...\nConnecting to Slack (socket mode)...\nConnected as @OpenClaw Bot\nListening for events — press Ctrl+C to stop",
   },
   {
     number: 11,
-    title: "Test your AI Slack bot in a channel",
+    title: "Send a test message in Slack",
     description:
-      "Go to any Slack channel where your bot is a member (invite it with /invite @OpenClaw Bot) and mention it. Your AI bot should respond within a few seconds. You can also test it by sending a direct message.",
-    code: "@OpenClaw Bot what can you help me with?",
+      "In Slack, invite your bot to a channel by typing /invite @OpenClaw Bot. Then @mention it with a question. You should see the agent process the message in your terminal and reply in a thread within a few seconds.",
+    code: "@OpenClaw Bot summarize our Q1 roadmap",
     label: "Example mention in Slack",
+    output:
+      "Event received: app_mention in #general\nAgent processing... (1.4s)\nReply sent to thread",
   },
   {
     number: 12,
-    title: "Deploy your Slack bot to OpenClaw cloud",
+    title: "Deploy your Slack bot to production",
     description:
-      "When you're ready to go live, deploy your agent to the OpenClaw cloud. This gives you a permanent public URL so you can replace the tunnel. After deploying, update your Slack app's Request URL with the new production endpoint.",
-    code: "openclaw deploy slack-bot",
-    label: "Deploy to OpenClaw cloud",
-    output: "Deploying slack-bot...\nBuild: success\nEndpoint: https://slack-bot.agents.openclaw.ai/slack/events\nStatus: live",
+      "When you're ready for production, deploy your Slack bot as a persistent daemon. The daemon auto-restarts on crashes and reconnects if the WebSocket drops. Check on it anytime with the status command.",
+    code: "openclaw deploy slack-bot\nopenclaw status",
+    label: "Deploy and check status",
+    output:
+      "Deploying agent \"slack-bot\"...\nDaemon registered and started\n\nAgent        Status    Uptime     Last Event\nslack-bot    running   just now   —",
   },
 ];
 
 const troubleshooting = [
   {
-    problem: "Fix \"url_verification_failed\" error when setting the Slack Request URL",
+    problem: "Slack bot connects but doesn't respond to @mentions",
     solution:
-      "Make sure the gateway is running (openclaw gateway --integration slack) and the tunnel is active (openclaw tunnel). Both must be up before Slack can verify.",
+      "Verify that app_mention is listed under Event Subscriptions in your Slack app settings.\nThen reinstall the app: OAuth & Permissions → Reinstall to Workspace.",
   },
   {
-    problem: "Slack bot not responding to @mentions in a channel",
+    problem: "\"token_revoked\" or \"invalid_auth\" errors in the terminal",
     solution:
-      "Invite the bot to the channel first with: /invite @OpenClaw Bot\nAlso verify app_mention is listed under Event Subscriptions.",
+      "Your bot token may have been rotated. Re-copy it from Slack and update:\nopenclaw secrets set SLACK_BOT_TOKEN xoxb-your-new-token\nopenclaw restart slack-bot",
   },
   {
-    problem: "Fix \"invalid_signing_secret\" error in OpenClaw gateway logs",
+    problem: "Slack bot replies are slow or timing out",
     solution:
-      "Re-copy the Signing Secret from Slack > Basic Information and update it:\nopenclaw secrets set SLACK_SIGNING_SECRET your-correct-secret",
+      "openclaw logs slack-bot --tail 50\n# Look for retry loops or rate-limit warnings.\n# For faster responses, switch to a smaller model in agent.yaml:\n# model: claude-haiku-4-5",
   },
 ];
 
@@ -147,13 +152,13 @@ export default function SlackBotGuide() {
           How to Build an AI Slack Bot with OpenClaw Agents
         </h1>
         <p className="font-serif text-xl text-text-secondary leading-relaxed mb-4">
-          Follow this step-by-step tutorial to connect an OpenClaw AI agent to
-          Slack and deploy a bot that responds to mentions and direct messages
-          in your workspace.
+          Build and deploy an AI-powered Slack bot using OpenClaw agents. Your
+          bot will answer questions, run tools, and respond to mentions —
+          configured with a single YAML file and ready in minutes.
         </p>
         <p className="text-sm text-text-secondary mb-10">
           Estimated time: 10&ndash;15 minutes &middot; Requires: OpenClaw
-          installed, a Slack workspace with admin access
+          installed, a Slack workspace where you can create apps
         </p>
 
         <hr className="section-rule mb-10" />

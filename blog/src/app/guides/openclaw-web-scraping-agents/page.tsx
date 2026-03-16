@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     "Learn how to build and schedule an OpenClaw web scraping agent in 10 minutes. Extract structured data from any website with this step-by-step tutorial.",
 };
 
-const steps = [
+const steps: Record<string, any>[] = [
   {
     number: 1,
     title: "Verify your OpenClaw installation",
