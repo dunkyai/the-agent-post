@@ -80,6 +80,37 @@
           </div>
           <div class="hint" style="margin-top: 6px;">Send emails to this address and your agent will respond via AI. Replies require a Tier 1+ LobsterMail API key.</div>
         </div>
+        <form method="POST" action="/integrations/email/filter" style="margin-bottom: 12px; padding-top: 12px; border-top: 1px solid var(--rule-light);">
+          <div class="form-group">
+            <label for="email_filter_mode">Filter Incoming Emails</label>
+            <select id="email_filter_mode" name="filter_mode">
+              <option value="all" <%= email.filter_mode === 'all' ? 'selected' : '' %>>Allow all</option>
+              <option value="domain" <%= email.filter_mode === 'domain' ? 'selected' : '' %>>Allow only from a domain</option>
+              <option value="addresses" <%= email.filter_mode === 'addresses' ? 'selected' : '' %>>Allow only specific addresses</option>
+            </select>
+          </div>
+
+          <div id="filter-domain-group" class="form-group" style="display: none;">
+            <label for="filter_domain">Allowed Domain</label>
+            <input type="text" id="filter_domain" name="filter_domain" value="<%= email.filter_domain || '' %>" placeholder="e.g. acme.com">
+            <div class="hint">Only emails from @this-domain will be processed</div>
+          </div>
+
+          <div id="filter-addresses-group" style="display: none;">
+            <div class="form-group">
+              <label>Allowed Addresses</label>
+              <div style="display: flex; gap: 8px;">
+                <input type="email" id="filter_address_input" placeholder="alice@example.com" style="flex: 1;">
+                <button type="button" id="add-address-btn" class="btn" style="padding: 8px 16px;">Add</button>
+              </div>
+            </div>
+            <div id="address-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;"></div>
+            <input type="hidden" id="filter_addresses_hidden" name="filter_addresses" value="">
+          </div>
+
+          <button type="submit" class="btn">Save Filter</button>
+        </form>
+
         <form method="POST" action="/integrations/email/disconnect">
           <button type="submit" class="btn btn-danger">Disconnect</button>
         </form>
@@ -163,4 +194,64 @@
     </div>
   </div>
 </div>
+<script>
+(function () {
+  var modeEl = document.getElementById("email_filter_mode");
+  if (!modeEl) return;
+
+  var domainGroup = document.getElementById("filter-domain-group");
+  var addressesGroup = document.getElementById("filter-addresses-group");
+  var addressInput = document.getElementById("filter_address_input");
+  var addBtn = document.getElementById("add-address-btn");
+  var tagsContainer = document.getElementById("address-tags");
+  var hiddenInput = document.getElementById("filter_addresses_hidden");
+
+  var addresses = <%= JSON.stringify(email.filter_addresses || []) %>;
+
+  function updateVisibility() {
+    var mode = modeEl.value;
+    domainGroup.style.display = mode === "domain" ? "block" : "none";
+    addressesGroup.style.display = mode === "addresses" ? "block" : "none";
+  }
+
+  function renderTags() {
+    tagsContainer.innerHTML = "";
+    hiddenInput.value = addresses.join(",");
+    addresses.forEach(function (addr, i) {
+      var tag = document.createElement("span");
+      tag.style.cssText = "display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: var(--tag-bg); color: var(--accent); border-radius: 12px; font-size: 13px;";
+      tag.textContent = addr;
+      var removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.textContent = "\u00d7";
+      removeBtn.style.cssText = "border: none; background: none; color: var(--accent); cursor: pointer; font-size: 16px; padding: 0; line-height: 1;";
+      removeBtn.onclick = function () {
+        addresses.splice(i, 1);
+        renderTags();
+      };
+      tag.appendChild(removeBtn);
+      tagsContainer.appendChild(tag);
+    });
+  }
+
+  function addAddress() {
+    var val = addressInput.value.trim().toLowerCase();
+    if (val && val.includes("@") && addresses.indexOf(val) === -1) {
+      addresses.push(val);
+      renderTags();
+      addressInput.value = "";
+    }
+    addressInput.focus();
+  }
+
+  addBtn.addEventListener("click", addAddress);
+  addressInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); addAddress(); }
+  });
+  modeEl.addEventListener("change", updateVisibility);
+
+  updateVisibility();
+  renderTags();
+})();
+</script>
 <%- include('partials/foot') %>

@@ -1,12 +1,23 @@
 import { Router, Request, Response } from "express";
+import { createHmac, timingSafeEqual } from "crypto";
 import { getIntegration, upsertIntegration } from "../services/db";
 import { encrypt, decrypt } from "../services/encryption";
 import { startGoogle } from "../services/google";
 import { startSlack, handleSlackEvent } from "../services/slack";
+import { isEmailAllowed, sanitizeEmailContent } from "../services/email";
 
 const router = Router();
 
-// Email (LobsterMail) webhook — future enhancement for push-based delivery
+// --- HMAC signature verification ---
+
+function verifyLobsterMailSignature(rawBody: Buffer, signatureHeader: string, secret: string): boolean {
+  if (!signatureHeader || !signatureHeader.startsWith("sha256=")) return false;
+  const expected = `sha256=${createHmac("sha256", secret).update(rawBody).digest("hex")}`;
+  if (expected.length !== signatureHeader.length) return false;
+  return timingSafeEqual(Buffer.from(expected), Buffer.from(signatureHeader));
+}
+
+// Email (LobsterMail) webhook
 router.post("/webhook/email", async (req: Request, res: Response) => {
   const integration = getIntegration("email");
   if (!integration || integration.status !== "connected") {
@@ -14,18 +25,68 @@ router.post("/webhook/email", async (req: Request, res: Response) => {
     return;
   }
 
+  let config: Record<string, any>;
   try {
-    const config = JSON.parse(decrypt(integration.config));
+    config = JSON.parse(decrypt(integration.config));
+  } catch {
+    console.error("Email webhook: failed to decrypt config");
+    res.sendStatus(200);
+    return;
+  }
+
+  // 1. Verify HMAC signature if webhook secret is configured
+  if (config.webhook_secret) {
+    const signature = req.headers["x-lobstermail-signature"] as string | undefined;
+    const rawBody = (req as any).rawBody as Buffer | undefined;
+
+    if (!signature || !rawBody) {
+      console.warn("Email webhook rejected: missing signature or raw body");
+      res.sendStatus(401);
+      return;
+    }
+
+    if (!verifyLobsterMailSignature(rawBody, signature, config.webhook_secret)) {
+      console.warn("Email webhook rejected: invalid signature");
+      res.sendStatus(401);
+      return;
+    }
+  }
+
+  try {
     const { processMessage } = require("../services/ai");
     const events = Array.isArray(req.body) ? req.body : [req.body];
 
     for (const event of events) {
       if (event.type !== "email.received") continue;
       const email = event.data || event;
-      const sender = email.from || email.sender || "unknown";
-      const subject = email.subject || "";
-      const body = email.body?.text || email.body?.html || email.body || "";
-      const text = subject ? `Subject: ${subject}\n\n${body}` : body;
+
+      // 2. Validate payload structure
+      const sender = email.from || email.sender;
+      const subject = email.subject;
+      const rawBody = email.body?.text || email.body?.html || email.body;
+
+      if (!sender || typeof sender !== "string") {
+        console.warn("Email webhook: missing or invalid 'from' field");
+        continue;
+      }
+      if (subject !== undefined && typeof subject !== "string") {
+        console.warn("Email webhook: invalid 'subject' field");
+        continue;
+      }
+      if (!rawBody || typeof rawBody !== "string") {
+        console.warn("Email webhook: missing or invalid body");
+        continue;
+      }
+
+      // 3. Check sender allowlist
+      if (!isEmailAllowed(sender)) {
+        console.log(`Webhook email from ${sender} filtered out`);
+        continue;
+      }
+
+      // 4. Sanitize content before AI processing
+      const bodyText = sanitizeEmailContent(rawBody);
+      const text = subject ? `Subject: ${subject}\n\n${bodyText}` : bodyText;
       if (!text.trim()) continue;
 
       const reply = await processMessage("email", sender, text);

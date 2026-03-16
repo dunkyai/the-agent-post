@@ -22,8 +22,14 @@ const PORT = parseInt(process.env.PORT || "3000", 10);
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
-// Middleware
-app.use(express.json());
+// Middleware — capture raw body on webhook routes for signature verification
+app.use(express.json({
+  verify: (req: any, _res, buf) => {
+    if (req.url?.startsWith("/webhook/")) {
+      req.rawBody = buf;
+    }
+  },
+}));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 

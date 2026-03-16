@@ -16,11 +16,17 @@ router.get("/integrations", (req: Request, res: Response) => {
   }
 
   let emailAddress: string | null = null;
+  let emailFilterMode = "all";
+  let emailFilterDomain = "";
+  let emailFilterAddresses: string[] = [];
   const emailIntegration = integrationMap["email"];
   if (emailIntegration && emailIntegration.status === "connected") {
     try {
       const config = JSON.parse(decrypt(emailIntegration.config));
       emailAddress = config.email_address || null;
+      emailFilterMode = config.filter_mode || "all";
+      emailFilterDomain = config.filter_domain || "";
+      emailFilterAddresses = config.filter_addresses || [];
     } catch {}
   }
 
@@ -53,6 +59,9 @@ router.get("/integrations", (req: Request, res: Response) => {
     email: {
       ...(integrationMap["email"] || { status: "disconnected", error_message: null }),
       email_address: emailAddress,
+      filter_mode: emailFilterMode,
+      filter_domain: emailFilterDomain,
+      filter_addresses: emailFilterAddresses,
     },
     google: {
       ...(integrationMap["google"] || { status: "disconnected", error_message: null }),
@@ -147,6 +156,39 @@ router.post("/integrations/email/connect", async (req: Request, res: Response) =
     const message = err instanceof Error ? err.message : "Unknown error";
     upsertIntegration("email", "{}", "error", message);
     res.redirect(303, "/integrations?flash=Email+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/email/filter", (req: Request, res: Response) => {
+  try {
+    const integration = getIntegration("email");
+    if (!integration || integration.status !== "connected") {
+      res.redirect(303, "/integrations?flash=Email+not+connected");
+      return;
+    }
+
+    const config = JSON.parse(decrypt(integration.config));
+    const { filter_mode, filter_domain, filter_addresses } = req.body;
+
+    const validModes = ["all", "domain", "addresses"];
+    config.filter_mode = validModes.includes(filter_mode) ? filter_mode : "all";
+    config.filter_domain = (filter_domain || "").trim().toLowerCase().replace(/^@/, "");
+
+    // Parse addresses: could be a comma-separated string or an array from hidden inputs
+    let addresses: string[] = [];
+    if (typeof filter_addresses === "string") {
+      addresses = filter_addresses.split(",").map((a: string) => a.trim().toLowerCase()).filter(Boolean);
+    } else if (Array.isArray(filter_addresses)) {
+      addresses = filter_addresses.map((a: string) => a.trim().toLowerCase()).filter(Boolean);
+    }
+    config.filter_addresses = addresses;
+
+    const encrypted = encrypt(JSON.stringify(config));
+    upsertIntegration("email", encrypted, "connected");
+    res.redirect(303, "/integrations?flash=Email+filter+saved");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.redirect(303, "/integrations?flash=Filter+error:+" + encodeURIComponent(message));
   }
 });
 
