@@ -6,7 +6,7 @@
     <%- include('partials/flash', { flash }) %>
 
     <form method="POST" action="/settings">
-      <div class="card">
+      <div class="card card-compact">
         <h3>Identity</h3>
         <div class="form-group">
           <label for="agent_name">Agent Name</label>
@@ -18,18 +18,21 @@
           <input type="text" id="user_name" name="user_name" value="<%= userName %>" placeholder="e.g. Elizabeth, Alex...">
           <div class="hint">Shown in the chat window next to your messages</div>
         </div>
+        <button type="submit" class="btn btn-sm">Save</button>
       </div>
 
-      <div class="card">
+      <div class="card card-compact">
         <h3>System Prompt</h3>
         <div class="form-group">
           <label for="system_prompt">System prompt sent with every message</label>
-          <textarea id="system_prompt" name="system_prompt" rows="8" placeholder="You are a helpful assistant..."><%= systemPrompt %></textarea>
+          <textarea id="system_prompt" name="system_prompt" rows="6" placeholder="You are a helpful assistant..."><%= systemPrompt %></textarea>
         </div>
+        <button type="submit" class="btn btn-sm">Save</button>
       </div>
 
-      <div class="card">
-        <p style="margin-bottom: 16px; font-size: 14px; color: var(--text);">Pick a brain (LLM) for your OpenClaw. Here's where to <a href="https://theagentpost.co/guides/find-your-api-key" target="_blank" style="color: var(--accent); text-decoration: underline;">find your API key</a></p>
+      <div class="card card-compact">
+        <h3>AI Provider</h3>
+        <p style="margin-bottom: 12px; font-size: 13px; color: var(--text-secondary);">Pick a brain (LLM) for your OpenClaw. Here's where to <a href="https://theagentpost.co/guides/find-your-api-key" target="_blank" style="color: var(--accent); text-decoration: underline;">find your API key</a></p>
         <div class="form-group">
           <label for="provider">Provider</label>
           <select id="provider" name="provider">
@@ -47,9 +50,10 @@
           <select id="model" name="model">
           </select>
         </div>
+        <button type="submit" class="btn btn-sm">Save</button>
       </div>
 
-      <div class="card">
+      <div class="card card-compact">
         <h3>Parameters</h3>
         <div class="form-group">
           <label for="temperature">Temperature</label>
@@ -59,11 +63,12 @@
         <div class="form-group">
           <label for="max_tokens">Max Tokens</label>
           <input type="number" id="max_tokens" name="max_tokens" value="<%= maxTokens %>" min="1" max="16384" step="1">
-          <div class="hint">Controls how long your agent's responses can be. A token is roughly one word. A typical blog post is 1,000-5,000 tokens. (Max: 16,384)</div>
+          <div class="hint">Max response length. A typical blog post is 1,000-5,000 tokens. (Max: 16,384)</div>
         </div>
+        <button type="submit" class="btn btn-sm">Save</button>
       </div>
 
-      <div class="card">
+      <div class="card card-compact">
         <h3>Security</h3>
         <div class="form-group">
           <label for="session_expiry_days">Session Duration</label>
@@ -75,9 +80,8 @@
           </select>
           <div class="hint">How long you stay logged in before needing to sign in again</div>
         </div>
+        <button type="submit" class="btn btn-sm">Save</button>
       </div>
-
-      <button type="submit" class="btn">Save Settings</button>
     </form>
   </div>
 </div>
@@ -124,7 +128,6 @@
     var providerModels = models[provider] || [];
     var hint = hints[provider];
 
-    // Update model dropdown
     modelEl.innerHTML = "";
     providerModels.forEach(function (m) {
       var opt = document.createElement("option");
@@ -134,11 +137,21 @@
       modelEl.appendChild(opt);
     });
 
-    // Update API key field
     apiKeyEl.placeholder = hint.placeholder;
     apiKeyEl.value = "";
     hintEl.innerHTML = hint.saved ? hint.savedText : hint.text;
   }
+
+  // Clear placeholder dots on focus so user doesn't think they need to delete them
+  apiKeyEl.addEventListener("focus", function () {
+    if (!apiKeyEl.value) apiKeyEl.placeholder = "";
+  });
+  apiKeyEl.addEventListener("blur", function () {
+    if (!apiKeyEl.value) {
+      var hint = hints[providerEl.value];
+      apiKeyEl.placeholder = hint.placeholder;
+    }
+  });
 
   providerEl.addEventListener("change", function () {
     currentModel = "";
