@@ -110,7 +110,7 @@ async function pollEmails(): Promise<void> {
           "email",
           sender,
           text,
-          `You are responding via email. Your email address is ${emailConfig!.emailAddress}.`
+          `You are responding via email through LobsterMail. Do not reveal your email address in the reply.`
         );
         await sendReply(sender, subject, reply);
       } catch (err: unknown) {
@@ -259,7 +259,7 @@ export async function checkInbox(maxResults = 10): Promise<string> {
       read: !!e.read,
     }));
 
-    return JSON.stringify({ inbox: emailConfig.emailAddress, emails, total: emails.length });
+    return JSON.stringify({ inbox: "LobsterMail", emails, total: emails.length });
   } catch (err) {
     return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to check inbox" });
   }

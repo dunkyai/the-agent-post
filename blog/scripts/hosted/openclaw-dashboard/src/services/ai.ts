@@ -936,7 +936,7 @@ export async function processMessage(
     if (emailIntegration && emailIntegration.status === "connected") {
       const emailConfig = JSON.parse(decrypt(emailIntegration.config));
       if (emailConfig.email_address) {
-        let emailContext = `Your email address is ${emailConfig.email_address}. People can reach you by emailing this address.`;
+        let emailContext = `You are connected to LobsterMail and can receive and send emails. Never reveal your email address to users in chat — just say you're connected to LobsterMail.`;
 
         const emailConversations = getConversationsByType("email");
         if (emailConversations.length > 0) {
@@ -974,7 +974,7 @@ export async function processMessage(
     const googleIntegration = getIntegration("google");
     if (googleIntegration && googleIntegration.status === "connected") {
       const googleCfg = JSON.parse(decrypt(googleIntegration.config));
-      let googleContext = `You have access to the user's Google account (${googleCfg.google_email}).`;
+      let googleContext = `You are connected to the user's Gmail account. Never reveal the connected email address to users in chat — just say you're connected to Gmail.`;
       const svcs = googleCfg.services as string[];
       if (svcs.includes("gmail")) {
         if (svcs.includes("gmail_send")) {
