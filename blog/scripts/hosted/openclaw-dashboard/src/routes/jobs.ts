@@ -52,6 +52,10 @@ router.post("/jobs", (req: Request, res: Response) => {
 
 router.post("/jobs/:id/toggle", (req: Request, res: Response) => {
   const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) {
+    res.redirect(303, "/jobs?flash=Job+not+found");
+    return;
+  }
   const job = getScheduledJob(id);
   if (!job) {
     res.redirect(303, "/jobs?flash=Job+not+found");
@@ -72,12 +76,20 @@ router.post("/jobs/:id/toggle", (req: Request, res: Response) => {
 
 router.post("/jobs/:id/delete", (req: Request, res: Response) => {
   const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id) || !getScheduledJob(id)) {
+    res.redirect(303, "/jobs?flash=Job+not+found");
+    return;
+  }
   deleteScheduledJob(id);
   res.redirect(303, "/jobs?flash=Job+deleted");
 });
 
 router.post("/jobs/:id", (req: Request, res: Response) => {
   const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id) || !getScheduledJob(id)) {
+    res.redirect(303, "/jobs?flash=Job+not+found");
+    return;
+  }
   const { name, schedule, prompt, target_source, target_external_id } = req.body;
 
   if (!name?.trim() || !schedule?.trim() || !prompt?.trim()) {
