@@ -145,6 +145,23 @@
     updateUI();
   });
 
+  // Validate temperature and max_tokens on submit
+  var form = document.querySelector("form[action='/settings']");
+  form.addEventListener("submit", function (e) {
+    var temp = parseFloat(document.getElementById("temperature").value);
+    if (isNaN(temp) || temp < 0 || temp > 2) {
+      e.preventDefault();
+      alert("Temperature must be between 0 and 2.");
+      return;
+    }
+    var tokens = parseInt(document.getElementById("max_tokens").value, 10);
+    if (isNaN(tokens) || tokens < 1 || tokens > 16384) {
+      e.preventDefault();
+      alert("Max tokens must be between 1 and 16,384.");
+      return;
+    }
+  });
+
   updateUI();
 })();
 </script>

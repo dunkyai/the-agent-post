@@ -69,14 +69,18 @@ router.post("/settings", (req: Request, res: Response) => {
   setSetting("system_prompt", system_prompt || "");
 
   const temp = parseFloat(temperature);
-  if (!isNaN(temp) && temp >= 0 && temp <= 2) {
-    setSetting("temperature", String(temp));
+  if (isNaN(temp) || temp < 0 || temp > 2) {
+    res.redirect(303, "/settings?flash=Temperature+must+be+between+0+and+2");
+    return;
   }
+  setSetting("temperature", String(temp));
 
   const tokens = parseInt(max_tokens, 10);
-  if (!isNaN(tokens) && tokens > 0 && tokens <= 16384) {
-    setSetting("max_tokens", String(tokens));
+  if (isNaN(tokens) || tokens < 1 || tokens > 16384) {
+    res.redirect(303, "/settings?flash=Max+tokens+must+be+between+1+and+16384");
+    return;
   }
+  setSetting("max_tokens", String(tokens));
 
   const validExpiry = ["1", "7", "30", "90"];
   if (validExpiry.includes(session_expiry_days)) {
