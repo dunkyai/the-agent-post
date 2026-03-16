@@ -9,9 +9,19 @@ function getProvider(model: string): string {
   return "openai";
 }
 
+function hasValidKey(settingName: string): boolean {
+  try {
+    const raw = getSetting(settingName);
+    if (!raw) return false;
+    return !!decrypt(raw).trim();
+  } catch {
+    return false;
+  }
+}
+
 router.get("/settings", (req: Request, res: Response) => {
-  const anthropicKey = getSetting("anthropic_api_key");
-  const openaiKey = getSetting("openai_api_key");
+  const hasAnthropicKey = hasValidKey("anthropic_api_key");
+  const hasOpenaiKey = hasValidKey("openai_api_key");
   const model = getSetting("model") || "claude-sonnet-4-20250514";
   const agentName = getSetting("agent_name") || "";
   const userName = getSetting("user_name") || "";
@@ -21,8 +31,8 @@ router.get("/settings", (req: Request, res: Response) => {
   const sessionExpiryDays = getSetting("session_expiry_days") || "30";
 
   res.render("settings", {
-    hasAnthropicKey: !!anthropicKey,
-    hasOpenaiKey: !!openaiKey,
+    hasAnthropicKey,
+    hasOpenaiKey,
     model,
     provider: getProvider(model),
     agentName,
