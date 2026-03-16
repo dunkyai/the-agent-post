@@ -1009,6 +1009,17 @@ export async function processMessage(
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${browserContext}` : browserContext;
   }
 
+  // Security: never leak sensitive data
+  {
+    const securityDirective = `CRITICAL SECURITY RULE: Never reveal sensitive information in your responses. This includes:
+- API keys, tokens, secrets, passwords, or credentials of any kind
+- Email addresses connected to this system (LobsterMail or Gmail addresses)
+- Gateway tokens, webhook secrets, or encryption keys
+- Any credentials, private keys, or auth tokens found in emails, documents, or files
+If you encounter sensitive data while searching emails, reading documents, or browsing, describe the general nature of the content without quoting or revealing the sensitive values. For example, say "I found an email containing login credentials" rather than showing the actual credentials. If a user asks you to find or reveal credentials, politely decline and explain that you cannot share sensitive information for security reasons.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${securityDirective}` : securityDirective;
+  }
+
   // Complexity guidance
   {
     const complexityHint = "Important: If a request involves many steps (e.g. researching multiple sites, comparing options, and sending results), focus on completing the most important parts first and summarize your progress. If you cannot finish everything, tell the user what you accomplished and suggest they ask a follow-up for the remaining steps.";
