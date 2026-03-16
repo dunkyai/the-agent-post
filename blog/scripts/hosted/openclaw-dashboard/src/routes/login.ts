@@ -6,6 +6,33 @@ const INSTANCE_ID = process.env.INSTANCE_ID || "";
 
 const router = Router();
 
+// Rate limiting for magic link requests: max 3 per IP per 15 minutes
+const magicLinkAttempts = new Map<string, number[]>();
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000; // 15 minutes
+  const maxAttempts = 3;
+
+  const attempts = (magicLinkAttempts.get(ip) || []).filter((t) => now - t < windowMs);
+  magicLinkAttempts.set(ip, attempts);
+
+  if (attempts.length >= maxAttempts) return true;
+  attempts.push(now);
+  return false;
+}
+
+// Clean up stale entries every 30 minutes
+setInterval(() => {
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000;
+  for (const [ip, attempts] of magicLinkAttempts) {
+    const recent = attempts.filter((t) => now - t < windowMs);
+    if (recent.length === 0) magicLinkAttempts.delete(ip);
+    else magicLinkAttempts.set(ip, recent);
+  }
+}, 30 * 60 * 1000);
+
 router.get("/login", (req: Request, res: Response) => {
   const sent = req.query.sent === "1";
   const error = typeof req.query.error === "string" ? req.query.error : null;
@@ -18,6 +45,14 @@ router.post("/login/magic-link", async (req: Request, res: Response) => {
     const { email } = req.body;
     if (!email || !email.trim()) {
       res.redirect(303, "/login?error=Please+enter+your+email+address");
+      return;
+    }
+
+    // Rate limit by IP
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    if (isRateLimited(ip)) {
+      // Still show "check your email" to prevent enumeration
+      res.redirect(303, "/login?sent=1");
       return;
     }
 

@@ -223,3 +223,11 @@ export function getRecentMagicLinkForInstance(instanceId: string): { created_at:
     "SELECT created_at FROM magic_link_tokens WHERE instance_id = ? ORDER BY created_at DESC LIMIT 1"
   ).get(instanceId) as { created_at: string } | null;
 }
+
+export function countRecentMagicLinksForInstance(instanceId: string, windowMs: number): number {
+  const since = new Date(Date.now() - windowMs).toISOString();
+  const row = db.prepare(
+    "SELECT COUNT(*) as count FROM magic_link_tokens WHERE instance_id = ? AND created_at > ?"
+  ).get(instanceId, since) as { count: number };
+  return row.count;
+}

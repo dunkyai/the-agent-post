@@ -273,15 +273,12 @@ router.post("/:id/magic-link", async (req, res) => {
       return;
     }
 
-    // Rate limit: 1 magic link per instance per minute
-    const recent = store.getRecentMagicLinkForInstance(instance.id);
-    if (recent) {
-      const elapsed = Date.now() - new Date(recent.created_at).getTime();
-      if (elapsed < 60_000) {
-        // Still return success to prevent enumeration
-        res.json({ message: "If you have an account, you will receive an email from us with your magic link." });
-        return;
-      }
+    // Rate limit: max 3 magic links per instance per 15 minutes
+    const recentCount = store.countRecentMagicLinksForInstance(instance.id, 15 * 60 * 1000);
+    if (recentCount >= 3) {
+      // Still return success to prevent enumeration
+      res.json({ message: "If you have an account, you will receive an email from us with your magic link." });
+      return;
     }
 
     // Only send if email matches the instance owner
