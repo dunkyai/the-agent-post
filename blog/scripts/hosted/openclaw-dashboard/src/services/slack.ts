@@ -98,13 +98,46 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
   const externalId = `${channelId}:${userId}`;
 
   try {
-    const reply = await processMessage("slack", externalId, text);
+    const reply = await processMessage("slack", externalId, text, "You are responding via Slack. Your replies are automatically posted as threaded replies. Keep messages concise and conversational — Slack is not email.");
     await sendSlackMessage(channelId, reply, threadTs);
   } catch (err: unknown) {
     const errMessage = err instanceof Error ? err.message : "Unknown error";
     console.error("Slack event processing error:", errMessage);
     await sendSlackMessage(channelId, "Sorry, I encountered an error processing your message.", threadTs).catch(() => {});
   }
+}
+
+// --- Channel & user info ---
+
+export async function getChannelMembers(channelId: string): Promise<string> {
+  if (!slackConfig) return JSON.stringify({ error: "Slack is not connected" });
+
+  const res = await fetch(`https://slack.com/api/conversations.members?channel=${channelId}&limit=100`, {
+    headers: { Authorization: `Bearer ${slackConfig.bot_token}` },
+  });
+  const data: any = await res.json();
+  if (!data.ok) return JSON.stringify({ error: data.error });
+
+  // Look up user names
+  const members = [];
+  for (const userId of data.members || []) {
+    const userRes = await fetch(`https://slack.com/api/users.info?user=${userId}`, {
+      headers: { Authorization: `Bearer ${slackConfig.bot_token}` },
+    });
+    const userData: any = await userRes.json();
+    if (userData.ok) {
+      members.push({
+        id: userId,
+        name: userData.user.real_name || userData.user.name,
+        display_name: userData.user.profile?.display_name || "",
+        is_bot: userData.user.is_bot || false,
+      });
+    } else {
+      members.push({ id: userId, name: userId });
+    }
+  }
+
+  return JSON.stringify({ channel: channelId, members });
 }
 
 // --- Sending messages ---

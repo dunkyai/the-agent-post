@@ -13,7 +13,7 @@ import {
   contactsSearch,
 } from "./google";
 import { sendTelegramMessage, isTelegramRunning } from "./telegram";
-import { sendSlackMessage, isSlackRunning } from "./slack";
+import { sendSlackMessage, isSlackRunning, getChannelMembers } from "./slack";
 import { sendEmailMessage, isEmailRunning, checkInbox } from "./email";
 
 interface AIResponse {
@@ -329,6 +329,17 @@ const SLACK_MESSAGING_TOOLS = [
       required: ["channel", "message"],
     },
   },
+  {
+    name: "slack_channel_members",
+    description: "List the members of a Slack channel. Use when you need to see who is in a channel, find someone's name or user ID, or understand the audience.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        channel: { type: "string", description: "The Slack channel ID" },
+      },
+      required: ["channel"],
+    },
+  },
 ];
 
 const EMAIL_MESSAGING_TOOLS = [
@@ -366,6 +377,8 @@ async function executeMessagingTool(toolName: string, input: any): Promise<strin
       case "send_slack":
         await sendSlackMessage(input.channel, input.message);
         return JSON.stringify({ success: true, channel: "slack", channel_id: input.channel });
+      case "slack_channel_members":
+        return await getChannelMembers(input.channel);
       case "check_lobstermail":
         return await checkInbox(input.max_results);
       case "send_lobstermail":
@@ -836,7 +849,7 @@ async function callAnthropic(
         "contacts_search",
       ];
       const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
-      const messagingToolNames = ["send_telegram", "send_slack", "send_lobstermail", "check_lobstermail"];
+      const messagingToolNames = ["send_telegram", "send_slack", "slack_channel_members", "send_lobstermail", "check_lobstermail"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
 
