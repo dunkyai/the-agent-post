@@ -25,14 +25,20 @@
         <h3>System Prompt</h3>
         <div class="form-group">
           <label for="system_prompt">System prompt sent with every message</label>
-          <textarea id="system_prompt" name="system_prompt" rows="6" placeholder="You are a helpful assistant..."><%= systemPrompt %></textarea>
+          <textarea id="system_prompt" name="system_prompt" rows="6" placeholder="e.g. You are a friendly assistant named Archie who works for Acme Corp. You help customers find products, answer questions about orders, and resolve support issues. You're upbeat and concise, and you always sign off with a fun fact."><%= systemPrompt %></textarea>
+          <div class="hint">Describe your agent's personality, role, knowledge, and any rules it should follow</div>
         </div>
         <button type="submit" class="btn btn-sm">Save</button>
       </div>
 
       <div class="card card-compact">
-        <h3>AI Provider</h3>
-        <p style="margin-bottom: 12px; font-size: 13px; color: var(--text-secondary);">Pick a brain (LLM) for your OpenClaw. Here's where to <a href="https://theagentpost.co/guides/find-your-api-key" target="_blank" style="color: var(--accent); text-decoration: underline;">find your API key</a></p>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+          <h3 style="margin-bottom: 0;">AI Provider</h3>
+          <span id="key_status_badge" class="status-badge <%= (provider === 'anthropic' ? hasAnthropicKey : hasOpenaiKey) ? 'status-connected' : 'status-error' %>">
+            <%= (provider === 'anthropic' ? hasAnthropicKey : hasOpenaiKey) ? 'API key saved' : 'No API key' %>
+          </span>
+        </div>
+        <p style="margin-bottom: 8px; font-size: 13px; color: var(--text-secondary);">Pick a brain (LLM) for your OpenClaw. Here's where to <a href="https://theagentpost.co/guides/find-your-api-key" target="_blank" style="color: var(--accent); text-decoration: underline;">find your API key</a></p>
         <div class="form-group">
           <label for="provider">Provider</label>
           <select id="provider" name="provider">
@@ -91,6 +97,7 @@
   var modelEl = document.getElementById("model");
   var apiKeyEl = document.getElementById("api_key");
   var hintEl = document.getElementById("api_key_hint");
+  var badgeEl = document.getElementById("key_status_badge");
 
   var models = {
     anthropic: [
@@ -140,6 +147,8 @@
     apiKeyEl.placeholder = hint.placeholder;
     apiKeyEl.value = "";
     hintEl.innerHTML = hint.saved ? hint.savedText : hint.text;
+    badgeEl.className = "status-badge " + (hint.saved ? "status-connected" : "status-error");
+    badgeEl.textContent = hint.saved ? "API key saved" : "No API key";
   }
 
   // Clear placeholder dots on focus so user doesn't think they need to delete them

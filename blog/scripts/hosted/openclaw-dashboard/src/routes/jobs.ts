@@ -19,6 +19,14 @@ router.get("/jobs", (req: Request, res: Response) => {
   });
 });
 
+router.get("/jobs/api", (req: Request, res: Response) => {
+  const jobs = getAllScheduledJobs().map((j) => ({
+    ...j,
+    schedule_description: describeCron(j.schedule),
+  }));
+  res.json(jobs);
+});
+
 router.post("/jobs", (req: Request, res: Response) => {
   const { name, schedule, prompt, target_source, target_external_id } = req.body;
 
