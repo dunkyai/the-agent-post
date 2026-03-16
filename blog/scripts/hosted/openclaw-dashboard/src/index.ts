@@ -2,7 +2,7 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import path from "path";
 import { requireAuth } from "./middleware/auth";
-import { getDb, getIntegration } from "./services/db";
+import { getDb, getIntegration, getGoogleIntegrations, upsertIntegration, deleteIntegration } from "./services/db";
 import { decrypt } from "./services/encryption";
 
 // Routes
@@ -138,17 +138,39 @@ async function reconnectIntegrations() {
     console.error("Failed to reconnect Email:", err instanceof Error ? err.message : err);
   }
 
-  // Google
+  // Google — migrate legacy type='google' to google:<email>, then reconnect all
   try {
-    const google = getIntegration("google");
-    if (google && google.status === "connected") {
-      const config = JSON.parse(decrypt(google.config));
-      const { startGoogle } = require("./services/google");
-      startGoogle(config);
-      console.log(`Google reconnected (${config.google_email})`);
+    const legacyGoogle = getIntegration("google");
+    if (legacyGoogle && legacyGoogle.status === "connected") {
+      try {
+        const config = JSON.parse(decrypt(legacyGoogle.config));
+        if (config.google_email) {
+          const newKey = `google:${config.google_email}`;
+          upsertIntegration(newKey, legacyGoogle.config, legacyGoogle.status, legacyGoogle.error_message || undefined);
+          deleteIntegration("google");
+          console.log(`Migrated legacy Google integration to ${newKey}`);
+        }
+      } catch (migErr: unknown) {
+        console.error("Failed to migrate legacy Google:", migErr instanceof Error ? migErr.message : migErr);
+      }
+    }
+  } catch {}
+
+  try {
+    const googleRows = getGoogleIntegrations();
+    for (const row of googleRows) {
+      if (row.status !== "connected") continue;
+      try {
+        const config = JSON.parse(decrypt(row.config));
+        const { startGoogle } = require("./services/google");
+        startGoogle(config);
+        console.log(`Google reconnected (${config.google_email})`);
+      } catch (err: unknown) {
+        console.error(`Failed to reconnect Google (${row.type}):`, err instanceof Error ? err.message : err);
+      }
     }
   } catch (err: unknown) {
-    console.error("Failed to reconnect Google:", err instanceof Error ? err.message : err);
+    console.error("Failed to reconnect Google accounts:", err instanceof Error ? err.message : err);
   }
 }
 

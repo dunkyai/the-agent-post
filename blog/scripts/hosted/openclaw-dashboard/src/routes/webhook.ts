@@ -148,8 +148,9 @@ router.post("/webhook/google/tokens", async (req: Request, res: Response) => {
       google_email,
     };
 
+    const typeKey = `google:${google_email}`;
     const config = encrypt(JSON.stringify(configData));
-    upsertIntegration("google", config, "connected");
+    upsertIntegration(typeKey, config, "connected");
     startGoogle(configData);
 
     console.log(`Google connected for ${google_email} with services: ${services.join(", ")}`);

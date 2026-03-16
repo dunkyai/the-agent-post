@@ -12,6 +12,12 @@ export interface GoogleConfig {
   google_email: string;
 }
 
+export interface GoogleAccountInfo {
+  accountId: string;
+  email: string;
+  services: string[];
+}
+
 // --- Scope mapping ---
 
 const SCOPE_MAP: Record<string, string[]> = {
@@ -36,28 +42,63 @@ const SCOPE_MAP: Record<string, string[]> = {
 
 const BASE_SCOPES = ["openid", "email"];
 
-// --- Module state ---
+// --- Module state (multi-account) ---
 
-let googleConfig: GoogleConfig | null = null;
+const googleAccounts = new Map<string, GoogleConfig>();
 
 // --- Lifecycle ---
 
 export function startGoogle(config: GoogleConfig): void {
-  googleConfig = config;
-  console.log(`Google started (${config.google_email}, services: ${config.services.join(", ")})`);
+  const accountId = config.google_email;
+  googleAccounts.set(accountId, config);
+  console.log(`Google started (${accountId}, services: ${config.services.join(", ")})`);
 }
 
-export function stopGoogle(): void {
-  googleConfig = null;
-  console.log("Google stopped");
+export function stopGoogle(accountId?: string): void {
+  if (accountId) {
+    googleAccounts.delete(accountId);
+    console.log(`Google stopped (${accountId})`);
+  } else {
+    googleAccounts.clear();
+    console.log("Google stopped (all accounts)");
+  }
 }
 
 export function isGoogleRunning(): boolean {
-  return googleConfig !== null;
+  return googleAccounts.size > 0;
+}
+
+export function getGoogleAccounts(): GoogleAccountInfo[] {
+  return Array.from(googleAccounts.entries()).map(([id, config]) => ({
+    accountId: id,
+    email: config.google_email,
+    services: config.services,
+  }));
+}
+
+export function getGoogleAccount(accountId: string): GoogleConfig | null {
+  return googleAccounts.get(accountId) || null;
+}
+
+function resolveAccount(accountId?: string): GoogleConfig {
+  if (accountId) {
+    const config = googleAccounts.get(accountId);
+    if (!config) throw new Error(`Google account not connected: ${accountId}`);
+    return config;
+  }
+  if (googleAccounts.size === 0) throw new Error("Google not connected");
+  // Default to first account
+  return googleAccounts.values().next().value!;
 }
 
 export function getConnectedServices(): string[] | null {
-  return googleConfig?.services || null;
+  if (googleAccounts.size === 0) return null;
+  // Union of all accounts' services
+  const allServices = new Set<string>();
+  for (const config of googleAccounts.values()) {
+    for (const svc of config.services) allServices.add(svc);
+  }
+  return Array.from(allServices);
 }
 
 // --- OAuth URL builder ---
@@ -99,22 +140,22 @@ export function buildOAuthUrl(services: string[]): string {
 
 // --- Token management ---
 
-export async function getValidAccessToken(): Promise<string> {
-  if (!googleConfig) throw new Error("Google not connected");
+export async function getValidAccessToken(accountId?: string): Promise<string> {
+  const config = resolveAccount(accountId);
 
-  const expiry = new Date(googleConfig.token_expiry).getTime();
+  const expiry = new Date(config.token_expiry).getTime();
   const fiveMinutes = 5 * 60 * 1000;
 
   if (Date.now() < expiry - fiveMinutes) {
-    return googleConfig.access_token;
+    return config.access_token;
   }
 
-  await refreshAccessToken();
-  return googleConfig.access_token;
+  await refreshAccessToken(config.google_email);
+  return config.access_token;
 }
 
-async function refreshAccessToken(): Promise<void> {
-  if (!googleConfig) throw new Error("Google not configured");
+async function refreshAccessToken(accountId?: string): Promise<void> {
+  const config = resolveAccount(accountId);
 
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -122,7 +163,7 @@ async function refreshAccessToken(): Promise<void> {
     body: new URLSearchParams({
       client_id: process.env.GOOGLE_CLIENT_ID!,
       client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-      refresh_token: googleConfig.refresh_token,
+      refresh_token: config.refresh_token,
       grant_type: "refresh_token",
     }),
   });
@@ -130,26 +171,27 @@ async function refreshAccessToken(): Promise<void> {
   if (!res.ok) {
     const body: any = await res.json().catch(() => ({}));
     if (res.status === 400 && body.error === "invalid_grant") {
-      upsertIntegration("google", "{}", "error", "Google access revoked. Please reconnect.");
-      stopGoogle();
-      throw new Error("Google refresh token revoked. Please reconnect.");
+      const typeKey = `google:${config.google_email}`;
+      upsertIntegration(typeKey, "{}", "error", "Google access revoked. Please reconnect.");
+      stopGoogle(config.google_email);
+      throw new Error(`Google refresh token revoked for ${config.google_email}. Please reconnect.`);
     }
     throw new Error(`Token refresh failed (${res.status}): ${JSON.stringify(body)}`);
   }
 
   const tokens: any = await res.json();
-  googleConfig.access_token = tokens.access_token;
-  googleConfig.token_expiry = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+  config.access_token = tokens.access_token;
+  config.token_expiry = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
-  // Persist to DB
-  const config = encrypt(JSON.stringify(googleConfig));
-  upsertIntegration("google", config, "connected");
+  // Persist to DB with google:<email> key
+  const encrypted = encrypt(JSON.stringify(config));
+  upsertIntegration(`google:${config.google_email}`, encrypted, "connected");
 }
 
 // --- HTTP helper ---
 
-async function googleFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const token = await getValidAccessToken();
+async function googleFetch(url: string, options: RequestInit = {}, accountId?: string): Promise<Response> {
+  const token = await getValidAccessToken(accountId);
   const headers = new Headers(options.headers);
   headers.set("Authorization", `Bearer ${token}`);
 
@@ -157,9 +199,9 @@ async function googleFetch(url: string, options: RequestInit = {}): Promise<Resp
 
   // Retry once on 401 (token may have just expired)
   if (res.status === 401) {
-    await refreshAccessToken();
-    const newToken = googleConfig!.access_token;
-    headers.set("Authorization", `Bearer ${newToken}`);
+    await refreshAccessToken(accountId);
+    const config = resolveAccount(accountId);
+    headers.set("Authorization", `Bearer ${config.access_token}`);
     res = await fetch(url, { ...options, headers });
   }
 
@@ -168,9 +210,9 @@ async function googleFetch(url: string, options: RequestInit = {}): Promise<Resp
 
 // --- Gmail API ---
 
-export async function gmailSearch(query: string, maxResults = 10): Promise<string> {
+export async function gmailSearch(query: string, maxResults = 10, accountId?: string): Promise<string> {
   const params = new URLSearchParams({ q: query, maxResults: String(Math.min(maxResults, 20)) });
-  const res = await googleFetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`);
+  const res = await googleFetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, {}, accountId);
   if (!res.ok) return JSON.stringify({ error: `Gmail search failed (${res.status})` });
 
   const data: any = await res.json();
@@ -182,7 +224,9 @@ export async function gmailSearch(query: string, maxResults = 10): Promise<strin
   const messages = await Promise.all(
     data.messages.slice(0, maxResults).map(async (m: any) => {
       const msgRes = await googleFetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date`,
+        {},
+        accountId
       );
       if (!msgRes.ok) return { id: m.id, error: "Failed to fetch" };
       const msg: any = await msgRes.json();
@@ -206,9 +250,11 @@ export async function gmailSearch(query: string, maxResults = 10): Promise<strin
   return JSON.stringify({ messages, total: data.resultSizeEstimate || messages.length });
 }
 
-export async function gmailReadMessage(messageId: string): Promise<string> {
+export async function gmailReadMessage(messageId: string, accountId?: string): Promise<string> {
   const res = await googleFetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
+    {},
+    accountId
   );
   if (!res.ok) return JSON.stringify({ error: `Failed to read message (${res.status})` });
 
@@ -242,21 +288,22 @@ export async function gmailReadMessage(messageId: string): Promise<string> {
   });
 }
 
-export async function gmailSend(to: string, subject: string, body: string): Promise<string> {
-  const email = [
+export async function gmailSend(to: string, subject: string, body: string, accountId?: string, from?: string): Promise<string> {
+  const emailHeaders = [
     `To: ${to}`,
     `Subject: ${subject}`,
     `Content-Type: text/plain; charset="UTF-8"`,
-    "",
-    body,
-  ].join("\r\n");
+  ];
+  if (from) emailHeaders.unshift(`From: ${from}`);
+
+  const email = [...emailHeaders, "", body].join("\r\n");
 
   const raw = Buffer.from(email).toString("base64url");
   const res = await googleFetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ raw }),
-  });
+  }, accountId);
 
   if (!res.ok) {
     const err: any = await res.json().catch(() => ({}));
@@ -267,21 +314,22 @@ export async function gmailSend(to: string, subject: string, body: string): Prom
   return JSON.stringify({ success: true, messageId: result.id });
 }
 
-export async function gmailCreateDraft(to: string, subject: string, body: string): Promise<string> {
-  const email = [
+export async function gmailCreateDraft(to: string, subject: string, body: string, accountId?: string, from?: string): Promise<string> {
+  const emailHeaders = [
     `To: ${to}`,
     `Subject: ${subject}`,
     `Content-Type: text/plain; charset="UTF-8"`,
-    "",
-    body,
-  ].join("\r\n");
+  ];
+  if (from) emailHeaders.unshift(`From: ${from}`);
+
+  const email = [...emailHeaders, "", body].join("\r\n");
 
   const raw = Buffer.from(email).toString("base64url");
   const res = await googleFetch("https://gmail.googleapis.com/gmail/v1/users/me/drafts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message: { raw } }),
-  });
+  }, accountId);
 
   if (!res.ok) {
     const err: any = await res.json().catch(() => ({}));
@@ -292,9 +340,9 @@ export async function gmailCreateDraft(to: string, subject: string, body: string
   return JSON.stringify({ success: true, draftId: result.id });
 }
 
-export async function gmailAddLabel(messageId: string, labelName: string): Promise<string> {
+export async function gmailAddLabel(messageId: string, labelName: string, accountId?: string): Promise<string> {
   // First, find or get the label ID
-  const labelsRes = await googleFetch("https://gmail.googleapis.com/gmail/v1/users/me/labels");
+  const labelsRes = await googleFetch("https://gmail.googleapis.com/gmail/v1/users/me/labels", {}, accountId);
   if (!labelsRes.ok) return JSON.stringify({ error: "Failed to list labels" });
 
   const labelsData: any = await labelsRes.json();
@@ -312,7 +360,8 @@ export async function gmailAddLabel(messageId: string, labelName: string): Promi
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ addLabelIds: [label.id] }),
-    }
+    },
+    accountId
   );
 
   if (!res.ok) {
@@ -323,12 +372,32 @@ export async function gmailAddLabel(messageId: string, labelName: string): Promi
   return JSON.stringify({ success: true, labelId: label.id, labelName: label.name });
 }
 
+export async function gmailGetSendAsAliases(accountId?: string): Promise<string> {
+  const res = await googleFetch(
+    "https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs",
+    {},
+    accountId
+  );
+  if (!res.ok) return JSON.stringify({ error: `Failed to list aliases (${res.status})` });
+
+  const data: any = await res.json();
+  const aliases = (data.sendAs || []).map((a: any) => ({
+    email: a.sendAsEmail,
+    displayName: a.displayName || "",
+    isDefault: a.isDefault || false,
+    isPrimary: a.isPrimary || false,
+  }));
+
+  return JSON.stringify({ aliases });
+}
+
 // --- Calendar API ---
 
 export async function calendarListEvents(
   timeMin?: string,
   timeMax?: string,
-  maxResults = 10
+  maxResults = 10,
+  accountId?: string
 ): Promise<string> {
   const now = new Date().toISOString();
   const weekFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -342,7 +411,9 @@ export async function calendarListEvents(
   });
 
   const res = await googleFetch(
-    `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
+    {},
+    accountId
   );
   if (!res.ok) return JSON.stringify({ error: `Calendar list failed (${res.status})` });
 
@@ -368,7 +439,7 @@ export async function calendarCreateEvent(event: {
   description?: string;
   attendees?: string;
   location?: string;
-}): Promise<string> {
+}, accountId?: string): Promise<string> {
   const body: any = {
     summary: event.summary,
     start: { dateTime: event.start },
@@ -386,7 +457,8 @@ export async function calendarCreateEvent(event: {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    }
+    },
+    accountId
   );
 
   if (!res.ok) {
@@ -412,7 +484,8 @@ export async function calendarUpdateEvent(
     start?: string;
     end?: string;
     description?: string;
-  }
+  },
+  accountId?: string
 ): Promise<string> {
   const body: any = {};
   if (updates.summary) body.summary = updates.summary;
@@ -426,7 +499,8 @@ export async function calendarUpdateEvent(
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    }
+    },
+    accountId
   );
 
   if (!res.ok) {
@@ -438,10 +512,11 @@ export async function calendarUpdateEvent(
   return JSON.stringify({ success: true, eventId: result.id, summary: result.summary });
 }
 
-export async function calendarDeleteEvent(eventId: string): Promise<string> {
+export async function calendarDeleteEvent(eventId: string, accountId?: string): Promise<string> {
   const res = await googleFetch(
     `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
-    { method: "DELETE" }
+    { method: "DELETE" },
+    accountId
   );
 
   if (!res.ok && res.status !== 204) {
@@ -454,7 +529,7 @@ export async function calendarDeleteEvent(eventId: string): Promise<string> {
 
 // --- Drive API ---
 
-export async function driveSearch(query: string, maxResults = 10, mimeType?: string): Promise<string> {
+export async function driveSearch(query: string, maxResults = 10, mimeType?: string, accountId?: string): Promise<string> {
   // Build query: try fullText first, fall back to name
   const escaped = query.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
   let driveQuery = `(name contains '${escaped}' or fullText contains '${escaped}')`;
@@ -471,7 +546,7 @@ export async function driveSearch(query: string, maxResults = 10, mimeType?: str
     orderBy: "modifiedTime desc",
   });
 
-  const res = await googleFetch(`https://www.googleapis.com/drive/v3/files?${params}`);
+  const res = await googleFetch(`https://www.googleapis.com/drive/v3/files?${params}`, {}, accountId);
   if (!res.ok) return JSON.stringify({ error: `Drive search failed (${res.status})` });
 
   const data: any = await res.json();
@@ -487,10 +562,12 @@ export async function driveSearch(query: string, maxResults = 10, mimeType?: str
   });
 }
 
-export async function driveReadFile(fileId: string): Promise<string> {
+export async function driveReadFile(fileId: string, accountId?: string): Promise<string> {
   // First get file metadata
   const metaRes = await googleFetch(
-    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType`
+    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType`,
+    {},
+    accountId
   );
   if (!metaRes.ok) return JSON.stringify({ error: `File not found (${metaRes.status})` });
   const meta: any = await metaRes.json();
@@ -507,7 +584,7 @@ export async function driveReadFile(fileId: string): Promise<string> {
     contentUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
   }
 
-  const contentRes = await googleFetch(contentUrl);
+  const contentRes = await googleFetch(contentUrl, {}, accountId);
   if (!contentRes.ok) return JSON.stringify({ error: `Failed to read file (${contentRes.status})` });
 
   const text = await contentRes.text();
@@ -523,7 +600,8 @@ export async function driveCreateFile(
   name: string,
   content: string,
   mimeType?: string,
-  folderId?: string
+  folderId?: string,
+  accountId?: string
 ): Promise<string> {
   const metadata: any = { name };
   if (mimeType === "application/vnd.google-apps.document") {
@@ -553,7 +631,8 @@ export async function driveCreateFile(
       method: "POST",
       headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
       body,
-    }
+    },
+    accountId
   );
 
   if (!res.ok) {
@@ -578,7 +657,7 @@ export function extractDriveFileId(url: string): string | null {
 
 // --- Contacts (People) API ---
 
-export async function contactsSearch(query: string): Promise<string> {
+export async function contactsSearch(query: string, accountId?: string): Promise<string> {
   const params = new URLSearchParams({
     query,
     readMask: "names,emailAddresses,phoneNumbers",
@@ -586,7 +665,9 @@ export async function contactsSearch(query: string): Promise<string> {
   });
 
   const res = await googleFetch(
-    `https://people.googleapis.com/v1/people:searchContacts?${params}`
+    `https://people.googleapis.com/v1/people:searchContacts?${params}`,
+    {},
+    accountId
   );
   if (!res.ok) return JSON.stringify({ error: `Contacts search failed (${res.status})` });
 
@@ -609,7 +690,7 @@ export async function contactsCreate(contact: {
   family_name?: string;
   email?: string;
   phone?: string;
-}): Promise<string> {
+}, accountId?: string): Promise<string> {
   const body: any = {
     names: [
       {
@@ -631,7 +712,8 @@ export async function contactsCreate(contact: {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    }
+    },
+    accountId
   );
 
   if (!res.ok) {

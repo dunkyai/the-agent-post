@@ -139,31 +139,31 @@
       </div>
     </details>
 
-    <!-- Google -->
+    <!-- Google (multi-account) -->
     <details class="card card-collapsible">
       <summary class="integration-toggle">
         <div class="integration-header">
           <h3>Google</h3>
-          <span class="status-badge status-<%= google.status %>"><%= google.status %></span>
+          <% if (googleAccounts.length > 0) { %>
+            <span class="status-badge status-connected"><%= googleAccounts.length %> account<%= googleAccounts.length > 1 ? 's' : '' %></span>
+          <% } else { %>
+            <span class="status-badge status-disconnected">disconnected</span>
+          <% } %>
         </div>
         <span class="toggle-arrow"></span>
       </summary>
       <div class="integration-body">
-        <% if (google.error_message) { %>
-          <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= google.error_message %></p>
-        <% } %>
-
-        <% if (google.status === 'connected') { %>
-          <div style="margin-bottom: 12px;">
-            <label style="font-size: 13px; color: var(--muted);">Connected Account</label>
-            <div style="margin-top: 4px;">
-              <code style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px;"><%= google.google_email %></code>
+        <% for (const acct of googleAccounts) { %>
+          <div style="padding: 12px 0; border-bottom: 1px solid var(--rule-light);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <code style="font-size: 14px; padding: 4px 8px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px;"><%= acct.email %></code>
+              <form method="POST" action="/integrations/google/disconnect" style="margin: 0;">
+                <input type="hidden" name="account" value="<%= acct.email %>">
+                <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+              </form>
             </div>
-          </div>
-          <div style="margin-bottom: 12px;">
-            <label style="font-size: 13px; color: var(--muted);">Connected Services</label>
-            <div style="margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap;">
-              <% for (const svc of google.services) { %>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <% for (const svc of acct.services) { %>
                 <% if (svc === 'gmail_send') { %>
                   <span class="status-badge status-connected">Draft & Send</span>
                 <% } else { %>
@@ -172,11 +172,9 @@
               <% } %>
             </div>
           </div>
-          <div class="hint" style="margin-bottom: 12px;">To change services, disconnect and reconnect with new selections.</div>
-          <form method="POST" action="/integrations/google/disconnect">
-            <button type="submit" class="btn btn-danger">Disconnect</button>
-          </form>
-        <% } else { %>
+        <% } %>
+
+        <div style="<%= googleAccounts.length > 0 ? 'padding-top: 12px;' : '' %>">
           <form method="POST" action="/integrations/google/connect">
             <div class="form-group">
               <label>Select Google services to connect:</label>
@@ -204,9 +202,9 @@
               </div>
               <div class="hint" style="margin-top: 8px;">At least one service must be selected. Your agent will only access services you enable.</div>
             </div>
-            <button type="submit" class="btn">Connect with Google</button>
+            <button type="submit" class="btn"><%= googleAccounts.length > 0 ? 'Add Another Google Account' : 'Connect with Google' %></button>
           </form>
-        <% } %>
+        </div>
       </div>
     </details>
   </div>

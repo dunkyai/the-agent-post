@@ -6,8 +6,8 @@ import {
 import { decrypt } from "./encryption";
 import { getNextRun, isValidCron, describeCron } from "./cron";
 import {
-  isGoogleRunning, getConnectedServices,
-  gmailSearch, gmailReadMessage, gmailSend, gmailCreateDraft, gmailAddLabel,
+  isGoogleRunning, getConnectedServices, getGoogleAccounts,
+  gmailSearch, gmailReadMessage, gmailSend, gmailCreateDraft, gmailAddLabel, gmailGetSendAsAliases,
   calendarListEvents, calendarCreateEvent, calendarUpdateEvent,
   driveSearch, driveReadFile, extractDriveFileId,
   contactsSearch,
@@ -439,12 +439,13 @@ async function executePublicGDocTool(input: any): Promise<string> {
 const GOOGLE_GMAIL_TOOLS = [
   {
     name: "gmail_search",
-    description: "Search Gmail messages. Use Gmail search syntax: 'from:john@example.com', 'subject:invoice', 'is:unread', 'newer_than:7d'.",
+    description: "Search Gmail messages. Use Gmail search syntax: 'from:john@example.com', 'subject:invoice', 'is:unread', 'newer_than:7d'. If multiple Google accounts are connected, specify which account to search.",
     input_schema: {
       type: "object" as const,
       properties: {
         query: { type: "string", description: "Gmail search query" },
         max_results: { type: "number", description: "Max results (default: 10, max: 20)" },
+        account: { type: "string", description: "Google account email to use (optional, defaults to first account)" },
       },
       required: ["query"],
     },
@@ -456,6 +457,7 @@ const GOOGLE_GMAIL_TOOLS = [
       type: "object" as const,
       properties: {
         message_id: { type: "string", description: "The Gmail message ID" },
+        account: { type: "string", description: "Google account email to use (optional)" },
       },
       required: ["message_id"],
     },
@@ -468,8 +470,19 @@ const GOOGLE_GMAIL_TOOLS = [
       properties: {
         message_id: { type: "string", description: "The Gmail message ID" },
         label_name: { type: "string", description: "Label name (e.g., 'IMPORTANT', 'STARRED', or custom)" },
+        account: { type: "string", description: "Google account email to use (optional)" },
       },
       required: ["message_id", "label_name"],
+    },
+  },
+  {
+    name: "gmail_list_aliases",
+    description: "List available send-as addresses (aliases) for a Gmail account. Use this to see which email addresses can be used as the 'from' address when sending or drafting.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
     },
   },
 ];
@@ -477,26 +490,30 @@ const GOOGLE_GMAIL_TOOLS = [
 const GOOGLE_GMAIL_SEND_TOOLS = [
   {
     name: "gmail_create_draft",
-    description: "Create a real draft email in the user's Gmail Drafts folder. The draft will appear in Gmail and can be reviewed and sent by the user. You MUST call this tool to actually create the draft — do not just write the email text in your response. If you don't know the recipient, ask the user.",
+    description: "Create a real draft email in the user's Gmail Drafts folder. The draft will appear in Gmail and can be reviewed and sent by the user. You MUST call this tool to actually create the draft — do not just write the email text in your response. If you don't know the recipient, ask the user. Use 'from' to send from an alias (use gmail_list_aliases to see available addresses).",
     input_schema: {
       type: "object" as const,
       properties: {
         to: { type: "string", description: "Recipient email address" },
         subject: { type: "string", description: "Email subject line" },
         body: { type: "string", description: "Full email body (plain text)" },
+        account: { type: "string", description: "Google account email to use (optional)" },
+        from: { type: "string", description: "Send-as alias address (optional, use gmail_list_aliases to see options)" },
       },
       required: ["to", "subject", "body"],
     },
   },
   {
     name: "gmail_send",
-    description: "Send an email immediately from the user's Gmail account. The email will be sent right away — use gmail_create_draft if you want to save it as a draft instead.",
+    description: "Send an email immediately from the user's Gmail account. The email will be sent right away — use gmail_create_draft if you want to save it as a draft instead. Use 'from' to send from an alias.",
     input_schema: {
       type: "object" as const,
       properties: {
         to: { type: "string", description: "Recipient email address" },
         subject: { type: "string", description: "Email subject line" },
         body: { type: "string", description: "Full email body (plain text)" },
+        account: { type: "string", description: "Google account email to use (optional)" },
+        from: { type: "string", description: "Send-as alias address (optional, use gmail_list_aliases to see options)" },
       },
       required: ["to", "subject", "body"],
     },
@@ -513,6 +530,7 @@ const GOOGLE_CALENDAR_TOOLS = [
         time_min: { type: "string", description: "Start of range (ISO 8601). Defaults to now." },
         time_max: { type: "string", description: "End of range (ISO 8601). Defaults to 7 days." },
         max_results: { type: "number", description: "Max events (default: 10)" },
+        account: { type: "string", description: "Google account email to use (optional)" },
       },
     },
   },
@@ -528,6 +546,7 @@ const GOOGLE_CALENDAR_TOOLS = [
         description: { type: "string", description: "Event description" },
         attendees: { type: "string", description: "Comma-separated attendee emails" },
         location: { type: "string", description: "Event location" },
+        account: { type: "string", description: "Google account email to use (optional)" },
       },
       required: ["summary", "start", "end"],
     },
@@ -543,6 +562,7 @@ const GOOGLE_CALENDAR_TOOLS = [
         start: { type: "string", description: "New start time" },
         end: { type: "string", description: "New end time" },
         description: { type: "string", description: "New description" },
+        account: { type: "string", description: "Google account email to use (optional)" },
       },
       required: ["event_id"],
     },
@@ -559,6 +579,7 @@ const GOOGLE_DRIVE_TOOLS = [
         query: { type: "string", description: "Search query — matches file names and document content" },
         max_results: { type: "number", description: "Max files (default: 10)" },
         mime_type: { type: "string", description: "Filter by MIME type. Common: 'application/vnd.google-apps.document' (Google Docs), 'application/vnd.google-apps.spreadsheet' (Sheets), 'application/vnd.google-apps.presentation' (Slides)" },
+        account: { type: "string", description: "Google account email to use (optional)" },
       },
       required: ["query"],
     },
@@ -570,6 +591,7 @@ const GOOGLE_DRIVE_TOOLS = [
       type: "object" as const,
       properties: {
         file_id: { type: "string", description: "Google Drive file ID (from drive_search results)" },
+        account: { type: "string", description: "Google account email to use (optional)" },
       },
       required: ["file_id"],
     },
@@ -581,6 +603,7 @@ const GOOGLE_DRIVE_TOOLS = [
       type: "object" as const,
       properties: {
         url: { type: "string", description: "The Google Docs/Sheets/Slides/Drive URL" },
+        account: { type: "string", description: "Google account email to use (optional)" },
       },
       required: ["url"],
     },
@@ -595,6 +618,7 @@ const GOOGLE_CONTACTS_TOOLS = [
       type: "object" as const,
       properties: {
         query: { type: "string", description: "Search query" },
+        account: { type: "string", description: "Google account email to use (optional)" },
       },
       required: ["query"],
     },
@@ -606,35 +630,39 @@ async function executeGoogleTool(toolName: string, input: any): Promise<string> 
     return JSON.stringify({ error: "Google is not connected. Ask the user to connect Google in the integrations page." });
   }
 
+  const acct = input.account || undefined;
+
   try {
     switch (toolName) {
       case "gmail_search":
-        return await gmailSearch(input.query, input.max_results);
+        return await gmailSearch(input.query, input.max_results, acct);
       case "gmail_read_message":
-        return await gmailReadMessage(input.message_id);
+        return await gmailReadMessage(input.message_id, acct);
       case "gmail_send":
-        return await gmailSend(input.to, input.subject, input.body);
+        return await gmailSend(input.to, input.subject, input.body, acct, input.from);
       case "gmail_create_draft":
-        return await gmailCreateDraft(input.to, input.subject, input.body);
+        return await gmailCreateDraft(input.to, input.subject, input.body, acct, input.from);
       case "gmail_label":
-        return await gmailAddLabel(input.message_id, input.label_name);
+        return await gmailAddLabel(input.message_id, input.label_name, acct);
+      case "gmail_list_aliases":
+        return await gmailGetSendAsAliases(acct);
       case "calendar_list_events":
-        return await calendarListEvents(input.time_min, input.time_max, input.max_results);
+        return await calendarListEvents(input.time_min, input.time_max, input.max_results, acct);
       case "calendar_create_event":
-        return await calendarCreateEvent(input);
+        return await calendarCreateEvent(input, acct);
       case "calendar_update_event":
-        return await calendarUpdateEvent(input.event_id, input);
+        return await calendarUpdateEvent(input.event_id, input, acct);
       case "drive_search":
-        return await driveSearch(input.query, input.max_results, input.mime_type);
+        return await driveSearch(input.query, input.max_results, input.mime_type, acct);
       case "drive_read_file":
-        return await driveReadFile(input.file_id);
+        return await driveReadFile(input.file_id, acct);
       case "drive_open_url": {
         const fileId = extractDriveFileId(input.url);
         if (!fileId) return JSON.stringify({ error: "Could not extract file ID from URL. Make sure it's a Google Docs, Sheets, Slides, or Drive link." });
-        return await driveReadFile(fileId);
+        return await driveReadFile(fileId, acct);
       }
       case "contacts_search":
-        return await contactsSearch(input.query);
+        return await contactsSearch(input.query, acct);
       default:
         return JSON.stringify({ error: `Unknown Google tool: ${toolName}` });
     }
@@ -802,7 +830,7 @@ async function callAnthropic(
       const memoryTools = ["save_memory", "list_memories", "delete_memory"];
       const codeTools = ["run_command", "read_file", "write_file"];
       const googleToolNames = [
-        "gmail_search", "gmail_read_message", "gmail_send", "gmail_create_draft", "gmail_label",
+        "gmail_search", "gmail_read_message", "gmail_send", "gmail_create_draft", "gmail_label", "gmail_list_aliases",
         "calendar_list_events", "calendar_create_event", "calendar_update_event",
         "drive_search", "drive_read_file", "drive_open_url",
         "contacts_search",
@@ -969,23 +997,28 @@ export async function processMessage(
     }
   }
 
-  // Inject Google context
+  // Inject Google context (multi-account)
   try {
-    const googleIntegration = getIntegration("google");
-    if (googleIntegration && googleIntegration.status === "connected") {
-      const googleCfg = JSON.parse(decrypt(googleIntegration.config));
-      let googleContext = `You are connected to the user's Gmail account. Never reveal the connected email address to users in chat — just say you're connected to Gmail.`;
-      const svcs = googleCfg.services as string[];
-      if (svcs.includes("gmail")) {
-        if (svcs.includes("gmail_send")) {
-          googleContext += " You can search, read, draft, send, and label Gmail messages.";
+    const accounts = getGoogleAccounts();
+    if (accounts.length > 0) {
+      const allSvcs = new Set<string>();
+      for (const a of accounts) {
+        for (const s of a.services) allSvcs.add(s);
+      }
+      let googleContext = `You are connected to ${accounts.length} Google account${accounts.length > 1 ? 's' : ''}. Never reveal the connected email addresses to users in chat — just say you're connected to Google.`;
+      if (accounts.length > 1) {
+        googleContext += ` When performing Google actions, you can specify which account to use with the 'account' parameter. If not specified, the first account is used.`;
+      }
+      if (allSvcs.has("gmail")) {
+        if (allSvcs.has("gmail_send")) {
+          googleContext += " You can search, read, draft, send, and label Gmail messages. Use gmail_list_aliases to see available send-as addresses, and use the 'from' parameter to send from an alias.";
         } else {
           googleContext += " You can search, read, and label Gmail messages. Drafting and sending are not enabled.";
         }
       }
-      if (svcs.includes("calendar")) googleContext += " You can view, create, update, and delete Google Calendar events.";
-      if (svcs.includes("drive")) googleContext += " You can search and read Google Drive files including Google Docs, Sheets, and Slides.";
-      if (svcs.includes("contacts")) googleContext += " You can search Google Contacts.";
+      if (allSvcs.has("calendar")) googleContext += " You can view, create, update, and delete Google Calendar events.";
+      if (allSvcs.has("drive")) googleContext += " You can search and read Google Drive files including Google Docs, Sheets, and Slides.";
+      if (allSvcs.has("contacts")) googleContext += " You can search Google Contacts.";
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${googleContext}` : googleContext;
     }
   } catch {}

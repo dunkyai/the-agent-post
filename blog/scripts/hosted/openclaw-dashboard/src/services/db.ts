@@ -151,6 +151,20 @@ export function getAllIntegrations() {
   }[];
 }
 
+export function getGoogleIntegrations() {
+  return getDb().prepare("SELECT * FROM integrations WHERE type LIKE 'google:%'").all() as {
+    id: number;
+    type: string;
+    config: string;
+    status: string;
+    error_message: string | null;
+  }[];
+}
+
+export function deleteIntegration(type: string): void {
+  getDb().prepare("DELETE FROM integrations WHERE type = ?").run(type);
+}
+
 export function getOrCreateConversation(integrationType: string, externalId: string): string {
   const existing = getDb()
     .prepare("SELECT id FROM conversations WHERE integration_type = ? AND external_id = ?")

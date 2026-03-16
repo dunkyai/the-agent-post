@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { getIntegration, upsertIntegration, getAllIntegrations } from "../services/db";
+import { getIntegration, upsertIntegration, deleteIntegration, getAllIntegrations, getGoogleIntegrations } from "../services/db";
 import { encrypt, decrypt } from "../services/encryption";
 import { startTelegram, stopTelegram, isTelegramRunning } from "../services/telegram";
 import { buildSlackOAuthUrl, stopSlack, isSlackRunning } from "../services/slack";
@@ -30,14 +30,18 @@ router.get("/integrations", (req: Request, res: Response) => {
     } catch {}
   }
 
-  let googleEmail: string | null = null;
-  let googleServices: string[] = [];
-  const googleIntegration = integrationMap["google"];
-  if (googleIntegration && googleIntegration.status === "connected") {
+  // Build multi-account Google data
+  const googleAccountsList: { email: string; services: string[]; typeKey: string }[] = [];
+  const googleRows = getGoogleIntegrations();
+  for (const row of googleRows) {
+    if (row.status !== "connected") continue;
     try {
-      const config = JSON.parse(decrypt(googleIntegration.config));
-      googleEmail = config.google_email || null;
-      googleServices = config.services || [];
+      const config = JSON.parse(decrypt(row.config));
+      googleAccountsList.push({
+        email: config.google_email || "Unknown",
+        services: config.services || [],
+        typeKey: row.type,
+      });
     } catch {}
   }
 
@@ -63,11 +67,7 @@ router.get("/integrations", (req: Request, res: Response) => {
       filter_domain: emailFilterDomain,
       filter_addresses: emailFilterAddresses,
     },
-    google: {
-      ...(integrationMap["google"] || { status: "disconnected", error_message: null }),
-      google_email: googleEmail,
-      services: googleServices,
-    },
+    googleAccounts: googleAccountsList,
     flash: req.query.flash || null,
   });
 });
@@ -215,9 +215,17 @@ router.post("/integrations/google/connect", (req: Request, res: Response) => {
 });
 
 router.post("/integrations/google/disconnect", async (req: Request, res: Response) => {
+  const account = req.body.account as string | undefined;
+  if (!account) {
+    res.redirect(303, "/integrations?flash=Missing+account");
+    return;
+  }
+
+  const typeKey = `google:${account}`;
+
   // Revoke token at Google (fire-and-forget)
   try {
-    const integration = getIntegration("google");
+    const integration = getIntegration(typeKey);
     if (integration && integration.status === "connected") {
       const config = JSON.parse(decrypt(integration.config));
       if (config.refresh_token) {
@@ -228,8 +236,8 @@ router.post("/integrations/google/disconnect", async (req: Request, res: Respons
     }
   } catch {}
 
-  stopGoogle();
-  upsertIntegration("google", "{}", "disconnected");
+  stopGoogle(account);
+  deleteIntegration(typeKey);
   res.redirect(303, "/integrations?flash=Google+disconnected");
 });
 
