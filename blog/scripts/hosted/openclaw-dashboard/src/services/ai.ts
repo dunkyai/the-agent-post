@@ -17,7 +17,7 @@ import { sendSlackMessage, isSlackRunning, getChannelMembers } from "./slack";
 import { sendEmailMessage, isEmailRunning, checkInbox } from "./email";
 import {
   isSupabaseRunning, getSupabaseProjectUrl, getSupabasePermissions,
-  supabaseListTables, supabaseQuery, supabaseInsert, supabaseUpdate,
+  supabaseListTables, supabaseDescribeTable, supabaseQuery, supabaseInsert, supabaseUpdate,
 } from "./supabase";
 import {
   isAirtableRunning,
@@ -409,21 +409,32 @@ const SUPABASE_READ_TOOLS = [
     input_schema: { type: "object" as const, properties: {} },
   },
   {
-    name: "supabase_query",
-    description: "Query records from a Supabase table. Use PostgREST filter syntax for filters, e.g. {\"id\": \"eq.5\"}, {\"name\": \"ilike.*john*\"}, {\"age\": \"gte.18\"}.",
+    name: "supabase_describe_table",
+    description: "Describe a Supabase table's columns by fetching a sample row. ALWAYS call this before querying a table you haven't seen yet, so you know the correct column names and types.",
     input_schema: {
       type: "object" as const,
       properties: {
         table: { type: "string", description: "Table name" },
-        select: { type: "string", description: "Columns to return (comma-separated), e.g. 'id,name,email'. Default: all columns." },
-        filters: {
-          type: "object",
-          description: "PostgREST filters as key-value pairs. Keys are column names, values use operators like eq.value, neq.value, gt.value, gte.value, lt.value, lte.value, like.pattern, ilike.pattern, in.(a,b,c), is.null, is.true.",
-          additionalProperties: { type: "string" },
-        },
-        limit: { type: "number", description: "Max records to return (default: 100)" },
       },
       required: ["table"],
+    },
+  },
+  {
+    name: "supabase_query",
+    description: "Query records from a Supabase table. You MUST specify a 'select' with only the columns you need — never omit it. Call supabase_describe_table first to learn column names and types. PostgREST filter syntax: {\"name\": \"eq.John\"}, {\"name\": \"ilike.*john*\"}, {\"age\": \"gte.18\"}. For array columns: {\"tags\": \"cs.{value}\"} (contains), {\"tags\": \"ov.{a,b}\"} (overlaps/any of). NEVER use eq/ilike on array columns. If a query times out, the tool will automatically retry without filters — you should then filter the returned results yourself.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        table: { type: "string", description: "Table name" },
+        select: { type: "string", description: "REQUIRED. Columns to return (comma-separated), e.g. 'id,name,email'. Only request columns you need." },
+        filters: {
+          type: "object",
+          description: "PostgREST filters as key-value pairs. Keys are column names, values use operators like eq.value, neq.value, gt.value, gte.value, lt.value, lte.value, like.pattern, ilike.pattern, in.(a,b,c), is.null, is.true. For array columns use cs.{value} or ov.{a,b}.",
+          additionalProperties: { type: "string" },
+        },
+        limit: { type: "number", description: "Max records to return (default: 50, max: 200)" },
+      },
+      required: ["table", "select"],
     },
   },
 ];
@@ -475,6 +486,8 @@ async function executeSupabaseTool(toolName: string, input: any): Promise<string
     switch (toolName) {
       case "supabase_list_tables":
         return await supabaseListTables();
+      case "supabase_describe_table":
+        return await supabaseDescribeTable(input.table);
       case "supabase_query":
         return await supabaseQuery(input.table, input.select, input.filters, input.limit);
       case "supabase_insert":
@@ -1016,7 +1029,7 @@ async function callAnthropic(
       ];
       const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
       const messagingToolNames = ["send_telegram", "send_slack", "slack_channel_members", "send_lobstermail", "check_lobstermail"];
-      const supabaseToolNames = ["supabase_list_tables", "supabase_query", "supabase_insert", "supabase_update"];
+      const supabaseToolNames = ["supabase_list_tables", "supabase_describe_table", "supabase_query", "supabase_insert", "supabase_update"];
       const airtableToolNames = ["airtable_list_bases", "airtable_list_tables", "airtable_list_records"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
@@ -1215,7 +1228,12 @@ export async function processMessage(
     const abilities = ["list tables and query records"];
     if (perms.includes("insert")) abilities.push("insert new records");
     if (perms.includes("update")) abilities.push("update existing records");
-    const supabaseContext = `You are connected to a Supabase database${projectUrl ? ` (${projectUrl})` : ""}. You can ${abilities.join(", ")} using the supabase_* tools. Use PostgREST filter syntax for queries (e.g. eq.value, gt.value, ilike.*pattern*).`;
+    const supabaseContext = `You are connected to a Supabase database${projectUrl ? ` (${projectUrl})` : ""}. You can ${abilities.join(", ")} using the supabase_* tools.
+CRITICAL Supabase query rules:
+1. ALWAYS call supabase_describe_table first to see column names and types before querying.
+2. For array columns (type: "array"), use cs.{value} to filter (contains), NEVER use eq or ilike on arrays.
+3. If a query returns a timeout or 500 error, simplify: use fewer filters, always include a select with only the columns you need, and keep limit small.
+4. Prefer fetching a broader set with limit and filtering the results yourself rather than using complex PostgREST filters that may timeout on large tables.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${supabaseContext}` : supabaseContext;
   }
 

@@ -16,7 +16,7 @@ router.get("/chat", (req: Request, res: Response) => {
   res.render("chat", { messages, agentName, userName });
 });
 
-const REQUEST_TIMEOUT_MS = 120_000; // 2 minutes
+const REQUEST_TIMEOUT_MS = 180_000; // 3 minutes
 
 router.post("/chat/message", async (req: Request, res: Response) => {
   try {
@@ -37,7 +37,7 @@ router.post("/chat/message", async (req: Request, res: Response) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     if (msg === "__TIMEOUT__") {
-      console.error("Chat timeout: request exceeded 2 minutes");
+      console.error("Chat timeout: request exceeded 3 minutes");
       res.status(504).json({ error: "That took longer than expected — could you try asking in a simpler way?" });
       return;
     }

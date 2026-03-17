@@ -3,11 +3,13 @@ let supabaseConfig: { projectUrl: string; apiKey: string; permissions: string[] 
 
 export function startSupabase(config: { projectUrl: string; apiKey: string; permissions?: string[] }): void {
   supabaseConfig = { ...config, permissions: config.permissions || ["read"] };
+  schemaCache = null; // Clear schema cache on reconnect
   console.log(`Supabase connected (${config.projectUrl}, permissions: ${supabaseConfig.permissions.join(", ")})`);
 }
 
 export function stopSupabase(): void {
   supabaseConfig = null;
+  schemaCache = null;
   console.log("Supabase disconnected");
 }
 
@@ -45,27 +47,82 @@ function sanitizeUrl(raw: string): string {
   return parsed.origin;
 }
 
-export async function supabaseListTables(): Promise<string> {
-  if (!supabaseConfig) return JSON.stringify({ error: "Supabase is not connected" });
+// Cache for schema info (tables + columns) to avoid repeated slow OpenAPI spec fetches
+let schemaCache: { tables: string[]; definitions: Record<string, any>; fetchedAt: number } | null = null;
+const SCHEMA_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+async function fetchAndCacheSchema(): Promise<{ tables: string[]; definitions: Record<string, any> } | null> {
+  if (schemaCache && Date.now() - schemaCache.fetchedAt < SCHEMA_CACHE_TTL) {
+    return schemaCache;
+  }
 
   try {
     const res = await fetch(`${baseUrl()}/rest/v1/`, {
       headers: headers(),
     });
 
-    if (!res.ok) {
-      return JSON.stringify({ error: `Supabase API error (${res.status}): ${await res.text()}` });
-    }
+    if (!res.ok) return null;
 
     const data: any = await res.json();
-    // PostgREST root returns OpenAPI spec with path definitions = table names
     const tables = Object.keys(data.paths || {})
       .map((p) => p.replace(/^\//, ""))
       .filter((t) => t && !t.startsWith("rpc/"));
 
-    return JSON.stringify({ tables, count: tables.length });
+    schemaCache = { tables, definitions: data.definitions || {}, fetchedAt: Date.now() };
+    return schemaCache;
+  } catch {
+    return null;
+  }
+}
+
+export async function supabaseListTables(): Promise<string> {
+  if (!supabaseConfig) return JSON.stringify({ error: "Supabase is not connected" });
+
+  const schema = await fetchAndCacheSchema();
+  if (schema) {
+    return JSON.stringify({ tables: schema.tables, count: schema.tables.length });
+  }
+
+  return JSON.stringify({ error: "Could not fetch table list — the database schema query timed out. You can try querying tables directly by name if you know them." });
+}
+
+export async function supabaseDescribeTable(table: string): Promise<string> {
+  if (!supabaseConfig) return JSON.stringify({ error: "Supabase is not connected" });
+
+  // Try cached schema first (avoids hitting the slow OpenAPI spec endpoint)
+  const schema = await fetchAndCacheSchema();
+  if (schema?.definitions?.[table]?.properties) {
+    const columns = Object.entries(schema.definitions[table].properties).map(([name, def]: [string, any]) => ({
+      name,
+      type: def.format || def.type || "unknown",
+      description: def.description || undefined,
+    }));
+    return JSON.stringify({ table, columns, count: columns.length });
+  }
+
+  // Fallback: fetch a single row to infer column names (may timeout on very wide tables)
+  try {
+    const res = await fetch(`${baseUrl()}/rest/v1/${encodeURIComponent(table)}?select=*&limit=1`, {
+      headers: headers(),
+    });
+
+    if (!res.ok) {
+      return JSON.stringify({ table, columns: [], note: "Could not describe table — it may be too large. Try querying specific column names you expect to find." });
+    }
+
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return JSON.stringify({ table, columns: [], note: "Table is empty or inaccessible" });
+    }
+
+    const columns = Object.entries(rows[0]).map(([name, value]) => ({
+      name,
+      type: value === null ? "unknown" : Array.isArray(value) ? "array" : typeof value,
+    }));
+
+    return JSON.stringify({ table, columns, count: columns.length });
   } catch (err) {
-    return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to list tables" });
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to describe table" });
   }
 }
 
@@ -77,30 +134,61 @@ export async function supabaseQuery(
 ): Promise<string> {
   if (!supabaseConfig) return JSON.stringify({ error: "Supabase is not connected" });
 
+  // Enforce a select to avoid SELECT * on wide tables
+  if (!select) {
+    return JSON.stringify({ error: "You must specify a 'select' with the column names you need. Call supabase_describe_table first to see available columns." });
+  }
+
+  // Cap limit to avoid huge result sets
+  const safeLimit = Math.min(limit || 50, 200);
+
   try {
-    const params = new URLSearchParams();
-    if (select) params.set("select", select);
-    if (limit) params.set("limit", String(limit));
-
-    // Filters use PostgREST syntax: column=operator.value
-    if (filters) {
-      for (const [key, value] of Object.entries(filters)) {
-        params.set(key, value);
-      }
+    const result = await supabaseQueryInternal(table, select, filters, safeLimit);
+    if (result.error && (result.raw?.includes("57014") || result.raw?.includes("statement timeout"))) {
+      // Retry with no filters — let the AI filter in post-processing
+      console.log(`Supabase query timeout on ${table} with filters, retrying without filters (limit ${Math.min(safeLimit, 50)})`);
+      const retry = await supabaseQueryInternal(table, select, undefined, Math.min(safeLimit, 50));
+      if (retry.error) return JSON.stringify({ error: retry.error });
+      return JSON.stringify({
+        table,
+        rows: retry.rows,
+        count: retry.rows.length,
+        note: "Original filtered query timed out. Returned unfiltered results — please filter these yourself.",
+      });
     }
-
-    const url = `${baseUrl()}/rest/v1/${encodeURIComponent(table)}?${params}`;
-    const res = await fetch(url, { headers: headers() });
-
-    if (!res.ok) {
-      return JSON.stringify({ error: `Query error (${res.status}): ${await res.text()}` });
-    }
-
-    const rows = await res.json();
-    return JSON.stringify({ table, rows, count: Array.isArray(rows) ? rows.length : 0 });
+    if (result.error) return JSON.stringify({ error: result.error });
+    return JSON.stringify({ table, rows: result.rows, count: result.rows.length });
   } catch (err) {
     return JSON.stringify({ error: err instanceof Error ? err.message : "Query failed" });
   }
+}
+
+async function supabaseQueryInternal(
+  table: string,
+  select: string,
+  filters?: Record<string, string>,
+  limit?: number
+): Promise<{ rows: any[]; error?: string; raw?: string }> {
+  const params = new URLSearchParams();
+  params.set("select", select);
+  if (limit) params.set("limit", String(limit));
+
+  if (filters) {
+    for (const [key, value] of Object.entries(filters)) {
+      params.set(key, value);
+    }
+  }
+
+  const url = `${baseUrl()}/rest/v1/${encodeURIComponent(table)}?${params}`;
+  const res = await fetch(url, { headers: headers() });
+
+  if (!res.ok) {
+    const body = await res.text();
+    return { rows: [], error: `Query error (${res.status}): ${body}`, raw: body };
+  }
+
+  const rows = await res.json();
+  return { rows: Array.isArray(rows) ? rows : [] };
 }
 
 export async function supabaseInsert(table: string, records: any[]): Promise<string> {
