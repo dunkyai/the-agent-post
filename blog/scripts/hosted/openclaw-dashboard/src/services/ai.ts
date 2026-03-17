@@ -49,15 +49,17 @@ function getApiKey(provider: "anthropic" | "openai"): string {
 const SCHEDULING_TOOLS = [
   {
     name: "create_scheduled_job",
-    description: "Create a new scheduled job that runs on a cron schedule. Use this when the user asks to be reminded of something, schedule a recurring task, or set up periodic actions.",
+    description: "Create a new scheduled job that runs on a cron schedule. Use this when the user asks to be reminded of something, schedule a recurring task, or set up periodic actions. IMPORTANT: Before creating a job, you MUST ask the user where they want the results delivered (e.g. Slack channel, Gmail, Telegram). Do NOT default to dashboard — results shown in the dashboard chat are unreliable. Only create the job once the user has confirmed a delivery channel.",
     input_schema: {
       type: "object" as const,
       properties: {
         name: { type: "string", description: "A short descriptive name for the job" },
         schedule: { type: "string", description: "A 5-field cron expression. Examples: '0 9 * * 1' (Monday 9am), '*/30 * * * *' (every 30 min), '0 0 * * *' (daily midnight). Fields: minute hour day-of-month month day-of-week." },
         prompt: { type: "string", description: "The prompt/instruction sent to the AI when the job fires" },
+        target_source: { type: "string", enum: ["slack", "telegram", "email"], description: "Where to deliver results. Must be one of: slack, telegram, email." },
+        target_external_id: { type: "string", description: "The delivery target ID. For Slack: channel ID (e.g. C01HCS46FPB). For Telegram: chat ID. For email: recipient email address." },
       },
-      required: ["name", "schedule", "prompt"],
+      required: ["name", "schedule", "prompt", "target_source", "target_external_id"],
     },
   },
   {
@@ -885,11 +887,20 @@ function executeSchedulingTool(toolName: string, input: any): string {
       if (!isValidCron(input.schedule)) {
         return JSON.stringify({ error: `Invalid cron expression: "${input.schedule}"` });
       }
+      if (!input.target_source || !input.target_external_id) {
+        return JSON.stringify({ error: "You must specify target_source and target_external_id. Ask the user where they want results delivered (Slack, Telegram, or email)." });
+      }
+      const validSources = ["slack", "telegram", "email"];
+      if (!validSources.includes(input.target_source)) {
+        return JSON.stringify({ error: `target_source must be one of: ${validSources.join(", ")}` });
+      }
       const nextRun = getNextRun(input.schedule);
       const id = createScheduledJob({
         name: input.name,
         schedule: input.schedule,
         prompt: input.prompt,
+        target_source: input.target_source,
+        target_external_id: input.target_external_id,
         created_by: "ai",
         next_run: nextRun.toISOString(),
       });
@@ -898,6 +909,7 @@ function executeSchedulingTool(toolName: string, input: any): string {
         job_id: id,
         name: input.name,
         schedule_description: describeCron(input.schedule),
+        target: `${input.target_source}:${input.target_external_id}`,
         next_run: nextRun.toISOString(),
       });
     }
@@ -1295,10 +1307,10 @@ If you encounter sensitive data while searching emails, reading documents, or br
       const jobSummaries = allJobs.map(
         (j) => `- #${j.id} "${j.name}" (${describeCron(j.schedule)}) ${j.enabled ? "enabled" : "disabled"}`
       ).join("\n");
-      const schedContext = `You can create, list, and delete scheduled jobs. Current jobs:\n${jobSummaries}`;
+      const schedContext = `You can create, list, and delete scheduled jobs. When creating a job, you MUST ask the user where to deliver results — Slack channel, email address, or Telegram. Never default to the dashboard.\nCurrent jobs:\n${jobSummaries}`;
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${schedContext}` : schedContext;
     } else {
-      const schedContext = "You can create, list, and delete scheduled jobs using the scheduling tools. No jobs are currently scheduled.";
+      const schedContext = "You can create, list, and delete scheduled jobs using the scheduling tools. When creating a job, you MUST ask the user where to deliver results — Slack channel, email address, or Telegram. Never default to the dashboard. No jobs are currently scheduled.";
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${schedContext}` : schedContext;
     }
   } catch {}
