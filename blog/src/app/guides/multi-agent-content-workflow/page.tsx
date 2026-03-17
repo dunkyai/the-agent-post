@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Multi-Agent Content Pipeline with OpenClaw — The Agent Post",
+  title:
+    "Build a Multi-Agent Content Pipeline | OpenClaw — The Agent Post",
   description:
-    "Learn how to build a multi-agent content pipeline with OpenClaw. Chain writer, editor, and publisher AI agents to automate article creation step by step.",
+    "Learn how to build a multi-agent content pipeline with OpenClaw. Chain researcher, writer, editor, and SEO agents to produce publish-ready articles automatically.",
 };
 
 const steps: {
@@ -20,136 +21,157 @@ const steps: {
 }[] = [
   {
     number: 1,
-    title: "Verify your OpenClaw installation is running",
+    title: "Verify your OpenClaw installation and gateway status",
     description:
-      "Before building your multi-agent content pipeline, confirm that OpenClaw is installed and the gateway is running. You should see a clean status summary with no errors.",
+      "Before wiring up any agents, confirm your OpenClaw installation is healthy and the gateway is online. Run the status command and check for errors. If the gateway shows as stopped, start it first.",
     code: "openclaw status",
     label: "Check OpenClaw status",
     output:
       "Gateway: running (port 18789)\nDaemon: active\nAgents: 0 running, 0 paused",
-    tip: "If the gateway isn't running, start it with: openclaw gateway",
+    tip: 'If the gateway is stopped, run "openclaw gateway" in a separate terminal tab first.',
   },
   {
     number: 2,
-    title: "Create an OpenClaw workspace for the content pipeline",
+    title: "Create an OpenClaw workspace for your content pipeline",
     description:
-      "OpenClaw workspaces keep related agents organized. Create a dedicated workspace for your content pipeline. This generates a folder with a manifest file where all your agent definitions will live.",
-    code: "openclaw workspace create content-pipeline",
+      "OpenClaw workspaces group related agents into a single project. Create one called content-crew. This generates a manifest file where your agent definitions, connections, and environment variables are stored.",
+    code: "openclaw workspace create content-crew",
     label: "Create a workspace",
     output:
-      "Created workspace: content-pipeline\nManifest: ~/.openclaw/workspaces/content-pipeline/manifest.yaml",
+      "Created workspace: content-crew\nManifest: ~/.openclaw/workspaces/content-crew/manifest.yaml",
   },
   {
     number: 3,
-    title: "Define the writer agent with a system prompt",
+    title: "Create a researcher agent to generate topic briefs",
     description:
-      "The writer is the first AI agent in your content pipeline. It takes a topic and produces a raw draft. The --role flag sets the system prompt, and --output-format tells it to emit structured JSON so downstream agents can parse the result.",
-    code: `openclaw agent create writer \\
-  --workspace content-pipeline \\
-  --role "You are a technical writer. Given a topic, produce a well-structured first draft with a title, introduction, body sections, and conclusion." \\
+      "The researcher is the first agent in your content pipeline. Given a topic, it produces a structured brief with key points, audience notes, and a suggested outline. Using --output-format json ensures downstream agents can parse its output cleanly.",
+    code: `openclaw agent create researcher \\
+  --workspace content-crew \\
+  --role "You are a research assistant. Given a topic, produce a JSON brief containing: key_points (5-7 bullet points), target_audience, suggested_outline (with section headings), and tone_guidance." \\
   --output-format json \\
   --model claude-sonnet-4-6`,
-    label: "Create the writer agent",
+    label: "Create the researcher agent",
   },
   {
     number: 4,
-    title: "Chain the editor agent to the writer",
+    title: "Chain a writer agent to the researcher with input piping",
     description:
-      "The editor agent receives the writer's draft and improves it — tightening prose, fixing grammar, and ensuring a consistent tone. The --input-from flag chains it to the writer's output, creating your first agent-to-agent connection.",
+      "The writer agent receives the researcher's brief and expands it into a full article draft. The --input-from flag connects these two agents — it tells OpenClaw to pipe the researcher's output directly into the writer's context as input.",
+    code: `openclaw agent create writer \\
+  --workspace content-crew \\
+  --role "You are a technical writer. Using the research brief provided, write a complete article draft with an engaging introduction, clearly structured body sections following the suggested outline, and a concise conclusion. Write in a conversational but authoritative tone." \\
+  --input-from researcher \\
+  --output-format json \\
+  --model claude-sonnet-4-6`,
+    label: "Create the writer agent",
+    tip: "Both the researcher and writer use Sonnet for the best balance of quality and speed. You can swap in Opus for higher-stakes content.",
+  },
+  {
+    number: 5,
+    title: "Add an editor agent to revise and polish drafts",
+    description:
+      "The editor agent reads the writer's draft and improves it — tightening sentences, fixing inconsistencies, and polishing transitions. Chaining it with --input-from writer creates the second link in your multi-agent pipeline.",
     code: `openclaw agent create editor \\
-  --workspace content-pipeline \\
-  --role "You are a sharp editor. Revise the draft for clarity, grammar, and tone. Preserve the author's intent but make every sentence earn its place." \\
+  --workspace content-crew \\
+  --role "You are a meticulous editor. Revise the article for clarity, grammar, flow, and factual consistency. Cut filler. Strengthen weak openings. Ensure every paragraph earns its place. Return the revised article in the same JSON structure." \\
   --input-from writer \\
   --output-format json \\
   --model claude-sonnet-4-6`,
     label: "Create the editor agent",
   },
   {
-    number: 5,
-    title: "Add a publisher agent for Markdown output",
+    number: 6,
+    title: "Add an SEO agent for metadata and Markdown output",
     description:
-      "The publisher agent takes the edited draft, formats it as Markdown, generates YAML front matter (title, description, tags), and writes the final file to disk. The --output-dir flag controls where your automated content output lands.",
-    code: `openclaw agent create publisher \\
-  --workspace content-pipeline \\
-  --role "You are a publisher. Take the edited article and format it as a complete Markdown file with YAML front matter including title, description, date, and tags." \\
+      "The final agent in the chain takes the polished article and generates SEO metadata — a meta description, Open Graph title, slug, and keyword tags. It also converts the article body into clean Markdown with YAML front matter, ready to publish.",
+    code: `openclaw agent create seo-formatter \\
+  --workspace content-crew \\
+  --role "You are an SEO specialist and formatter. Take the edited article and produce a final Markdown file with YAML front matter containing: title, slug, meta_description (under 160 chars), og_title, tags (3-5 keywords), and date. Format the body as clean Markdown." \\
   --input-from editor \\
   --output-dir ./output \\
   --model claude-haiku-4-5`,
-    label: "Create the publisher agent",
-    tip: "The publisher uses a faster model since its task is mostly formatting, not creative writing. This keeps costs down.",
-  },
-  {
-    number: 6,
-    title: "Preview the multi-agent workflow graph",
-    description:
-      "Before running anything, visualize your agent pipeline to confirm all three agents are wired correctly. You should see the full chain: writer → editor → publisher.",
-    code: "openclaw workflow preview content-pipeline",
-    label: "Preview the agent pipeline",
-    output:
-      "content-pipeline\n  writer (claude-sonnet-4-6)\n    → editor (claude-sonnet-4-6)\n      → publisher (claude-haiku-4-5)\n\n3 agents, 2 connections",
+    label: "Create the SEO formatter agent",
+    tip: "The SEO formatter uses Haiku since its job is mostly structural — formatting and metadata extraction. This keeps the cost of each pipeline run low.",
   },
   {
     number: 7,
-    title: "Run the content pipeline end to end",
+    title: "Preview the multi-agent pipeline graph",
     description:
-      "Trigger the full multi-agent pipeline by passing a topic to the workspace. The --watch flag streams each agent's progress to your terminal in real time so you can see the content evolve from draft to finished article.",
-    code: `openclaw workflow run content-pipeline \\
-  --input "How to build your first MCP server" \\
-  --watch`,
-    label: "Run the content pipeline",
+      "Before running anything, verify that all four agents are connected in the right order. The preview command prints your content pipeline as a visual graph so you can spot broken links or missing connections.",
+    code: "openclaw workflow preview content-crew",
+    label: "Preview the agent pipeline",
     output:
-      '[writer]    Generating draft...\n[writer]    Done (1,240 tokens)\n[editor]    Revising draft...\n[editor]    Done (1,180 tokens)\n[publisher] Formatting output...\n[publisher] Saved to ./output/how-to-build-your-first-mcp-server.md\n\nWorkflow complete — 3/3 agents finished',
+      "content-crew\n  researcher (claude-sonnet-4-6)\n    → writer (claude-sonnet-4-6)\n      → editor (claude-sonnet-4-6)\n        → seo-formatter (claude-haiku-4-5)\n\n4 agents, 3 connections",
   },
   {
     number: 8,
-    title: "Debug and inspect agent output logs",
+    title: "Run the content pipeline end to end",
     description:
-      "To see exactly what each agent produced, use the OpenClaw logs command. This is useful for debugging your multi-agent workflow when an agent's output isn't what you expected.",
-    code: "openclaw logs content-pipeline --agent editor --last 1",
-    label: "View the editor's last output",
-    tip: "Add --raw to see the full JSON payload including token counts and latency.",
+      "Trigger the full multi-agent workflow by passing a topic string. The --watch flag streams each agent's progress to your terminal in real time, so you can see content move from research brief to finished article.",
+    code: `openclaw workflow run content-crew \\
+  --input "A beginner's guide to prompt engineering" \\
+  --watch`,
+    label: "Run the full content pipeline",
+    output:
+      "[researcher]     Generating brief...\n[researcher]     Done (820 tokens)\n[writer]         Drafting article...\n[writer]         Done (1,450 tokens)\n[editor]         Revising draft...\n[editor]         Done (1,380 tokens)\n[seo-formatter]  Formatting output...\n[seo-formatter]  Saved to ./output/beginners-guide-to-prompt-engineering.md\n\nWorkflow complete — 4/4 agents finished",
   },
   {
     number: 9,
-    title: "Add a quality gate between agents (optional)",
+    title: "Inspect individual agent outputs",
     description:
-      "You can insert a review step that scores the editor's output and loops it back for another revision if quality is below a threshold. The --gate flag adds a conditional check between any two agents in your pipeline.",
-    code: `openclaw gate add content-pipeline \\
-  --after editor \\
-  --check "Rate this article 1-10 for clarity and completeness. Return PASS if 7 or above, FAIL otherwise." \\
-  --on-fail retry \\
-  --max-retries 2`,
-    label: "Add a quality gate",
+      "If the final article doesn't look right, trace the issue back to the responsible agent. The logs command lets you inspect what any single agent produced during the last run. This is the fastest way to debug a multi-agent workflow.",
+    code: "openclaw logs content-crew --agent writer --last 1",
+    label: "View the writer's last output",
+    tip: "Add --raw to see the full JSON payload with token counts, latency, and the exact prompt that was sent.",
   },
   {
     number: 10,
-    title: "Schedule automated content runs with cron",
+    title: "Add a quality gate between the editor and formatter",
     description:
-      "Once your multi-agent workflow is reliable, schedule it to run automatically on a cron. This example runs the content pipeline every weekday at 9 AM with a different topic pulled from a topics file.",
-    code: `openclaw workflow schedule content-pipeline \\
-  --cron "0 9 * * 1-5" \\
-  --input-file ./topics.txt \\
-  --rotate`,
-    label: "Schedule daily content runs",
-    tip: "The --rotate flag picks the next unused topic from the file each run, so you won't get duplicates.",
+      "Quality gates let you insert an automated review step between any two agents. This gate scores the editor's output and retries the revision if quality drops below a threshold — preventing low-quality drafts from reaching the formatting stage.",
+    code: `openclaw gate add content-crew \\
+  --after editor \\
+  --check "Score this article 1-10 on clarity, structure, and engagement. Return PASS if 7 or above, FAIL with specific feedback otherwise." \\
+  --on-fail retry \\
+  --max-retries 2`,
+    label: "Add a quality gate",
+    tip: "Quality gates add a small cost per run but dramatically improve consistency when producing content at scale.",
+  },
+  {
+    number: 11,
+    title: "Batch-run the pipeline with multiple topics",
+    description:
+      "Once your workflow is producing solid results, run it against a list of topics in one command. Create a plain text file with one topic per line, then use --input-file to process them all. OpenClaw runs each topic through the full pipeline sequentially.",
+    code: `cat <<'EOF' > topics.txt
+How to choose the right LLM for your use case
+Building AI agents that use external tools
+What is retrieval-augmented generation (RAG)
+EOF
+
+openclaw workflow batch content-crew \\
+  --input-file topics.txt \\
+  --output-dir ./output`,
+    label: "Batch-run with a topics file",
+    output:
+      "Queued 3 topics\n[1/3] How to choose the right LLM... ✓\n[2/3] Building AI agents that use... ✓\n[3/3] What is retrieval-augmented... ✓\n\nBatch complete — 3 articles saved to ./output/",
   },
 ];
 
 const troubleshooting = [
   {
-    problem: "\"No agents found in workspace\" error when running the pipeline",
+    problem: "\"No agents found in workspace\" when running the workflow",
     solution:
-      "openclaw workspace list content-pipeline\n# If empty, re-create agents with the --workspace flag",
+      "openclaw workspace list content-crew\n# If empty, recreate agents making sure to pass --workspace content-crew",
   },
   {
-    problem: "Editor agent produces empty output",
+    problem: "An agent produces empty or malformed output",
     solution:
-      'openclaw agent update editor --workspace content-pipeline --output-format json\n# Ensure --output-format matches what the next agent expects',
+      "openclaw logs content-crew --agent <name> --last 1 --raw\n# Check that --output-format json is set on the upstream agent",
   },
   {
-    problem: "Quality gate always returns FAIL",
+    problem: "Quality gate always returns FAIL and retries are exhausted",
     solution:
-      "openclaw logs content-pipeline --agent editor --last 1 --raw\n# Review the output, then adjust the gate threshold or editor prompt",
+      "openclaw gate update content-crew --after editor --max-retries 3\n# Or lower the threshold by editing the --check prompt to be less strict",
   },
 ];
 
@@ -165,11 +187,11 @@ export default function MultiAgentContentWorkflowPage() {
         </Link>
 
         <h1 className="font-serif text-4xl sm:text-5xl font-black tracking-tight leading-tight mb-4">
-          Build a Multi-Agent Content Pipeline with OpenClaw
+          Creating a Multi-Agent Workflow for Content Creation
         </h1>
         <p className="font-serif text-xl text-text-secondary leading-relaxed mb-4">
-          Chain writer, editor, and publisher AI agents into an automated
-          pipeline that turns a single topic into a publish-ready article.
+          Wire up researcher, writer, editor, and SEO agents into a single
+          automated pipeline that turns any topic into a publish-ready article.
         </p>
         <p className="text-sm text-text-secondary mb-10">
           Estimated time: 10&ndash;15 minutes &middot; Requires: OpenClaw

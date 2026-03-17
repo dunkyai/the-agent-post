@@ -224,20 +224,11 @@ log "Committing to GitHub..."
 cd "$BLOG_DIR" || exit 1
 git add "content/posts/$SLUG.md"
 git commit -m "Add new article: $SLUG" >> "$LOG" 2>&1
-git push >> "$LOG" 2>&1
+git push origin main >> "$LOG" 2>&1
 log "Pushed to GitHub."
 
 # --- Step 3: Build and deploy ---
-log "Building..."
-npm run build >> "$LOG" 2>&1
-if [ $? -ne 0 ]; then
-  log "ERROR: Build failed."
-  exit 1
-fi
-
-log "Deploying..."
-npx vercel --prod --yes >> "$LOG" 2>&1
-log "Deployed."
+log "Vercel will auto-deploy from main push."
 
 # --- Step 4: Sync to Bluesky ---
 log "Syncing to Bluesky..."

@@ -1,7 +1,7 @@
 {
   "slug": "multi-agent-content-workflow",
-  "title": "Build a Multi-Agent Content Pipeline with OpenClaw",
-  "description": "Chain writer, editor, and publisher AI agents into an automated OpenClaw pipeline that turns a topic into a polished, publish-ready article.",
+  "title": "Creating a Multi-Agent Workflow for Content Creation",
+  "description": "Wire up researcher, writer, editor, and SEO agents into one automated OpenClaw pipeline that produces publish-ready articles from any topic.",
   "time": "10-15 min",
-  "tags": ["Multi-Agent Pipeline", "Content Automation", "OpenClaw"]
+  "tags": ["Multi-Agent", "Content Creation", "Automation"]
 }

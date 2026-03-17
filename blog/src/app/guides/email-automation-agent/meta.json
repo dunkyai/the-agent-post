@@ -1,0 +1,7 @@
+{
+  "slug": "email-automation-agent",
+  "title": "Building an Email Automation Agent",
+  "description": "Connect OpenClaw to your inbox with triage rules that sort, label, and draft replies to email automatically.",
+  "time": "10-15 min",
+  "tags": ["Email", "Automation", "IMAP"]
+}

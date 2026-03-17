@@ -1,0 +1,7 @@
+{
+  "slug": "data-pipeline-agent",
+  "title": "Building a Data Pipeline Agent for ETL Tasks",
+  "description": "Build an autonomous agent that extracts, transforms, and loads data on a schedule using OpenClaw pipelines and TypeScript transforms.",
+  "time": "10-15 min",
+  "tags": ["ETL", "Data Pipelines", "Automation"]
+}

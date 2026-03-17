@@ -1,7 +1,7 @@
 {
   "slug": "slack-bot-openclaw-agents",
   "title": "How to Build an AI Slack Bot with OpenClaw Agents",
-  "description": "Build and deploy an AI-powered Slack bot using OpenClaw agents. Covers Slack app setup, agent configuration, and production deployment.",
+  "description": "Build and deploy an AI-powered Slack bot using OpenClaw agents — from Slack app setup to production deployment in under 15 minutes.",
   "time": "10-15 min",
-  "tags": ["AI Slack Bot", "OpenClaw Agents", "Slack Integration"]
+  "tags": ["Slack Bot", "AI Agents", "OpenClaw"]
 }

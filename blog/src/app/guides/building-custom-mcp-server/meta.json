@@ -1,0 +1,7 @@
+{
+  "slug": "building-custom-mcp-server",
+  "title": "Building a Custom MCP Server from Scratch",
+  "description": "Create your own Model Context Protocol server with custom tools, test it with the MCP Inspector, and connect it to Claude or OpenClaw.",
+  "time": "10-15 min",
+  "tags": ["MCP", "TypeScript", "Tooling"]
+}
