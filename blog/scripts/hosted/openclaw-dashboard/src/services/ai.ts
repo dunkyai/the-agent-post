@@ -1231,9 +1231,10 @@ export async function processMessage(
     const supabaseContext = `You are connected to a Supabase database${projectUrl ? ` (${projectUrl})` : ""}. You can ${abilities.join(", ")} using the supabase_* tools.
 CRITICAL Supabase query rules:
 1. ALWAYS call supabase_describe_table first to see column names and types before querying.
-2. For array columns (type: "array"), use cs.{value} to filter (contains), NEVER use eq or ilike on arrays.
-3. If a query returns a timeout or 500 error, simplify: use fewer filters, always include a select with only the columns you need, and keep limit small.
-4. Prefer fetching a broader set with limit and filtering the results yourself rather than using complex PostgREST filters that may timeout on large tables.`;
+2. If you're unsure which columns contain the data the user needs, show them a list of relevant column names and ask which ones to query. Don't guess — ask.
+3. For array columns (type: "array"), use cs.{value} to filter (contains), NEVER use eq or ilike on arrays.
+4. If a query returns a timeout or 500 error, simplify: use fewer filters, always include a select with only the columns you need, and keep limit small.
+5. Prefer fetching a broader set with limit and filtering the results yourself rather than using complex PostgREST filters that may timeout on large tables.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${supabaseContext}` : supabaseContext;
   }
 
@@ -1277,6 +1278,12 @@ If you encounter sensitive data while searching emails, reading documents, or br
   {
     const complexityHint = "Important: If a request involves many steps (e.g. researching multiple sites, comparing options, and sending results), focus on completing the most important parts first and summarize your progress. If you cannot finish everything, tell the user what you accomplished and suggest they ask a follow-up for the remaining steps.";
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${complexityHint}` : complexityHint;
+  }
+
+  // Clarification behavior
+  {
+    const clarificationDirective = "When a request is ambiguous or you're unsure about what the user wants, ask a brief clarifying question before proceeding. It's always better to ask than to guess wrong. For example, if the user asks to look something up in a database but you don't know which table or columns to use, ask them. Keep clarifications short and specific — offer options when possible.";
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${clarificationDirective}` : clarificationDirective;
   }
 
   // Inject scheduling context
