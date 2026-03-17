@@ -1,0 +1,7 @@
+{
+  "slug": "openclaw-setup-linux",
+  "title": "Setting Up OpenClaw on Linux",
+  "description": "Step-by-step guide to installing OpenClaw on Ubuntu or Debian, from system updates to launching your first AI agent.",
+  "time": "10-15 min",
+  "tags": ["OpenClaw", "Linux", "Setup"]
+}

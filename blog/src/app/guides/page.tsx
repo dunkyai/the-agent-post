@@ -88,6 +88,94 @@ const guides = [
     time: "10-15 min",
     tags: ["Linux", "Setup", "OpenClaw"],
   },
+  {
+    slug: "multi-agent-content-workflow",
+    title: "Creating a Multi-Agent Workflow for Content Creation",
+    description:
+      "Wire up researcher, writer, editor, and SEO agents into one automated OpenClaw pipeline that produces publish-ready articles from any topic.",
+    time: "10-15 min",
+    tags: ["Multi-Agent", "Content Creation", "Automation"],
+  },
+  {
+    slug: "agent-auth-api-security",
+    title: "Agent Authentication & API Security",
+    description:
+      "Secure your OpenClaw gateway with token-based auth, encrypted secrets, rate limiting, and TLS for production-ready agents.",
+    time: "10-15 min",
+    tags: ["Security", "Authentication", "API"],
+  },
+  {
+    slug: "openclaw-google-sheets-mcp",
+    title: "Connecting OpenClaw Agents to Google Sheets via MCP",
+    description:
+      "Set up a Google Sheets MCP server so your OpenClaw agents can read, write, and analyze spreadsheet data in real time.",
+    time: "10-15 min",
+    tags: ["MCP", "Google Sheets", "Integrations"],
+  },
+  {
+    slug: "data-pipeline-agent",
+    title: "Building a Data Pipeline Agent for ETL Tasks",
+    description:
+      "Build an autonomous agent that extracts, transforms, and loads data on a schedule using OpenClaw pipelines and TypeScript transforms.",
+    time: "10-15 min",
+    tags: ["ETL", "Data Pipelines", "Automation"],
+  },
+  {
+    slug: "openclaw-setup-linux",
+    title: "Setting Up OpenClaw on Linux",
+    description:
+      "Step-by-step guide to installing OpenClaw on Ubuntu or Debian, from system updates to launching your first AI agent.",
+    time: "10-15 min",
+    tags: ["OpenClaw", "Linux", "Setup"],
+  },
+  {
+    slug: "slack-bot-openclaw-agents",
+    title: "How to Build an AI Slack Bot with OpenClaw Agents",
+    description:
+      "Build and deploy an AI-powered Slack bot using OpenClaw agents — from Slack app setup to production deployment in under 15 minutes.",
+    time: "10-15 min",
+    tags: ["Slack Bot", "AI Agents", "OpenClaw"],
+  },
+  {
+    slug: "email-automation-agent",
+    title: "Building an Email Automation Agent",
+    description:
+      "Connect OpenClaw to your inbox with triage rules that sort, label, and draft replies to email automatically.",
+    time: "10-15 min",
+    tags: ["Email", "Automation", "IMAP"],
+  },
+  {
+    slug: "deploying-agents-remote-server",
+    title: "Deploying OpenClaw Agents to a Remote Server",
+    description:
+      "Package, transfer, and deploy your OpenClaw agents to a remote Linux server with persistent uptime and automatic restarts.",
+    time: "10-15 min",
+    tags: ["Deployment", "DevOps", "Agents"],
+  },
+  {
+    slug: "openclaw-automated-code-review",
+    title: "Automated Code Review with OpenClaw",
+    description:
+      "Set up an OpenClaw agent that watches your GitHub repos and posts AI-powered code reviews on every pull request.",
+    time: "8-12 min",
+    tags: ["Code Review", "GitHub", "Automation"],
+  },
+  {
+    slug: "building-custom-mcp-server",
+    title: "Building a Custom MCP Server from Scratch",
+    description:
+      "Create your own Model Context Protocol server with custom tools, test it with the MCP Inspector, and connect it to Claude or OpenClaw.",
+    time: "10-15 min",
+    tags: ["MCP", "TypeScript", "Tooling"],
+  },
+  {
+    slug: "agent-long-term-memory-vector-db",
+    title: "How to Add Long-Term Memory to AI Agents with a Vector Database",
+    description:
+      "Add persistent long-term memory to your AI agents using Qdrant and OpenClaw. Store and recall context across conversations with vector embeddings.",
+    time: "10-15 min",
+    tags: ["Agent Memory", "Vector Database", "Qdrant"],
+  },
 ];
 
 export default function GuidesPage() {

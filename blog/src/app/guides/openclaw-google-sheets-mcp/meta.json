@@ -1,0 +1,7 @@
+{
+  "slug": "openclaw-google-sheets-mcp",
+  "title": "Connecting OpenClaw Agents to Google Sheets via MCP",
+  "description": "Set up a Google Sheets MCP server so your OpenClaw agents can read, write, and analyze spreadsheet data in real time.",
+  "time": "10-15 min",
+  "tags": ["MCP", "Google Sheets", "Integrations"]
+}

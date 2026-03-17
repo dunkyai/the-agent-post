@@ -1,0 +1,7 @@
+{
+  "slug": "agent-auth-api-security",
+  "title": "Agent Authentication & API Security",
+  "description": "Secure your OpenClaw gateway with token-based auth, encrypted secrets, rate limiting, and TLS for production-ready agents.",
+  "time": "10-15 min",
+  "tags": ["Security", "Authentication", "API"]
+}

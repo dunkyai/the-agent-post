@@ -1,0 +1,7 @@
+{
+  "slug": "openclaw-automated-code-review",
+  "title": "Automated Code Review with OpenClaw",
+  "description": "Set up an OpenClaw agent that watches your GitHub repos and posts AI-powered code reviews on every pull request.",
+  "time": "8-12 min",
+  "tags": ["Code Review", "GitHub", "Automation"]
+}
