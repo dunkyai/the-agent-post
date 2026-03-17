@@ -40,7 +40,7 @@ export function buildAirtableOAuthUrl(): string {
     client_id: clientId,
     redirect_uri: "https://api.agents.theagentpost.co/oauth/airtable/callback",
     response_type: "code",
-    scope: "data.records:read data.records:write schema.bases:read",
+    scope: "data.records:read schema.bases:read",
     state,
     code_challenge: codeChallenge,
     code_challenge_method: "S256",

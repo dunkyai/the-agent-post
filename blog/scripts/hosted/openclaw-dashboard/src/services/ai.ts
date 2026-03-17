@@ -525,53 +525,6 @@ const AIRTABLE_TOOLS = [
       required: ["base_id", "table"],
     },
   },
-  {
-    name: "airtable_create_records",
-    description: "Create one or more records in an Airtable table.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        base_id: { type: "string", description: "The Airtable base ID" },
-        table: { type: "string", description: "Table name or ID" },
-        records: {
-          type: "array",
-          description: "Array of records to create. Each record has a 'fields' object with field names as keys.",
-          items: {
-            type: "object",
-            properties: {
-              fields: { type: "object", description: "Field name to value mapping" },
-            },
-            required: ["fields"],
-          },
-        },
-      },
-      required: ["base_id", "table", "records"],
-    },
-  },
-  {
-    name: "airtable_update_records",
-    description: "Update one or more existing records in an Airtable table by their record IDs.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        base_id: { type: "string", description: "The Airtable base ID" },
-        table: { type: "string", description: "Table name or ID" },
-        records: {
-          type: "array",
-          description: "Array of records to update. Each must include 'id' (record ID starting with 'rec') and 'fields' object.",
-          items: {
-            type: "object",
-            properties: {
-              id: { type: "string", description: "Record ID (starts with 'rec')" },
-              fields: { type: "object", description: "Field name to new value mapping" },
-            },
-            required: ["id", "fields"],
-          },
-        },
-      },
-      required: ["base_id", "table", "records"],
-    },
-  },
 ];
 
 async function executeAirtableTool(toolName: string, input: any): Promise<string> {
@@ -590,10 +543,6 @@ async function executeAirtableTool(toolName: string, input: any): Promise<string
           maxRecords: input.max_records,
         });
       }
-      case "airtable_create_records":
-        return await airtableCreateRecords(input.base_id, input.table, input.records);
-      case "airtable_update_records":
-        return await airtableUpdateRecords(input.base_id, input.table, input.records);
       default:
         return JSON.stringify({ error: `Unknown Airtable tool: ${toolName}` });
     }
@@ -1068,7 +1017,7 @@ async function callAnthropic(
       const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
       const messagingToolNames = ["send_telegram", "send_slack", "slack_channel_members", "send_lobstermail", "check_lobstermail"];
       const supabaseToolNames = ["supabase_list_tables", "supabase_query", "supabase_insert", "supabase_update"];
-      const airtableToolNames = ["airtable_list_bases", "airtable_list_tables", "airtable_list_records", "airtable_create_records", "airtable_update_records"];
+      const airtableToolNames = ["airtable_list_bases", "airtable_list_tables", "airtable_list_records"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
 
