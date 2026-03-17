@@ -40,7 +40,7 @@ const sections = [
   {
     title: "Data Storage & Security",
     items: [
-      "Each agent runs in its own isolated Docker container with a dedicated SQLite database",
+      "Each agent runs in its own isolated Docker container with a dedicated database",
       "All sensitive credentials (API keys, OAuth tokens, bot tokens) are encrypted at rest using AES-256",
       "Dashboard access is protected by a unique gateway token per instance",
       "TLS encryption in transit for all connections",
