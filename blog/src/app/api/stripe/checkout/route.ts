@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
       payment_method_types: ["card"],
       customer_email: email,
       line_items: [{ price: priceId, quantity: 1 }],
+      allow_promotion_codes: true,
       success_url: `${req.nextUrl.origin}/hosted/success`,
       cancel_url: `${req.nextUrl.origin}/hosted`,
     });
