@@ -262,11 +262,21 @@ router.post("/integrations/google/disconnect", async (req: Request, res: Respons
 
 router.post("/integrations/supabase/connect", async (req: Request, res: Response) => {
   try {
-    const projectUrl = (req.body.project_url || "").trim();
+    const rawUrl = (req.body.project_url || "").trim();
     const apiKey = (req.body.api_key || "").trim();
 
-    if (!projectUrl) {
+    if (!rawUrl) {
       res.redirect(303, "/integrations?flash=Project+URL+is+required");
+      return;
+    }
+
+    // Normalize to origin only (strips paths, credentials, trailing slashes)
+    let projectUrl: string;
+    try {
+      const urlWithScheme = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
+      projectUrl = new URL(urlWithScheme).origin;
+    } catch {
+      res.redirect(303, "/integrations?flash=Invalid+Project+URL");
       return;
     }
     if (!apiKey) {
@@ -280,7 +290,9 @@ router.post("/integrations/supabase/connect", async (req: Request, res: Response
     const permissions = ["read", ...permsList.filter((p: string) => ["insert", "update"].includes(p))];
 
     // Test connection
+    console.log(`Supabase connect: testing ${projectUrl}`);
     await testSupabaseConnection(projectUrl, apiKey);
+    console.log("Supabase connect: test passed");
 
     const config = encrypt(JSON.stringify({ project_url: projectUrl, api_key: apiKey, permissions }));
     startSupabase({ projectUrl, apiKey, permissions });
@@ -288,6 +300,7 @@ router.post("/integrations/supabase/connect", async (req: Request, res: Response
     res.redirect(303, "/integrations?flash=Supabase+connected");
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("Supabase connect error:", message, err instanceof Error ? err.cause : "");
     upsertIntegration("supabase", "{}", "error", message);
     res.redirect(303, "/integrations?flash=Supabase+error:+" + encodeURIComponent(message));
   }

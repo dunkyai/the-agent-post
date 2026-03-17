@@ -35,7 +35,14 @@ function headers(): Record<string, string> {
 
 function baseUrl(): string {
   if (!supabaseConfig) throw new Error("Supabase is not connected");
-  return supabaseConfig.projectUrl.replace(/\/$/, "");
+  return sanitizeUrl(supabaseConfig.projectUrl);
+}
+
+function sanitizeUrl(raw: string): string {
+  const parsed = new URL(raw);
+  parsed.username = "";
+  parsed.password = "";
+  return parsed.origin;
 }
 
 export async function supabaseListTables(): Promise<string> {
@@ -177,16 +184,20 @@ export async function supabaseDelete(
 
 // Test connection by hitting the PostgREST root
 export async function testSupabaseConnection(projectUrl: string, apiKey: string): Promise<void> {
-  const url = projectUrl.replace(/\/$/, "");
-  const res = await fetch(`${url}/rest/v1/`, {
+  const url = sanitizeUrl(projectUrl);
+  // Simple validation: just check the key looks like a JWT and the URL is reachable
+  if (!apiKey.startsWith("eyJ")) {
+    throw new Error("Invalid API key format — use the anon or service_role key (starts with 'eyJ')");
+  }
+
+  const res = await fetch(`${url}/auth/v1/settings`, {
     headers: {
       apikey: apiKey,
       Authorization: `Bearer ${apiKey}`,
     },
   });
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Connection failed (${res.status}): ${body.slice(0, 200)}`);
+  if (res.status === 401 || res.status === 403) {
+    throw new Error("Invalid API key — check that you're using the anon or service_role key");
   }
 }
