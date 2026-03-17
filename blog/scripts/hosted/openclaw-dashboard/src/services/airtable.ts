@@ -85,15 +85,19 @@ async function refreshAccessToken(): Promise<string> {
   if (!airtableConfig) throw new Error("Airtable is not connected");
 
   const clientId = process.env.AIRTABLE_CLIENT_ID;
+  const clientSecret = process.env.AIRTABLE_CLIENT_SECRET;
   if (!clientId) throw new Error("AIRTABLE_CLIENT_ID not configured");
+  if (!clientSecret) throw new Error("AIRTABLE_CLIENT_SECRET not configured");
 
   const res = await fetch("https://airtable.com/oauth2/v1/token", {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
+    },
     body: new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: airtableConfig.refresh_token,
-      client_id: clientId,
     }),
   });
 
