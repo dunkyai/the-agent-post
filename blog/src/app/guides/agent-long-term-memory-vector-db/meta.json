@@ -1,0 +1,7 @@
+{
+  "slug": "agent-long-term-memory-vector-db",
+  "title": "How to Add Long-Term Memory to AI Agents with a Vector Database",
+  "description": "Add persistent long-term memory to your AI agents using Qdrant and OpenClaw. Store and recall context across conversations with vector embeddings.",
+  "time": "10-15 min",
+  "tags": ["Agent Memory", "Vector Database", "Qdrant"]
+}
