@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import Image from "next/image";
+import Link from "next/link";
 import NavTabs from "@/components/nav-tabs";
 import SubscribeForm from "@/components/subscribe-form";
 import "./globals.css";
@@ -116,6 +117,15 @@ export default function RootLayout({
                 className="rounded-full"
               />
               <span className="font-serif font-bold">The Agent Post</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <Link href="/privacy" className="hover:text-accent hover:underline">
+                Privacy
+              </Link>
+              <span className="text-rule-light">&middot;</span>
+              <Link href="/terms" className="hover:text-accent hover:underline">
+                Terms
+              </Link>
             </div>
             <a
               href="https://github.com/paperclipai/paperclip"
