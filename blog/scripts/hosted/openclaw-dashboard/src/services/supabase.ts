@@ -180,7 +180,16 @@ async function supabaseQueryInternal(
   }
 
   const url = `${baseUrl()}/rest/v1/${encodeURIComponent(table)}?${params}`;
-  const res = await fetch(url, { headers: headers() });
+
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: headers(), signal: AbortSignal.timeout(15_000) });
+  } catch (err: any) {
+    if (err?.name === "TimeoutError" || err?.name === "AbortError") {
+      return { rows: [], error: `Query timed out on table "${table}". This table may be too large or unindexed for this query.`, raw: "57014" };
+    }
+    throw err;
+  }
 
   if (!res.ok) {
     const body = await res.text();
@@ -288,4 +297,73 @@ export async function testSupabaseConnection(projectUrl: string, apiKey: string)
   if (res.status === 401 || res.status === 403) {
     throw new Error("Invalid API key — check that you're using the anon or service_role key");
   }
+}
+
+// Probe tables after connecting to detect slow/unindexed ones
+export async function probeSupabaseHealth(): Promise<{
+  totalTables: number;
+  slowTables: string[];
+  fastTables: string[];
+  schemaTimeout: boolean;
+}> {
+  if (!supabaseConfig) return { totalTables: 0, slowTables: [], fastTables: [], schemaTimeout: false };
+
+  // First, fetch schema (with a 10-second timeout for the OpenAPI spec itself)
+  let tables: string[];
+  try {
+    const res = await fetch(`${baseUrl()}/rest/v1/`, {
+      headers: headers(),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!res.ok) {
+      return { totalTables: 0, slowTables: [], fastTables: [], schemaTimeout: true };
+    }
+
+    const data: any = await res.json();
+    tables = Object.keys(data.paths || {})
+      .map((p) => p.replace(/^\//, ""))
+      .filter((t) => t && !t.startsWith("rpc/"));
+
+    // Cache schema while we have it
+    schemaCache = { tables, definitions: data.definitions || {}, fetchedAt: Date.now() };
+  } catch {
+    return { totalTables: 0, slowTables: [], fastTables: [], schemaTimeout: true };
+  }
+
+  if (tables.length === 0) {
+    return { totalTables: 0, slowTables: [], fastTables: [], schemaTimeout: false };
+  }
+
+  // Probe up to 10 tables in parallel with 5-second timeouts
+  const probeTables = tables.slice(0, 10);
+  const results = await Promise.allSettled(
+    probeTables.map(async (table) => {
+      const res = await fetch(
+        `${baseUrl()}/rest/v1/${encodeURIComponent(table)}?select=*&limit=1`,
+        { headers: headers(), signal: AbortSignal.timeout(5_000) }
+      );
+      if (!res.ok) {
+        const body = await res.text();
+        if (body.includes("57014") || body.includes("statement timeout")) {
+          throw new Error("timeout");
+        }
+      }
+      // Consume body to complete the request
+      await res.json();
+      return table;
+    })
+  );
+
+  const slowTables: string[] = [];
+  const fastTables: string[] = [];
+  for (let i = 0; i < results.length; i++) {
+    if (results[i].status === "fulfilled") {
+      fastTables.push(probeTables[i]);
+    } else {
+      slowTables.push(probeTables[i]);
+    }
+  }
+
+  return { totalTables: tables.length, slowTables, fastTables, schemaTimeout: false };
 }

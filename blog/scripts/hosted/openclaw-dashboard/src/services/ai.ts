@@ -1233,8 +1233,10 @@ CRITICAL Supabase query rules:
 1. ALWAYS call supabase_describe_table first to see column names and types before querying.
 2. If you're unsure which columns contain the data the user needs, show them a list of relevant column names and ask which ones to query. Don't guess — ask.
 3. For array columns (type: "array"), use cs.{value} to filter (contains), NEVER use eq or ilike on arrays.
-4. If a query returns a timeout or 500 error, simplify: use fewer filters, always include a select with only the columns you need, and keep limit small.
-5. Prefer fetching a broader set with limit and filtering the results yourself rather than using complex PostgREST filters that may timeout on large tables.`;
+4. If a query times out or returns a 500 error, do NOT keep retrying different tables. After 2 failed queries, STOP and tell the user which tables/views timed out and suggest they try a smaller query or ask their database admin to add indexes.
+5. Select ONLY 2-5 columns per query. Never select more than 5 columns at once.
+6. Always use a small limit (10-20). You can ask for more if the first batch works.
+7. Prefer fetching a broader set with a small limit and filtering the results yourself rather than using complex PostgREST filters that may timeout on unindexed tables.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${supabaseContext}` : supabaseContext;
   }
 

@@ -5,7 +5,7 @@ import { startTelegram, stopTelegram, isTelegramRunning } from "../services/tele
 import { buildSlackOAuthUrl, stopSlack, isSlackRunning } from "../services/slack";
 import { signupAndCreateInbox, createInbox, startEmail, stopEmail, isEmailRunning } from "../services/email";
 import { buildOAuthUrl, stopGoogle, isGoogleRunning } from "../services/google";
-import { startSupabase, stopSupabase, testSupabaseConnection } from "../services/supabase";
+import { startSupabase, stopSupabase, testSupabaseConnection, probeSupabaseHealth } from "../services/supabase";
 import { buildAirtableOAuthUrl, stopAirtable } from "../services/airtable";
 
 const router = Router();
@@ -297,7 +297,23 @@ router.post("/integrations/supabase/connect", async (req: Request, res: Response
     const config = encrypt(JSON.stringify({ project_url: projectUrl, api_key: apiKey, permissions }));
     startSupabase({ projectUrl, apiKey, permissions });
     upsertIntegration("supabase", config, "connected");
-    res.redirect(303, "/integrations?flash=Supabase+connected");
+
+    // Probe tables in the background to detect slow/unindexed ones
+    const probe = await probeSupabaseHealth();
+    console.log(`Supabase probe: ${probe.totalTables} tables, ${probe.slowTables.length} slow, ${probe.fastTables.length} fast`);
+
+    if (probe.schemaTimeout) {
+      res.redirect(303, "/integrations?flash=" + encodeURIComponent(
+        "Supabase connected — Warning: your database schema took too long to load. Queries may be very slow. Consider adding indexes to your tables."
+      ));
+    } else if (probe.slowTables.length > 0) {
+      const warning = probe.slowTables.length === probe.totalTables
+        ? `Supabase connected — Warning: all ${probe.totalTables} tables appear to be slow (possibly missing indexes). Queries will likely time out. Consider adding indexes or using smaller tables.`
+        : `Supabase connected — Warning: ${probe.slowTables.length} of ${Math.min(probe.totalTables, 10)} tables tested are slow to query (${probe.slowTables.slice(0, 5).join(", ")}${probe.slowTables.length > 5 ? "..." : ""}). These may be missing database indexes.`;
+      res.redirect(303, "/integrations?flash=" + encodeURIComponent(warning));
+    } else {
+      res.redirect(303, "/integrations?flash=Supabase+connected");
+    }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Supabase connect error:", message, err instanceof Error ? err.cause : "");
