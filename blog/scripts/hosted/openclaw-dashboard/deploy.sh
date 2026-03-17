@@ -41,6 +41,8 @@ run_container() {
       -e SLACK_CLIENT_ID="$SLACK_CLIENT_ID" \\
       -e AIRTABLE_CLIENT_ID="$AIRTABLE_CLIENT_ID" \\
       -e AIRTABLE_CLIENT_SECRET="$AIRTABLE_CLIENT_SECRET" \\
+      -e RESEND_API_KEY="$RESEND_API_KEY" \\
+      -e PROVISIONING_API_SECRET="$PROVISIONING_API_SECRET" \\
       -p "$PORT:3000" \\
       --add-host=host.docker.internal:host-gateway \\
       --restart unless-stopped \\
