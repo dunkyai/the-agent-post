@@ -184,6 +184,14 @@ const guides = [
     time: "10-15 min",
     tags: ["Multi-Agent", "Channels", "Communication"],
   },
+  {
+    slug: "openclaw-email-automation",
+    title: "Build an Email Automation Agent",
+    description:
+      "Connect OpenClaw to Gmail, write triage rules, and automate labeling, archiving, and draft replies with an AI agent.",
+    time: "10-15 min",
+    tags: ["Email", "MCP", "Automation"],
+  },
 ];
 
 export default function GuidesPage() {
