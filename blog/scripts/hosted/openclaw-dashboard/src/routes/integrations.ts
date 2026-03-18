@@ -7,6 +7,7 @@ import { signupAndCreateInbox, createInbox, startEmail, stopEmail, isEmailRunnin
 import { buildOAuthUrl, stopGoogle, isGoogleRunning } from "../services/google";
 import { startSupabase, stopSupabase, testSupabaseConnection, probeSupabaseHealth } from "../services/supabase";
 import { buildAirtableOAuthUrl, stopAirtable } from "../services/airtable";
+import { buildNotionOAuthUrl, stopNotion, getNotionWorkspaceName } from "../services/notion";
 
 const router = Router();
 
@@ -56,6 +57,15 @@ router.get("/integrations", (req: Request, res: Response) => {
     } catch {}
   }
 
+  let notionWorkspaceName: string | null = null;
+  const notionIntegration = integrationMap["notion"];
+  if (notionIntegration && notionIntegration.status === "connected") {
+    try {
+      const config = JSON.parse(decrypt(notionIntegration.config));
+      notionWorkspaceName = config.workspace_name || null;
+    } catch {}
+  }
+
   let supabaseProjectUrl: string | null = null;
   let supabasePermissions: string[] = ["read"];
   const supabaseIntegration = integrationMap["supabase"];
@@ -87,6 +97,10 @@ router.get("/integrations", (req: Request, res: Response) => {
       permissions: supabasePermissions,
     },
     airtable: integrationMap["airtable"] || { status: "disconnected", error_message: null },
+    notion: {
+      ...(integrationMap["notion"] || { status: "disconnected", error_message: null }),
+      workspace_name: notionWorkspaceName,
+    },
     flash: req.query.flash || null,
   });
 });
@@ -368,6 +382,22 @@ router.post("/integrations/airtable/disconnect", async (req: Request, res: Respo
   stopAirtable();
   upsertIntegration("airtable", "{}", "disconnected");
   res.redirect(303, "/integrations?flash=Airtable+disconnected");
+});
+
+router.post("/integrations/notion/connect", (req: Request, res: Response) => {
+  try {
+    const url = buildNotionOAuthUrl();
+    res.redirect(url);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.redirect(303, "/integrations?flash=Notion+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/notion/disconnect", async (req: Request, res: Response) => {
+  stopNotion();
+  upsertIntegration("notion", "{}", "disconnected");
+  res.redirect(303, "/integrations?flash=Notion+disconnected");
 });
 
 export default router;

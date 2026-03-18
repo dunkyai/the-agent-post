@@ -6,6 +6,7 @@ import { startGoogle } from "../services/google";
 import { startSlack, handleSlackEvent } from "../services/slack";
 import { isEmailAllowed, sanitizeEmailContent } from "../services/email";
 import { startAirtable } from "../services/airtable";
+import { startNotion } from "../services/notion";
 
 const router = Router();
 
@@ -232,6 +233,30 @@ router.post("/webhook/airtable/tokens", async (req: Request, res: Response) => {
   } catch (err: unknown) {
     console.error("Airtable token delivery error:", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "Failed to store Airtable tokens" });
+  }
+});
+
+// Notion OAuth — provisioning API delivers tokens here after consent
+router.post("/webhook/notion/tokens", async (req: Request, res: Response) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (token !== process.env.GATEWAY_TOKEN) {
+    res.sendStatus(401);
+    return;
+  }
+
+  try {
+    const { access_token, workspace_name, workspace_id, bot_id } = req.body;
+
+    const configData = { access_token, workspace_name, workspace_id, bot_id };
+    const config = encrypt(JSON.stringify(configData));
+    upsertIntegration("notion", config, "connected");
+    startNotion(configData);
+
+    console.log(`Notion connected (workspace: ${workspace_name})`);
+    res.json({ ok: true });
+  } catch (err: unknown) {
+    console.error("Notion token delivery error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Failed to store Notion tokens" });
   }
 });
 
