@@ -7,9 +7,43 @@
   var config = window.__chatConfig || {};
   var agentName = config.agentName || "Agent";
   var userName = config.userName || "You";
+  var messageCount = messages.querySelectorAll(".chat-message").length;
+  var memorySaved = false;
 
   function scrollToBottom() {
     messages.scrollTop = messages.scrollHeight;
+  }
+
+  function maybeShowMemoryLink() {
+    if (memorySaved || messages.querySelector(".memory-prompt")) return;
+    var total = messages.querySelectorAll(".chat-message").length;
+    if (total < 6) return;
+    var link = document.createElement("div");
+    link.className = "memory-prompt";
+    link.style.cssText = "text-align: center; margin: 12px 0; font-size: 13px;";
+    link.innerHTML = '<a href="#" style="color: var(--accent); text-decoration: underline;">Save to memory so I will remember in the future</a>';
+    link.querySelector("a").addEventListener("click", function (e) {
+      e.preventDefault();
+      if (memorySaved) return;
+      memorySaved = true;
+      link.innerHTML = '<span style="color: var(--text-secondary);">Saving...</span>';
+      fetch("/chat/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Please review our conversation and save the important details, decisions, and preferences to your memory so you remember them in the future." }),
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          link.innerHTML = '<span style="color: var(--text-secondary);">Saved to memory</span>';
+          addMessage("assistant", data.content);
+        })
+        .catch(function () {
+          link.innerHTML = '<span style="color: var(--danger);">Failed to save</span>';
+          memorySaved = false;
+        });
+    });
+    messages.appendChild(link);
+    scrollToBottom();
   }
 
   function addMessage(role, content) {
@@ -76,6 +110,7 @@
         var t = messages.querySelector(".thinking-indicator");
         if (t) t.remove();
         addMessage("assistant", data.content);
+        maybeShowMemoryLink();
       })
       .catch(function (err) {
         var t = messages.querySelector(".thinking-indicator");

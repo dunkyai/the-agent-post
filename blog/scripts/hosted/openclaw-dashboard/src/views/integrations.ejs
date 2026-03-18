@@ -135,7 +135,9 @@
         <span class="toggle-arrow"></span>
       </summary>
       <div class="integration-body">
+        <% const allAvailableServices = ['gmail', 'gmail_send', 'calendar', 'drive', 'contacts', 'docs', 'sheets']; %>
         <% for (const acct of googleAccounts) { %>
+          <% const missingServices = allAvailableServices.filter(s => !acct.services.includes(s)); %>
           <div style="padding: 12px 0; border-bottom: 1px solid var(--rule-light);">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
               <code style="font-size: 14px; padding: 4px 8px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px;"><%= acct.email %></code>
@@ -153,33 +155,47 @@
                 <% } %>
               <% } %>
             </div>
+            <% if (missingServices.length > 0) { %>
+              <div style="margin-top: 8px; font-size: 13px; color: var(--text-secondary);">
+                To add more services (e.g. Docs, Sheets), disconnect and reconnect with the services you want.
+              </div>
+            <% } %>
           </div>
         <% } %>
 
+        <% const connectedServices = googleAccounts.flatMap(a => a.services); %>
         <div style="<%= googleAccounts.length > 0 ? 'padding-top: 12px;' : '' %>">
           <form method="POST" action="/integrations/google/connect">
             <div class="form-group">
               <label>Select Google services to connect:</label>
               <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
                 <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="checkbox" name="services" value="gmail" checked>
+                  <input type="checkbox" name="services" value="gmail" <%= connectedServices.includes('gmail') || googleAccounts.length === 0 ? 'checked' : '' %>>
                   <strong>Gmail</strong> &mdash; Read and label emails
                 </label>
                 <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; padding-left: 28px;">
-                  <input type="checkbox" name="services" value="gmail_send">
+                  <input type="checkbox" name="services" value="gmail_send" <%= connectedServices.includes('gmail_send') ? 'checked' : '' %>>
                   <strong>Draft &amp; Send</strong> &mdash; Create drafts and send emails
                 </label>
                 <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="checkbox" name="services" value="calendar">
+                  <input type="checkbox" name="services" value="calendar" <%= connectedServices.includes('calendar') ? 'checked' : '' %>>
                   <strong>Calendar</strong> &mdash; View and create events
                 </label>
                 <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="checkbox" name="services" value="drive">
+                  <input type="checkbox" name="services" value="drive" <%= connectedServices.includes('drive') ? 'checked' : '' %>>
                   <strong>Drive</strong> &mdash; Search and read files
                 </label>
                 <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="checkbox" name="services" value="contacts">
+                  <input type="checkbox" name="services" value="contacts" <%= connectedServices.includes('contacts') ? 'checked' : '' %>>
                   <strong>Contacts</strong> &mdash; Search contacts
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                  <input type="checkbox" name="services" value="docs" <%= connectedServices.includes('docs') ? 'checked' : '' %>>
+                  <strong>Docs</strong> &mdash; Create and edit Google Docs
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                  <input type="checkbox" name="services" value="sheets" <%= connectedServices.includes('sheets') ? 'checked' : '' %>>
+                  <strong>Sheets</strong> &mdash; Create, read, and write spreadsheets
                 </label>
               </div>
               <div class="hint" style="margin-top: 8px;">At least one service must be selected. Your agent will only access services you enable.</div>

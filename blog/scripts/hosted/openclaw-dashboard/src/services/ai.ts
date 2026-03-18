@@ -11,6 +11,8 @@ import {
   calendarListEvents, calendarCreateEvent, calendarUpdateEvent,
   driveSearch, driveReadFile, extractDriveFileId,
   contactsSearch,
+  docsCreate, docsRead, docsAppend, docsInsert,
+  sheetsCreate, sheetsRead, sheetsWrite, sheetsAppend, sheetsListSheets,
 } from "./google";
 import { sendTelegramMessage, isTelegramRunning } from "./telegram";
 import { sendSlackMessage, isSlackRunning, getChannelMembers } from "./slack";
@@ -329,12 +331,13 @@ const TELEGRAM_MESSAGING_TOOLS = [
 const SLACK_MESSAGING_TOOLS = [
   {
     name: "send_slack",
-    description: "Send a message to a Slack channel. Use when the user asks you to message someone on Slack, or when you need to proactively reach out via Slack.",
+    description: "Send a message to a Slack channel or DM. Only use this to send messages to OTHER channels — do NOT use this to reply to the current conversation (just return your reply text instead). When replying in a thread, always include thread_ts.",
     input_schema: {
       type: "object" as const,
       properties: {
         channel: { type: "string", description: "The Slack channel ID to send to" },
         message: { type: "string", description: "The message text to send" },
+        thread_ts: { type: "string", description: "Thread timestamp to reply in a thread. Include this to keep the conversation threaded." },
       },
       required: ["channel", "message"],
     },
@@ -385,7 +388,7 @@ async function executeMessagingTool(toolName: string, input: any): Promise<strin
         await sendTelegramMessage(input.chat_id, input.message);
         return JSON.stringify({ success: true, channel: "telegram", chat_id: input.chat_id });
       case "send_slack":
-        await sendSlackMessage(input.channel, input.message);
+        await sendSlackMessage(input.channel, input.message, input.thread_ts);
         return JSON.stringify({ success: true, channel: "slack", channel_id: input.channel });
       case "slack_channel_members":
         return await getChannelMembers(input.channel);
@@ -812,6 +815,130 @@ const GOOGLE_CONTACTS_TOOLS = [
   },
 ];
 
+const GOOGLE_DOCS_TOOLS = [
+  {
+    name: "docs_create",
+    description: "Create a new Google Doc with a title and optional initial text content. Returns the document ID and URL.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string", description: "Document title" },
+        content: { type: "string", description: "Optional initial text content for the document" },
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    name: "docs_read",
+    description: "Read the text content of a Google Doc by its document ID. Returns the title and full text content. Use drive_search to find document IDs, or extract from a Google Docs URL (the ID is the long string after /d/ in the URL).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        document_id: { type: "string", description: "The Google Docs document ID" },
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
+      required: ["document_id"],
+    },
+  },
+  {
+    name: "docs_append",
+    description: "Append text to the end of a Google Doc. Use this to add new content at the bottom of an existing document.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        document_id: { type: "string", description: "The Google Docs document ID" },
+        text: { type: "string", description: "Text to append to the end of the document" },
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
+      required: ["document_id", "text"],
+    },
+  },
+  {
+    name: "docs_insert",
+    description: "Insert text at a specific character index position in a Google Doc. Index 1 is the start of the document. Use docs_read first to understand the document structure and find the right insertion point.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        document_id: { type: "string", description: "The Google Docs document ID" },
+        text: { type: "string", description: "Text to insert" },
+        index: { type: "number", description: "Character index position to insert at (1 = start of document)" },
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
+      required: ["document_id", "text", "index"],
+    },
+  },
+];
+
+const GOOGLE_SHEETS_TOOLS = [
+  {
+    name: "sheets_create",
+    description: "Create a new Google Spreadsheet. Optionally specify names for the initial sheet tabs.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string", description: "Spreadsheet title" },
+        sheet_titles: { type: "array", items: { type: "string" }, description: "Optional list of sheet tab names (default: one sheet called 'Sheet1')" },
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    name: "sheets_read",
+    description: "Read a range of cells from a Google Spreadsheet. Returns the values as a 2D array. Use A1 notation for the range (e.g. 'Sheet1!A1:D10', 'Sheet1!A:A' for a full column). Use sheets_list_sheets first to see available sheet tabs.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        spreadsheet_id: { type: "string", description: "The spreadsheet ID (from the URL or sheets_create result)" },
+        range: { type: "string", description: "Cell range in A1 notation, e.g. 'Sheet1!A1:D10'" },
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
+      required: ["spreadsheet_id", "range"],
+    },
+  },
+  {
+    name: "sheets_write",
+    description: "Write values to a specific range of cells in a Google Spreadsheet. Overwrites existing values in the range. Values are a 2D array where each inner array is a row.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        spreadsheet_id: { type: "string", description: "The spreadsheet ID" },
+        range: { type: "string", description: "Cell range in A1 notation, e.g. 'Sheet1!A1:C3'" },
+        values: { type: "array", items: { type: "array", items: {} }, description: "2D array of values. Each inner array is a row, e.g. [['Name','Age'],['Alice',30]]" },
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
+      required: ["spreadsheet_id", "range", "values"],
+    },
+  },
+  {
+    name: "sheets_append",
+    description: "Append rows to the end of data in a Google Spreadsheet. Finds the last row with data and adds new rows below it. Values are a 2D array where each inner array is a row.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        spreadsheet_id: { type: "string", description: "The spreadsheet ID" },
+        range: { type: "string", description: "Sheet range to append to, e.g. 'Sheet1!A:E' or 'Sheet1'" },
+        values: { type: "array", items: { type: "array", items: {} }, description: "2D array of rows to append, e.g. [['Alice',30],['Bob',25]]" },
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
+      required: ["spreadsheet_id", "range", "values"],
+    },
+  },
+  {
+    name: "sheets_list_sheets",
+    description: "List all sheet tabs in a Google Spreadsheet. Returns tab names, IDs, and grid dimensions. Use this to discover available sheets before reading or writing.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        spreadsheet_id: { type: "string", description: "The spreadsheet ID" },
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
+      required: ["spreadsheet_id"],
+    },
+  },
+];
+
 async function executeGoogleTool(toolName: string, input: any): Promise<string> {
   if (!isGoogleRunning()) {
     return JSON.stringify({ error: "Google is not connected. Ask the user to connect Google in the integrations page." });
@@ -850,6 +977,24 @@ async function executeGoogleTool(toolName: string, input: any): Promise<string> 
       }
       case "contacts_search":
         return await contactsSearch(input.query, acct);
+      case "docs_create":
+        return await docsCreate(input.title, input.content, acct);
+      case "docs_read":
+        return await docsRead(input.document_id, acct);
+      case "docs_append":
+        return await docsAppend(input.document_id, input.text, acct);
+      case "docs_insert":
+        return await docsInsert(input.document_id, input.text, input.index, acct);
+      case "sheets_create":
+        return await sheetsCreate(input.title, input.sheet_titles, acct);
+      case "sheets_read":
+        return await sheetsRead(input.spreadsheet_id, input.range, acct);
+      case "sheets_write":
+        return await sheetsWrite(input.spreadsheet_id, input.range, input.values, acct);
+      case "sheets_append":
+        return await sheetsAppend(input.spreadsheet_id, input.range, input.values, acct);
+      case "sheets_list_sheets":
+        return await sheetsListSheets(input.spreadsheet_id, acct);
       default:
         return JSON.stringify({ error: `Unknown Google tool: ${toolName}` });
     }
@@ -979,6 +1124,8 @@ async function callAnthropic(
     if (googleServices.includes("calendar")) tools.push(...GOOGLE_CALENDAR_TOOLS);
     if (googleServices.includes("drive")) tools.push(...GOOGLE_DRIVE_TOOLS);
     if (googleServices.includes("contacts")) tools.push(...GOOGLE_CONTACTS_TOOLS);
+    if (googleServices.includes("docs")) tools.push(...GOOGLE_DOCS_TOOLS);
+    if (googleServices.includes("sheets")) tools.push(...GOOGLE_SHEETS_TOOLS);
   }
 
   // Only add public Google Doc tool if Drive is not connected (Drive has full OAuth access)
@@ -1038,6 +1185,8 @@ async function callAnthropic(
         "calendar_list_events", "calendar_create_event", "calendar_update_event",
         "drive_search", "drive_read_file", "drive_open_url",
         "contacts_search",
+        "docs_create", "docs_read", "docs_append", "docs_insert",
+        "sheets_create", "sheets_read", "sheets_write", "sheets_append", "sheets_list_sheets",
       ];
       const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
       const messagingToolNames = ["send_telegram", "send_slack", "slack_channel_members", "send_lobstermail", "check_lobstermail"];
@@ -1199,7 +1348,7 @@ export async function processMessage(
   {
     const channels: string[] = [];
     if (isTelegramRunning()) channels.push("Telegram (use send_telegram tool)");
-    if (isSlackRunning()) channels.push("Slack (use send_slack tool)");
+    if (isSlackRunning()) channels.push("Slack (use send_slack tool to message other channels — never use it to reply to the current Slack conversation)");
     if (isEmailRunning()) channels.push("Email/LobsterMail (use check_lobstermail to check inbox, send_lobstermail to send)");
     if (channels.length > 0) {
       const msgContext = `You can send messages on the following channels at any time: ${channels.join(", ")}. Use these tools to proactively reach out or relay messages across channels when asked.`;
@@ -1229,6 +1378,8 @@ export async function processMessage(
       if (allSvcs.has("calendar")) googleContext += " You can view, create, update, and delete Google Calendar events.";
       if (allSvcs.has("drive")) googleContext += " You can search and read Google Drive files including Google Docs, Sheets, and Slides.";
       if (allSvcs.has("contacts")) googleContext += " You can search Google Contacts.";
+      if (allSvcs.has("docs")) googleContext += " You can create, read, and edit Google Docs using the docs_* tools. Use docs_create to make new documents, docs_read to read content, and docs_append or docs_insert to add text.";
+      if (allSvcs.has("sheets")) googleContext += " You can create, read, and write Google Sheets using the sheets_* tools. Use sheets_list_sheets to see tabs, sheets_read to read cell ranges, sheets_write to update cells, and sheets_append to add rows.";
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${googleContext}` : googleContext;
     }
   } catch {}

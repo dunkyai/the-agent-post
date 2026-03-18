@@ -43,6 +43,15 @@ db.exec(`
     installed_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS slack_user_instances (
+    team_id TEXT NOT NULL,
+    slack_user_id TEXT NOT NULL,
+    instance_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (team_id, slack_user_id),
+    FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
+  );
 `);
 
 function rowToInstance(row: Record<string, unknown>): Instance {
@@ -140,19 +149,20 @@ export function upsertSlackInstallation(installation: {
 }): void {
   // Remove any prior installation for this instance (workspace switch)
   db.prepare("DELETE FROM slack_installations WHERE instance_id = ?").run(installation.instanceId);
-  db.prepare(
-    `INSERT INTO slack_installations (team_id, instance_id, bot_user_id, team_name)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(team_id) DO UPDATE SET instance_id = ?, bot_user_id = ?, team_name = ?, installed_at = datetime('now')`
-  ).run(
-    installation.teamId,
-    installation.instanceId,
-    installation.botUserId,
-    installation.teamName,
-    installation.instanceId,
-    installation.botUserId,
-    installation.teamName
-  );
+  // Only insert if no existing installation for this team (first installer keeps the row)
+  // The bot token is tied to the app, not the user, so the first install works for all instances
+  const existing = db.prepare("SELECT team_id FROM slack_installations WHERE team_id = ?").get(installation.teamId);
+  if (!existing) {
+    db.prepare(
+      `INSERT INTO slack_installations (team_id, instance_id, bot_user_id, team_name)
+       VALUES (?, ?, ?, ?)`
+    ).run(
+      installation.teamId,
+      installation.instanceId,
+      installation.botUserId,
+      installation.teamName
+    );
+  }
 }
 
 export function getSlackInstallationByTeam(teamId: string): SlackInstallation | null {
@@ -169,6 +179,24 @@ export function getSlackInstallationByTeam(teamId: string): SlackInstallation | 
 
 export function deleteSlackInstallationsByInstance(instanceId: string): void {
   db.prepare("DELETE FROM slack_installations WHERE instance_id = ?").run(instanceId);
+  db.prepare("DELETE FROM slack_user_instances WHERE instance_id = ?").run(instanceId);
+}
+
+// --- Slack user → instance mapping (multi-tenant) ---
+
+export function upsertSlackUserInstance(teamId: string, slackUserId: string, instanceId: string): void {
+  db.prepare(
+    `INSERT INTO slack_user_instances (team_id, slack_user_id, instance_id)
+     VALUES (?, ?, ?)
+     ON CONFLICT(team_id, slack_user_id) DO UPDATE SET instance_id = ?, created_at = datetime('now')`
+  ).run(teamId, slackUserId, instanceId, instanceId);
+}
+
+export function getSlackUserInstance(teamId: string, slackUserId: string): string | null {
+  const row = db.prepare(
+    "SELECT instance_id FROM slack_user_instances WHERE team_id = ? AND slack_user_id = ?"
+  ).get(teamId, slackUserId) as { instance_id: string } | undefined;
+  return row ? row.instance_id : null;
 }
 
 // --- Magic Link Tokens ---

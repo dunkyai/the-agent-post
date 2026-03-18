@@ -38,6 +38,12 @@ const SCOPE_MAP: Record<string, string[]> = {
   contacts: [
     "https://www.googleapis.com/auth/contacts.readonly",
   ],
+  docs: [
+    "https://www.googleapis.com/auth/documents",
+  ],
+  sheets: [
+    "https://www.googleapis.com/auth/spreadsheets",
+  ],
 };
 
 const BASE_SCOPES = ["openid", "email"];
@@ -726,5 +732,292 @@ export async function contactsCreate(contact: {
     success: true,
     resourceName: result.resourceName,
     name: result.names?.[0]?.displayName || "",
+  });
+}
+
+// --- Google Docs API ---
+
+export async function docsCreate(title: string, content?: string, accountId?: string): Promise<string> {
+  const res = await googleFetch(
+    "https://docs.googleapis.com/v1/documents",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    },
+    accountId
+  );
+
+  if (!res.ok) {
+    const err: any = await res.json().catch(() => ({}));
+    return JSON.stringify({ error: err.error?.message || `Create doc failed (${res.status})` });
+  }
+
+  const doc: any = await res.json();
+
+  if (content) {
+    const insertRes = await googleFetch(
+      `https://docs.googleapis.com/v1/documents/${doc.documentId}:batchUpdate`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requests: [{ insertText: { location: { index: 1 }, text: content } }],
+        }),
+      },
+      accountId
+    );
+    if (!insertRes.ok) {
+      return JSON.stringify({
+        success: true,
+        documentId: doc.documentId,
+        title: doc.title,
+        warning: "Document created but initial content insertion failed",
+      });
+    }
+  }
+
+  return JSON.stringify({
+    success: true,
+    documentId: doc.documentId,
+    title: doc.title,
+    documentUrl: `https://docs.google.com/document/d/${doc.documentId}/edit`,
+  });
+}
+
+export async function docsRead(documentId: string, accountId?: string): Promise<string> {
+  const res = await googleFetch(
+    `https://docs.googleapis.com/v1/documents/${documentId}`,
+    {},
+    accountId
+  );
+  if (!res.ok) return JSON.stringify({ error: `Failed to read document (${res.status})` });
+
+  const doc: any = await res.json();
+
+  let text = "";
+  function extractText(elements: any[]): void {
+    for (const el of elements) {
+      if (el.paragraph) {
+        for (const pe of el.paragraph.elements || []) {
+          if (pe.textRun?.content) text += pe.textRun.content;
+        }
+      }
+      if (el.table) {
+        for (const row of el.table.tableRows || []) {
+          for (const cell of row.tableCells || []) {
+            extractText(cell.content || []);
+            text += "\t";
+          }
+          text += "\n";
+        }
+      }
+    }
+  }
+
+  if (doc.body?.content) extractText(doc.body.content);
+
+  return JSON.stringify({
+    documentId: doc.documentId,
+    title: doc.title,
+    content: text.slice(0, 50000),
+    revisionId: doc.revisionId,
+  });
+}
+
+export async function docsAppend(documentId: string, text: string, accountId?: string): Promise<string> {
+  const docRes = await googleFetch(
+    `https://docs.googleapis.com/v1/documents/${documentId}`,
+    {},
+    accountId
+  );
+  if (!docRes.ok) return JSON.stringify({ error: `Failed to read document (${docRes.status})` });
+
+  const doc: any = await docRes.json();
+  const body = doc.body;
+  const endIndex = body?.content?.[body.content.length - 1]?.endIndex;
+  if (!endIndex || endIndex < 2) {
+    return JSON.stringify({ error: "Could not determine document end index" });
+  }
+
+  const res = await googleFetch(
+    `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requests: [{ insertText: { location: { index: endIndex - 1 }, text: "\n" + text } }],
+      }),
+    },
+    accountId
+  );
+
+  if (!res.ok) {
+    const err: any = await res.json().catch(() => ({}));
+    return JSON.stringify({ error: err.error?.message || `Append failed (${res.status})` });
+  }
+
+  return JSON.stringify({ success: true, documentId });
+}
+
+export async function docsInsert(documentId: string, text: string, index: number, accountId?: string): Promise<string> {
+  const res = await googleFetch(
+    `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requests: [{ insertText: { location: { index }, text } }],
+      }),
+    },
+    accountId
+  );
+
+  if (!res.ok) {
+    const err: any = await res.json().catch(() => ({}));
+    return JSON.stringify({ error: err.error?.message || `Insert failed (${res.status})` });
+  }
+
+  return JSON.stringify({ success: true, documentId, insertedAt: index });
+}
+
+// --- Google Sheets API ---
+
+export async function sheetsCreate(title: string, sheetTitles?: string[], accountId?: string): Promise<string> {
+  const reqBody: any = { properties: { title } };
+  if (sheetTitles && sheetTitles.length > 0) {
+    reqBody.sheets = sheetTitles.map((t) => ({ properties: { title: t } }));
+  }
+
+  const res = await googleFetch(
+    "https://sheets.googleapis.com/v4/spreadsheets",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(reqBody),
+    },
+    accountId
+  );
+
+  if (!res.ok) {
+    const err: any = await res.json().catch(() => ({}));
+    return JSON.stringify({ error: err.error?.message || `Create spreadsheet failed (${res.status})` });
+  }
+
+  const result: any = await res.json();
+  return JSON.stringify({
+    success: true,
+    spreadsheetId: result.spreadsheetId,
+    title: result.properties.title,
+    spreadsheetUrl: result.spreadsheetUrl,
+    sheets: (result.sheets || []).map((s: any) => s.properties.title),
+  });
+}
+
+export async function sheetsRead(spreadsheetId: string, range: string, accountId?: string): Promise<string> {
+  const params = new URLSearchParams({
+    valueRenderOption: "FORMATTED_VALUE",
+    dateTimeRenderOption: "FORMATTED_STRING",
+  });
+
+  const res = await googleFetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?${params}`,
+    {},
+    accountId
+  );
+
+  if (!res.ok) {
+    const err: any = await res.json().catch(() => ({}));
+    return JSON.stringify({ error: err.error?.message || `Read range failed (${res.status})` });
+  }
+
+  const data: any = await res.json();
+  return JSON.stringify({
+    range: data.range,
+    values: data.values || [],
+    rows: (data.values || []).length,
+  });
+}
+
+export async function sheetsWrite(spreadsheetId: string, range: string, values: any[][], accountId?: string): Promise<string> {
+  const params = new URLSearchParams({ valueInputOption: "USER_ENTERED" });
+
+  const res = await googleFetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?${params}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ range, majorDimension: "ROWS", values }),
+    },
+    accountId
+  );
+
+  if (!res.ok) {
+    const err: any = await res.json().catch(() => ({}));
+    return JSON.stringify({ error: err.error?.message || `Write failed (${res.status})` });
+  }
+
+  const result: any = await res.json();
+  return JSON.stringify({
+    success: true,
+    updatedRange: result.updatedRange,
+    updatedRows: result.updatedRows,
+    updatedColumns: result.updatedColumns,
+    updatedCells: result.updatedCells,
+  });
+}
+
+export async function sheetsAppend(spreadsheetId: string, range: string, values: any[][], accountId?: string): Promise<string> {
+  const params = new URLSearchParams({
+    valueInputOption: "USER_ENTERED",
+    insertDataOption: "INSERT_ROWS",
+  });
+
+  const res = await googleFetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}:append?${params}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ range, majorDimension: "ROWS", values }),
+    },
+    accountId
+  );
+
+  if (!res.ok) {
+    const err: any = await res.json().catch(() => ({}));
+    return JSON.stringify({ error: err.error?.message || `Append failed (${res.status})` });
+  }
+
+  const result: any = await res.json();
+  return JSON.stringify({
+    success: true,
+    updatedRange: result.updates?.updatedRange,
+    updatedRows: result.updates?.updatedRows,
+    updatedCells: result.updates?.updatedCells,
+  });
+}
+
+export async function sheetsListSheets(spreadsheetId: string, accountId?: string): Promise<string> {
+  const res = await googleFetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=properties.title,sheets.properties`,
+    {},
+    accountId
+  );
+
+  if (!res.ok) {
+    const err: any = await res.json().catch(() => ({}));
+    return JSON.stringify({ error: err.error?.message || `List sheets failed (${res.status})` });
+  }
+
+  const data: any = await res.json();
+  return JSON.stringify({
+    spreadsheetTitle: data.properties.title,
+    sheets: (data.sheets || []).map((s: any) => ({
+      sheetId: s.properties.sheetId,
+      title: s.properties.title,
+      index: s.properties.index,
+      rowCount: s.properties.gridProperties?.rowCount,
+      columnCount: s.properties.gridProperties?.columnCount,
+    })),
   });
 }
