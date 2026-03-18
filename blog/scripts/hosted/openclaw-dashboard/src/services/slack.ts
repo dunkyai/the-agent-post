@@ -98,7 +98,7 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
   const externalId = `${channelId}:${userId}`;
 
   try {
-    const reply = await processMessage("slack", externalId, text, "You are responding via Slack. Your replies are automatically posted as threaded replies. Keep messages concise and conversational — Slack is not email.");
+    const reply = await processMessage("slack", externalId, text, "You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. Keep messages concise and conversational — Slack is not email.");
     await sendSlackMessage(channelId, reply, threadTs);
   } catch (err: unknown) {
     const errMessage = err instanceof Error ? err.message : "Unknown error";

@@ -65,16 +65,27 @@ router.post("/", raw({ type: "application/json" }), async (req, res) => {
       return;
     }
 
-    const instance = store.getInstance(installation.instanceId);
-    if (!instance || instance.status !== "running") {
-      console.warn(
-        `Slack event for non-running instance: ${installation.instanceId}`
-      );
+    // Filter out bot's own messages
+    if (event.bot_id || event.user === installation.botUserId) {
       return;
     }
 
-    // Filter out bot's own messages
-    if (event.bot_id || event.user === installation.botUserId) {
+    // Route by user: check slack_user_instances first, fall back to slack_installations
+    const userId = event.user;
+    let targetInstanceId: string | null = null;
+
+    if (userId) {
+      targetInstanceId = store.getSlackUserInstance(teamId, userId);
+    }
+    if (!targetInstanceId) {
+      targetInstanceId = installation.instanceId;
+    }
+
+    const instance = store.getInstance(targetInstanceId);
+    if (!instance || instance.status !== "running") {
+      console.warn(
+        `Slack event for non-running instance: ${targetInstanceId}`
+      );
       return;
     }
 

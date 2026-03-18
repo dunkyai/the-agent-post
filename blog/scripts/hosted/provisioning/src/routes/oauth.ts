@@ -214,6 +214,7 @@ router.get("/slack/callback", async (req, res) => {
     const botUserId = data.bot_user_id;
     const teamId = data.team?.id;
     const teamName = data.team?.name || null;
+    const authedUserId = data.authed_user?.id;
 
     if (!botToken || !botUserId || !teamId) {
       console.error("Slack OAuth response missing fields:", { botToken: !!botToken, botUserId, teamId });
@@ -223,13 +224,19 @@ router.get("/slack/callback", async (req, res) => {
       return;
     }
 
-    // Save team→instance mapping
+    // Save team→instance mapping (first installer keeps the row)
     store.upsertSlackInstallation({
       teamId,
       instanceId: instance.id,
       botUserId,
       teamName,
     });
+
+    // Map the authorizing Slack user to this instance for event routing
+    if (authedUserId) {
+      store.upsertSlackUserInstance(teamId, authedUserId, instance.id);
+      console.log(`Slack user ${authedUserId} mapped to instance ${instance.id}`);
+    }
 
     // Deliver token to the instance
     const deliverRes = await fetch(
