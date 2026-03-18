@@ -59,7 +59,7 @@ const SCHEDULING_TOOLS = [
         schedule: { type: "string", description: "A 5-field cron expression. Examples: '0 9 * * 1' (Monday 9am), '*/30 * * * *' (every 30 min), '0 0 * * *' (daily midnight). Fields: minute hour day-of-month month day-of-week." },
         prompt: { type: "string", description: "The prompt/instruction sent to the AI when the job fires" },
         target_source: { type: "string", enum: ["slack", "telegram", "email"], description: "Where to deliver results. Must be one of: slack, telegram, email." },
-        target_external_id: { type: "string", description: "The delivery target ID. For Slack: channel ID (e.g. C01HCS46FPB). For Telegram: chat ID. For email: recipient email address." },
+        target_external_id: { type: "string", description: "The delivery target ID. For Slack: must be a real Slack channel ID starting with C, D, or G (e.g. C01HCS46FPB) — NEVER use placeholder values like 'scheduler' or 'dashboard'. If you don't know the channel ID, ask the user. For Telegram: chat ID. For email: recipient email address." },
       },
       required: ["name", "schedule", "prompt", "target_source", "target_external_id"],
     },
@@ -1038,6 +1038,9 @@ function executeSchedulingTool(toolName: string, input: any): string {
       const validSources = ["slack", "telegram", "email"];
       if (!validSources.includes(input.target_source)) {
         return JSON.stringify({ error: `target_source must be one of: ${validSources.join(", ")}` });
+      }
+      if (input.target_source === "slack" && !/^[CDG][A-Z0-9]+$/.test(input.target_external_id)) {
+        return JSON.stringify({ error: `Invalid Slack channel ID "${input.target_external_id}". Slack channel IDs start with C, D, or G followed by uppercase letters and numbers (e.g. C01HCS46FPB). Ask the user for their Slack channel ID.` });
       }
       const nextRun = getNextRun(input.schedule);
       const id = createScheduledJob({
