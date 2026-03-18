@@ -192,6 +192,14 @@ const guides = [
     time: "10-15 min",
     tags: ["Email", "MCP", "Automation"],
   },
+  {
+    slug: "agent-auth-api-security",
+    title: "How to Secure Your OpenClaw Gateway",
+    description:
+      "Step-by-step guide to securing your OpenClaw gateway with encrypted secrets, scoped API tokens, rate limiting, and audit logging.",
+    time: "10-15 min",
+    tags: ["OpenClaw Security", "API Authentication", "Rate Limiting"],
+  },
 ];
 
 export default function GuidesPage() {

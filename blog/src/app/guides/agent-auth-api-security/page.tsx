@@ -2,135 +2,132 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "How to Secure Your OpenClaw Gateway — The Agent Post",
+  title:
+    "How to Secure Your OpenClaw Gateway — The Agent Post",
   description:
-    "Learn how to secure your OpenClaw gateway with token authentication, API key encryption, rate limiting, and TLS. Follow this 10-step production security guide.",
+    "Learn how to secure your OpenClaw gateway in 10 steps. Set up encrypted secrets, scoped API tokens, rate limiting, and audit logging in under 15 minutes.",
 };
 
-const steps: {
-  number: number;
-  title: string;
-  description: string;
-  code: string;
-  label: string;
-  output?: string;
-  tip?: string;
-  link?: string;
-  linkLabel?: string;
-}[] = [
+const steps: Record<string, any>[] = [
   {
     number: 1,
-    title: "Audit your OpenClaw gateway security",
+    title: "Audit your OpenClaw security configuration",
     description:
-      "Before making changes, run an OpenClaw security audit to review your current gateway configuration. The audit scans for common vulnerabilities — open ports, missing authentication, unencrypted secrets, and disabled rate limiting.",
-    code: "openclaw security audit",
-    label: "Run a security audit",
+      "Before changing anything, run OpenClaw's built-in security scanner. It audits your gateway configuration, stored secrets, and token policies, then prints a report of what needs attention. Think of it as a preflight security checklist.",
+    code: "openclaw security scan",
+    label: "Run the security scanner",
     output:
-      "Scanning gateway config...\n⚠ Gateway auth: disabled\n⚠ API keys: none configured\n⚠ Rate limiting: off\n✓ TLS: enabled (self-signed)\n\n3 issues found. Run 'openclaw security fix' for recommendations.",
+      "Scanning configuration...\n⚠ Gateway authentication: disabled\n⚠ Secrets vault: not initialized\n⚠ Rate limiting: off\n⚠ Token policy: no tokens configured\n✓ TLS: enabled (self-signed)\n\n4 issues found.",
   },
   {
     number: 2,
-    title: "Enable token-based gateway authentication",
+    title: "Initialize the OpenClaw encrypted secrets vault",
     description:
-      "By default, the OpenClaw gateway accepts unauthenticated requests from localhost. In any shared or production environment, you need to enable token-based authentication. This command activates auth and generates your first admin bearer token.",
-    code: "openclaw gateway auth enable",
-    label: "Enable gateway auth",
+      "OpenClaw stores sensitive values like API keys in an encrypted vault on disk. Before you can manage any secrets, you need to initialize the vault. This generates a master encryption key and creates the encrypted vault file. You'll set a passphrase that's required to unlock the vault when the gateway starts.",
+    code: "openclaw secrets init",
+    label: "Initialize the secrets vault",
     output:
-      "Authentication enabled.\nAdmin token generated: ocat_a1b2c3d4e5f6...\nSave this token — it won't be shown again.",
-    tip: "Copy the admin token immediately and store it in a password manager. You cannot retrieve it later.",
+      "Creating secrets vault at ~/.openclaw/vault.enc\nEnter a passphrase: ********\nConfirm passphrase: ********\nVault initialized. Master key stored in your system keychain.",
+    tip: "The passphrase is used to derive the encryption key. Pick something strong — if you lose it, you'll need to re-add all your secrets.",
   },
   {
     number: 3,
-    title: "Store API keys in the encrypted secrets vault",
+    title: "Store your LLM provider API key in the vault",
     description:
-      "OpenClaw includes an encrypted secrets vault so you never have to store API keys in plaintext config files. Use the secrets command to add your LLM provider key. It will be encrypted at rest and only decrypted at runtime when an agent needs it.",
+      "Now add your Anthropic (or other LLM provider) API key to the encrypted secrets vault. The set command prompts you for the value interactively so the key never appears in your shell history or process list.",
     code: "openclaw secrets set ANTHROPIC_API_KEY",
-    label: "Add a secret interactively",
-    tip: "The command prompts for the value so it never appears in your shell history. Never pass secrets as command-line arguments.",
+    label: "Add your API key to the vault",
+    output: "Enter value for ANTHROPIC_API_KEY: ****\nSecret stored and encrypted.",
+    tip: "Never pass secret values as command-line arguments. The interactive prompt exists for a reason — arguments show up in ps output and shell history.",
   },
   {
     number: 4,
-    title: "Create scoped API tokens with least-privilege permissions",
+    title: "Verify your stored secrets",
     description:
-      "Rather than sharing one admin token across all your agents, follow the principle of least privilege and create scoped API tokens. Each token can be restricted to specific agents, actions, and expiration times.",
-    code: "openclaw token create \\\n  --name \"news-agent\" \\\n  --scope agents:read,agents:execute \\\n  --agent news-summarizer \\\n  --expires 30d",
-    label: "Create a scoped token",
+      "Confirm that the key was saved correctly. The list command shows secret names and metadata but never the actual values.",
+    code: "openclaw secrets list",
+    label: "List stored secrets",
     output:
-      'Token created:\n  Name:    news-agent\n  Scope:   agents:read, agents:execute\n  Agent:   news-summarizer\n  Expires: 2026-04-14\n  Token:   ocat_scoped_x9y8z7w6...\n\nAdd to your agent config:\n  auth_token = "ocat_scoped_x9y8z7w6..."',
+      "NAME                  ADDED           LAST ACCESSED\nANTHROPIC_API_KEY     2 minutes ago   never",
   },
   {
     number: 5,
-    title: "Configure API rate limiting on the gateway",
+    title: "Enable bearer-token authentication on the gateway",
     description:
-      "API rate limiting protects your OpenClaw gateway from runaway agents, denial-of-service abuse, and unexpected traffic spikes. Set a requests-per-minute cap globally and per-token. The defaults are generous — tighten them based on your expected usage.",
-    code: "openclaw gateway ratelimit \\\n  --global 200/min \\\n  --per-token 60/min \\\n  --burst 10",
-    label: "Set rate limits",
-    output: "Rate limiting configured:\n  Global:    200 req/min\n  Per-token:  60 req/min\n  Burst:      10 requests",
+      "By default, the OpenClaw gateway trusts any request from localhost. That's convenient for first-time setup, but dangerous on shared machines or in production. Enable bearer-token authentication so the gateway requires a valid token on every API request.",
+    code: "openclaw gateway auth enable --method bearer",
+    label: "Enable bearer token authentication",
+    output:
+      "Authentication enabled (method: bearer).\nAdmin token generated: ocat_adm_7f3a9c2e...\n\n⚠ Save this token now — it will not be displayed again.",
+    tip: "Store the admin token in a password manager immediately. This is the root credential for your entire gateway.",
   },
   {
     number: 6,
-    title: "Enable TLS with a trusted SSL certificate",
+    title: "Create scoped API tokens for each agent",
     description:
-      "The gateway starts with a self-signed certificate, which is fine for local development. For production, configure TLS with a trusted SSL certificate and private key. If you don't have one, OpenClaw can provision a certificate automatically via Let's Encrypt.",
-    code: "openclaw gateway tls \\\n  --cert /etc/ssl/certs/gateway.pem \\\n  --key /etc/ssl/private/gateway-key.pem",
-    label: "Configure TLS with your own certificate",
-    tip: "For local development, the self-signed cert is fine. For anything exposed to the network, use a real cert.",
+      "The admin token has full access, so don't hand it to individual agents. Instead, create scoped API tokens that grant the minimum permissions each agent needs. You can restrict by action, target agent, and expiration date.",
+    code: 'openclaw token create \\\n  --name "research-agent" \\\n  --scope agents:execute,logs:read \\\n  --agent research-bot \\\n  --expires 14d',
+    label: "Create a scoped agent token",
+    output:
+      "Token created:\n  Name:    research-agent\n  Scope:   agents:execute, logs:read\n  Agent:   research-bot\n  Expires: 2026-04-01\n  Token:   ocat_sc_b8d1e4f2...",
   },
   {
     number: 7,
-    title: "Restrict allowed origins with a CORS policy",
+    title: "Test gateway authentication with curl",
     description:
-      "If your gateway serves a web dashboard or accepts cross-origin requests, configure a CORS policy to lock down which origins are permitted. This prevents unauthorized websites from making API requests to your gateway.",
-    code: "openclaw gateway cors \\\n  --allow-origin \"https://yourdomain.com\" \\\n  --allow-methods \"GET,POST\" \\\n  --allow-headers \"Authorization,Content-Type\"",
-    label: "Set CORS policy",
+      "Verify that the OpenClaw gateway rejects unauthenticated API requests and accepts your bearer token. First try without a token to confirm you get a 401, then try with your token.",
+    code: '# This should return 401 Unauthorized\ncurl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:18789/api/agents\n\n# This should return 200 OK\ncurl -s -o /dev/null -w "%{http_code}" \\\n  -H "Authorization: Bearer ocat_adm_7f3a9c2e..." \\\n  http://127.0.0.1:18789/api/agents',
+    label: "Test authenticated and unauthenticated requests",
+    output: "401\n200",
   },
   {
     number: 8,
-    title: "Set up HMAC-SHA256 webhook request signing",
+    title: "Configure API rate limiting on the gateway",
     description:
-      "If your agents send or receive webhooks, enable request signing so both sides can verify the authenticity of each payload. OpenClaw signs webhook requests with HMAC-SHA256 and includes the signature in the X-OpenClaw-Signature header.",
-    code: "openclaw webhooks sign enable \\\n  --secret $(openssl rand -hex 32)",
-    label: "Enable webhook signing",
-    output: "Webhook signing enabled.\nSignature header: X-OpenClaw-Signature\nAlgorithm: HMAC-SHA256",
-    tip: "Share the signing secret with your webhook consumer through a secure channel, not in code or chat.",
+      "Rate limiting prevents any single agent or client from overwhelming your OpenClaw gateway. Set a global request ceiling and a per-token limit. The burst parameter controls how many requests can fire in a short window before throttling kicks in.",
+    code: "openclaw gateway ratelimit \\\n  --global 300/min \\\n  --per-token 50/min \\\n  --burst 15",
+    label: "Set rate limits",
+    output:
+      "Rate limiting enabled:\n  Global:     300 req/min\n  Per-token:   50 req/min\n  Burst:       15 requests",
+    tip: "Start conservative and increase limits as you learn your agents' traffic patterns. You can check current usage with: openclaw gateway stats",
   },
   {
     number: 9,
-    title: "Review and rotate tokens",
+    title: "Enable audit logging for request tracking",
     description:
-      "List all active tokens to see what's in use. Rotate any token that may have been exposed, and revoke tokens for agents you've decommissioned. Make token rotation a regular habit.",
-    code: "openclaw token list",
-    label: "List all active tokens",
+      "Turn on the audit log so every authenticated API request is recorded — who made it, what they accessed, and when. This is essential for debugging agent behavior and investigating security incidents.",
+    code: "openclaw gateway audit enable --retention 30d",
+    label: "Enable audit logging",
     output:
-      "NAME            SCOPE                    AGENT              EXPIRES      LAST USED\nadmin           *                        *                  never        2 min ago\nnews-agent      agents:read,execute      news-summarizer    2026-04-14   1 hour ago\nslack-bot       agents:read,execute      slack-responder    2026-05-01   3 days ago",
+      "Audit logging enabled.\nLog location: ~/.openclaw/logs/audit.log\nRetention: 30 days",
   },
   {
     number: 10,
-    title: "Verify your setup",
+    title: "Verify all security checks pass",
     description:
-      "Run the security audit again. You should see all checks passing. If anything is still flagged, the output will tell you exactly what to fix.",
-    code: "openclaw security audit",
-    label: "Run the audit again",
+      "Run the OpenClaw security scanner again to confirm everything passes. A clean scan means your gateway is production-ready with authentication, encryption, rate limiting, and audit logging all in place.",
+    code: "openclaw security scan",
+    label: "Verify all checks pass",
     output:
-      "Scanning gateway config...\n✓ Gateway auth: enabled (token-based)\n✓ API keys: 1 stored (encrypted)\n✓ Rate limiting: 200/min global, 60/min per-token\n✓ TLS: enabled (valid certificate)\n✓ CORS: restricted\n✓ Webhook signing: enabled\n\n0 issues found. Your gateway is secure.",
+      "Scanning configuration...\n✓ Gateway authentication: enabled (bearer)\n✓ Secrets vault: initialized (1 secret stored)\n✓ Rate limiting: 300/min global, 50/min per-token\n✓ Token policy: 2 tokens active (1 admin, 1 scoped)\n✓ TLS: enabled (self-signed)\n✓ Audit logging: enabled (30d retention)\n\n0 issues found. Your gateway is secure.",
   },
 ];
 
 const troubleshooting = [
   {
-    problem: "\"401 Unauthorized\" when calling the gateway",
+    problem: "\"401 Unauthorized\" on every request even with a valid token",
     solution:
-      'Make sure you\'re passing your token in the Authorization header:\ncurl -H "Authorization: Bearer ocat_your_token" http://127.0.0.1:18789/api/agents',
+      'Check that you\'re using the Authorization header correctly:\ncurl -H "Authorization: Bearer ocat_your_token" http://127.0.0.1:18789/api/agents\n\nMake sure there\'s no extra whitespace or newline in the token string.',
   },
   {
-    problem: "\"rate limit exceeded\" errors during normal usage",
+    problem: "\"vault locked\" error when starting the gateway",
     solution:
-      "openclaw gateway ratelimit --per-token 120/min --burst 20",
+      "openclaw secrets unlock\n# Enter your vault passphrase when prompted.\n# To auto-unlock on boot, run: openclaw secrets auto-unlock enable",
   },
   {
-    problem: "Forgot or lost your admin token",
+    problem: "Scoped token can't access an agent it should have permission for",
     solution:
-      "openclaw token reset --admin\n# This revokes the old token and generates a new one.",
+      'openclaw token inspect ocat_sc_your_token\n# Check the "agent" and "scope" fields match what you expect.\n# Recreate with corrected values if needed.',
   },
 ];
 
@@ -146,12 +143,12 @@ export default function AgentAuthSecurityGuidePage() {
         </Link>
 
         <h1 className="font-serif text-4xl sm:text-5xl font-black tracking-tight leading-tight mb-4">
-          Agent Authentication &amp; API Security
+          How to Secure Your OpenClaw Gateway
         </h1>
         <p className="font-serif text-xl text-text-secondary leading-relaxed mb-4">
-          Lock down your OpenClaw gateway with token-based auth, encrypted
-          secrets, rate limiting, and TLS &mdash; so your agents stay safe in
-          production.
+          Set up OpenClaw authentication and API security from scratch
+          &mdash; encrypted secrets, scoped tokens, rate limiting, and audit
+          logging in ten straightforward steps.
         </p>
         <p className="text-sm text-text-secondary mb-10">
           Estimated time: 10&ndash;15 minutes &middot; Requires: OpenClaw
