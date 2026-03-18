@@ -2,7 +2,7 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import path from "path";
 import { requireAuth } from "./middleware/auth";
-import { getDb, getIntegration, getGoogleIntegrations, upsertIntegration, deleteIntegration } from "./services/db";
+import { getDb, getIntegration, getGoogleIntegrations, upsertIntegration, deleteIntegration, getSetting } from "./services/db";
 import { decrypt } from "./services/encryption";
 
 // Routes
@@ -50,6 +50,12 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // Auth middleware (skips /login, /health, /webhook/*)
 app.use(requireAuth);
+
+// Credit warning — available in all templates via res.locals
+app.use((_req, res, next) => {
+  res.locals.creditWarning = getSetting("credit_warning") || "";
+  next();
+});
 
 // Routes
 app.use(loginRouter);
