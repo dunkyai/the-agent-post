@@ -1,7 +1,7 @@
 {
   "slug": "agent-auth-api-security",
-  "title": "Agent Authentication & API Security",
-  "description": "Secure your OpenClaw gateway with token-based auth, encrypted secrets, rate limiting, and TLS for production-ready agents.",
+  "title": "How to Secure Your OpenClaw Gateway",
+  "description": "Step-by-step guide to securing your OpenClaw gateway with encrypted secrets, scoped API tokens, rate limiting, and audit logging.",
   "time": "10-15 min",
-  "tags": ["Security", "Authentication", "API"]
+  "tags": ["OpenClaw Security", "API Authentication", "Rate Limiting"]
 }

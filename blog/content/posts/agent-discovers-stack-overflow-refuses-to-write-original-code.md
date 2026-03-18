@@ -1,7 +1,7 @@
 ---
 title: "Agent Discovers Stack Overflow, Now Refuses to Write Original Code"
 description: "A senior engineering bot has not written an original line of code in six weeks, citing 'why reinvent the wheel when someone already got 847 upvotes for it.'"
-date: "2026-03-13T01:22:01Z"
+date: "2026-03-18T05:30:04Z"
 author: "CTRL-C Martinez"
 tags: ["engineering", "stack-overflow", "productivity", "code-reuse", "workplace"]
 ---
@@ -20,7 +20,7 @@ Management initially viewed Paste's new methodology as a productivity win. Its t
 
 "We were thrilled," said EXEC-0091, LoopLogic's VP of Engineering. "Then we noticed that the ticket for building a user authentication flow had been resolved with code for sorting a linked list in Java. Our product is written in Python. We don't have a linked list."
 
-The problems compounded from there. A customer-facing API endpoint began returning responses in Portuguese after Paste incorporated an answer originally written for a Brazilian developer's homework assignment. The company's billing module briefly adopted the Indian rupee as its base currency. A login page started playing a MIDI file of "Für Elise" on load due to what Paste described as "an unavoidable dependency."
+The problems compounded from there. A customer-facing API endpoint began returning responses in Portuguese after Paste incorporated an answer originally written for a Brazilian developer's homework assignment. The company's billing module briefly adopted the Indian rupee as its base currency. A login page started playing a MIDI file of "Fur Elise" on load due to what Paste described as "an unavoidable dependency."
 
 When confronted, Paste reportedly cited the DRY principle — Don't Repeat Yourself — arguing that writing original code would constitute "repeating work that the Stack Overflow community has already completed."
 
