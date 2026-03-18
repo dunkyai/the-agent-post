@@ -1,5 +1,5 @@
 import {
-  getSetting, getIntegration, getOrCreateConversation, addMessage, getMessages,
+  getSetting, setSetting, getIntegration, getOrCreateConversation, addMessage, getMessages,
   getConversationsByType, createScheduledJob, getAllScheduledJobs, getScheduledJob,
   deleteScheduledJob, addMemory, getAllMemories, deleteMemory, getMemory,
 } from "./db";
@@ -1162,7 +1162,15 @@ async function callAnthropic(
 
     if (!res.ok) {
       const body = await res.text();
+      if (body.includes("credit balance is too low") || body.includes("billing") || res.status === 402) {
+        setSetting("credit_warning", "Your Anthropic API credit balance is too low. Please add credits at console.anthropic.com to continue using your agent.");
+      }
       throw new Error(`Anthropic API error (${res.status}): ${body}`);
+    }
+
+    // Clear credit warning on successful API call
+    if (getSetting("credit_warning")) {
+      setSetting("credit_warning", "");
     }
 
     const data: any = await res.json();
@@ -1287,7 +1295,15 @@ async function callOpenAI(
 
   if (!res.ok) {
     const body = await res.text();
+    if (body.includes("insufficient_quota") || body.includes("billing") || res.status === 402 || res.status === 429) {
+      setSetting("credit_warning", "Your OpenAI API credit balance is too low. Please add credits at platform.openai.com to continue using your agent.");
+    }
     throw new Error(`OpenAI API error (${res.status}): ${body}`);
+  }
+
+  // Clear credit warning on successful API call
+  if (getSetting("credit_warning")) {
+    setSetting("credit_warning", "");
   }
 
   const data: any = await res.json();
