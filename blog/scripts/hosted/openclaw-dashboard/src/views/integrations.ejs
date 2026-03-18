@@ -358,6 +358,39 @@
         <% } %>
       </div>
     </details>
+
+    <!-- Notion -->
+    <details class="card card-collapsible">
+      <summary class="integration-toggle">
+        <div class="integration-header">
+          <h3>Notion</h3>
+          <span class="status-badge status-<%= notion.status %>"><%= notion.status %></span>
+        </div>
+        <span class="toggle-arrow"></span>
+      </summary>
+      <div class="integration-body">
+        <% if (notion.error_message) { %>
+          <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= notion.error_message %></p>
+        <% } %>
+
+        <% if (notion.status === 'connected') { %>
+          <div style="margin-bottom: 12px;">
+            <label style="font-size: 13px; color: var(--muted);">Connected Workspace</label>
+            <div style="margin-top: 4px;">
+              <code style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px;"><%= notion.workspace_name || 'Unknown' %></code>
+            </div>
+          </div>
+          <form method="POST" action="/integrations/notion/disconnect">
+            <button type="submit" class="btn btn-danger">Disconnect</button>
+          </form>
+        <% } else { %>
+          <form method="POST" action="/integrations/notion/connect">
+            <p style="font-size: 14px; margin-bottom: 12px;">Connect your Notion workspace so your agent can search, read, and update your pages and databases.</p>
+            <button type="submit" class="btn">Connect to Notion</button>
+          </form>
+        <% } %>
+      </div>
+    </details>
   </div>
 </div>
 <script>
