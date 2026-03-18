@@ -285,8 +285,10 @@ export async function gmailReadMessage(messageId: string, accountId?: string): P
   return JSON.stringify({
     id: msg.id,
     threadId: msg.threadId,
+    messageId: headers["message-id"] || "",
     from: headers.from || "",
     to: headers.to || "",
+    cc: headers.cc || "",
     subject: headers.subject || "",
     date: headers.date || "",
     body: body.slice(0, 10000),
@@ -294,21 +296,28 @@ export async function gmailReadMessage(messageId: string, accountId?: string): P
   });
 }
 
-export async function gmailSend(to: string, subject: string, body: string, accountId?: string, from?: string): Promise<string> {
+export async function gmailSend(to: string, subject: string, body: string, accountId?: string, from?: string, cc?: string, threadId?: string, inReplyTo?: string): Promise<string> {
   const emailHeaders = [
     `To: ${to}`,
     `Subject: ${subject}`,
     `Content-Type: text/plain; charset="UTF-8"`,
   ];
   if (from) emailHeaders.unshift(`From: ${from}`);
+  if (cc) emailHeaders.push(`Cc: ${cc}`);
+  if (inReplyTo) {
+    emailHeaders.push(`In-Reply-To: ${inReplyTo}`);
+    emailHeaders.push(`References: ${inReplyTo}`);
+  }
 
   const email = [...emailHeaders, "", body].join("\r\n");
 
   const raw = Buffer.from(email).toString("base64url");
+  const msgPayload: any = { raw };
+  if (threadId) msgPayload.threadId = threadId;
   const res = await googleFetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ raw }),
+    body: JSON.stringify(msgPayload),
   }, accountId);
 
   if (!res.ok) {
@@ -320,21 +329,28 @@ export async function gmailSend(to: string, subject: string, body: string, accou
   return JSON.stringify({ success: true, messageId: result.id });
 }
 
-export async function gmailCreateDraft(to: string, subject: string, body: string, accountId?: string, from?: string): Promise<string> {
+export async function gmailCreateDraft(to: string, subject: string, body: string, accountId?: string, from?: string, cc?: string, threadId?: string, inReplyTo?: string): Promise<string> {
   const emailHeaders = [
     `To: ${to}`,
     `Subject: ${subject}`,
     `Content-Type: text/plain; charset="UTF-8"`,
   ];
   if (from) emailHeaders.unshift(`From: ${from}`);
+  if (cc) emailHeaders.push(`Cc: ${cc}`);
+  if (inReplyTo) {
+    emailHeaders.push(`In-Reply-To: ${inReplyTo}`);
+    emailHeaders.push(`References: ${inReplyTo}`);
+  }
 
   const email = [...emailHeaders, "", body].join("\r\n");
 
   const raw = Buffer.from(email).toString("base64url");
+  const msgPayload: any = { raw };
+  if (threadId) msgPayload.threadId = threadId;
   const res = await googleFetch("https://gmail.googleapis.com/gmail/v1/users/me/drafts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: { raw } }),
+    body: JSON.stringify({ message: msgPayload }),
   }, accountId);
 
   if (!res.ok) {

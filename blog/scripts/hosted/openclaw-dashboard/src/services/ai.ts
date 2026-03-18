@@ -680,13 +680,16 @@ const GOOGLE_GMAIL_TOOLS = [
 const GOOGLE_GMAIL_SEND_TOOLS = [
   {
     name: "gmail_create_draft",
-    description: "Create a real draft email in the user's Gmail Drafts folder. The draft will appear in Gmail and can be reviewed and sent by the user. You MUST call this tool to actually create the draft — do not just write the email text in your response. If you don't know the recipient, ask the user. Use 'from' to send from an alias (use gmail_list_aliases to see available addresses).",
+    description: "Create a real draft email in the user's Gmail Drafts folder. The draft will appear in Gmail and can be reviewed and sent by the user. You MUST call this tool to actually create the draft — do not just write the email text in your response. If you don't know the recipient, ask the user. Use 'from' to send from an alias (use gmail_list_aliases to see available addresses). When replying to an email thread, ALWAYS include thread_id, in_reply_to, and cc from the original message to keep the reply in-thread and reply-all.",
     input_schema: {
       type: "object" as const,
       properties: {
-        to: { type: "string", description: "Recipient email address" },
-        subject: { type: "string", description: "Email subject line" },
+        to: { type: "string", description: "Recipient email address(es), comma-separated for multiple" },
+        subject: { type: "string", description: "Email subject line. For replies, use 'Re: <original subject>'" },
         body: { type: "string", description: "Full email body (plain text)" },
+        cc: { type: "string", description: "CC recipients, comma-separated (include all original To/CC addresses for reply-all)" },
+        thread_id: { type: "string", description: "Gmail thread ID to keep the reply in the same thread (from gmail_read_message threadId)" },
+        in_reply_to: { type: "string", description: "Message-ID header of the email being replied to (from gmail_read_message messageId)" },
         account: { type: "string", description: "Google account email to use (optional)" },
         from: { type: "string", description: "Send-as alias address (optional, use gmail_list_aliases to see options)" },
       },
@@ -695,13 +698,16 @@ const GOOGLE_GMAIL_SEND_TOOLS = [
   },
   {
     name: "gmail_send",
-    description: "Send an email immediately from the user's Gmail account. The email will be sent right away — use gmail_create_draft if you want to save it as a draft instead. Use 'from' to send from an alias.",
+    description: "Send an email immediately from the user's Gmail account. The email will be sent right away — use gmail_create_draft if you want to save it as a draft instead. Use 'from' to send from an alias. When replying to an email thread, ALWAYS include thread_id, in_reply_to, and cc from the original message to keep the reply in-thread and reply-all.",
     input_schema: {
       type: "object" as const,
       properties: {
-        to: { type: "string", description: "Recipient email address" },
-        subject: { type: "string", description: "Email subject line" },
+        to: { type: "string", description: "Recipient email address(es), comma-separated for multiple" },
+        subject: { type: "string", description: "Email subject line. For replies, use 'Re: <original subject>'" },
         body: { type: "string", description: "Full email body (plain text)" },
+        cc: { type: "string", description: "CC recipients, comma-separated (include all original To/CC addresses for reply-all)" },
+        thread_id: { type: "string", description: "Gmail thread ID to keep the reply in the same thread (from gmail_read_message threadId)" },
+        in_reply_to: { type: "string", description: "Message-ID header of the email being replied to (from gmail_read_message messageId)" },
         account: { type: "string", description: "Google account email to use (optional)" },
         from: { type: "string", description: "Send-as alias address (optional, use gmail_list_aliases to see options)" },
       },
@@ -953,9 +959,9 @@ async function executeGoogleTool(toolName: string, input: any): Promise<string> 
       case "gmail_read_message":
         return await gmailReadMessage(input.message_id, acct);
       case "gmail_send":
-        return await gmailSend(input.to, input.subject, input.body, acct, input.from);
+        return await gmailSend(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
       case "gmail_create_draft":
-        return await gmailCreateDraft(input.to, input.subject, input.body, acct, input.from);
+        return await gmailCreateDraft(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
       case "gmail_label":
         return await gmailAddLabel(input.message_id, input.label_name, acct);
       case "gmail_list_aliases":
@@ -1389,7 +1395,7 @@ export async function processMessage(
       }
       if (allSvcs.has("gmail")) {
         if (allSvcs.has("gmail_send")) {
-          googleContext += " You can search, read, draft, send, and label Gmail messages. Use gmail_list_aliases to see available send-as addresses, and use the 'from' parameter to send from an alias.";
+          googleContext += " You can search, read, draft, send, and label Gmail messages. Use gmail_list_aliases to see available send-as addresses, and use the 'from' parameter to send from an alias. IMPORTANT: When replying to an email, ALWAYS use reply-all by default — include all original To/CC recipients in the 'cc' field, set 'thread_id' from the original message's threadId, and set 'in_reply_to' from the original message's messageId. This keeps the reply in the same Gmail thread and ensures everyone stays in the loop.";
         } else {
           googleContext += " You can search, read, and label Gmail messages. Drafting and sending are not enabled.";
         }
