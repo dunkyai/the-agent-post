@@ -945,6 +945,40 @@ const GOOGLE_SHEETS_TOOLS = [
   },
 ];
 
+function checkGmailRecipientRules(to?: string, cc?: string): string | null {
+  try {
+    const rules = JSON.parse(getSetting("gmail_email_rules") || "{}");
+    if (!rules.mode || rules.mode === "all") return null;
+
+    const allRecipients = [to, cc]
+      .filter(Boolean)
+      .join(",")
+      .split(",")
+      .map(r => r.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (rules.mode === "domains" && rules.domains?.length > 0) {
+      const allowed = rules.domains.map((d: string) => d.toLowerCase());
+      const blocked = allRecipients.filter(r => {
+        const domain = r.split("@")[1];
+        return !domain || !allowed.includes(domain);
+      });
+      if (blocked.length > 0) {
+        return JSON.stringify({ error: `Email rules only allow sending to domains: ${allowed.join(", ")}. Blocked recipients: ${blocked.join(", ")}` });
+      }
+    }
+
+    if (rules.mode === "addresses" && rules.addresses?.length > 0) {
+      const allowed = rules.addresses.map((a: string) => a.toLowerCase());
+      const blocked = allRecipients.filter(r => !allowed.includes(r));
+      if (blocked.length > 0) {
+        return JSON.stringify({ error: `Email rules only allow sending to: ${allowed.join(", ")}. Blocked recipients: ${blocked.join(", ")}` });
+      }
+    }
+  } catch {}
+  return null;
+}
+
 async function executeGoogleTool(toolName: string, input: any): Promise<string> {
   if (!isGoogleRunning()) {
     return JSON.stringify({ error: "Google is not connected. Ask the user to connect Google in the integrations page." });
@@ -959,9 +993,14 @@ async function executeGoogleTool(toolName: string, input: any): Promise<string> 
       case "gmail_read_message":
         return await gmailReadMessage(input.message_id, acct);
       case "gmail_send":
-        return await gmailSend(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
-      case "gmail_create_draft":
+      case "gmail_create_draft": {
+        const ruleCheck = checkGmailRecipientRules(input.to, input.cc);
+        if (ruleCheck) return ruleCheck;
+        if (toolName === "gmail_send") {
+          return await gmailSend(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
+        }
         return await gmailCreateDraft(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
+      }
       case "gmail_label":
         return await gmailAddLabel(input.message_id, input.label_name, acct);
       case "gmail_list_aliases":
@@ -1400,6 +1439,15 @@ export async function processMessage(
           googleContext += " You can search, read, and label Gmail messages. Drafting and sending are not enabled.";
         }
       }
+      // Gmail email rules
+      try {
+        const gmailRules = JSON.parse(getSetting("gmail_email_rules") || "{}");
+        if (gmailRules.mode === "domains" && gmailRules.domains?.length > 0) {
+          googleContext += ` IMPORTANT: You may only read and respond to Gmail emails from these domains: ${gmailRules.domains.join(", ")}. Do not draft, send, or respond to emails from anyone outside these domains.`;
+        } else if (gmailRules.mode === "addresses" && gmailRules.addresses?.length > 0) {
+          googleContext += ` IMPORTANT: You may only read and respond to Gmail emails from these addresses: ${gmailRules.addresses.join(", ")}. Do not draft, send, or respond to emails from anyone else.`;
+        }
+      } catch {}
       if (allSvcs.has("calendar")) googleContext += " You can view, create, update, and delete Google Calendar events.";
       if (allSvcs.has("drive")) googleContext += " You can search and read Google Drive files including Google Docs, Sheets, and Slides.";
       if (allSvcs.has("contacts")) googleContext += " You can search Google Contacts.";

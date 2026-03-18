@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { getIntegration, upsertIntegration, deleteIntegration, getAllIntegrations, getGoogleIntegrations } from "../services/db";
+import { getIntegration, upsertIntegration, deleteIntegration, getAllIntegrations, getGoogleIntegrations, getSetting, setSetting } from "../services/db";
 import { encrypt, decrypt } from "../services/encryption";
 import { startTelegram, stopTelegram, isTelegramRunning } from "../services/telegram";
 import { buildSlackOAuthUrl, stopSlack, isSlackRunning } from "../services/slack";
@@ -67,6 +67,13 @@ router.get("/integrations", (req: Request, res: Response) => {
     } catch {}
   }
 
+  // Gmail email rules
+  let gmailFilter = { mode: "all", domains: [] as string[], addresses: [] as string[] };
+  try {
+    const raw = getSetting("gmail_email_rules");
+    if (raw) gmailFilter = { ...gmailFilter, ...JSON.parse(raw) };
+  } catch {}
+
   res.render("integrations", {
     telegram: integrationMap["telegram"] || { status: "disconnected", error_message: null },
     slack: {
@@ -81,6 +88,7 @@ router.get("/integrations", (req: Request, res: Response) => {
       filter_addresses: emailFilterAddresses,
     },
     googleAccounts: googleAccountsList,
+    gmailFilter,
     supabase: {
       ...(integrationMap["supabase"] || { status: "disconnected", error_message: null }),
       project_url: supabaseProjectUrl,
@@ -351,6 +359,32 @@ router.post("/integrations/supabase/permissions", (req: Request, res: Response) 
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     res.redirect(303, "/integrations?flash=Permission+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/google/email-rules", (req: Request, res: Response) => {
+  try {
+    const { filter_mode, filter_domains, filter_addresses } = req.body;
+    const validModes = ["all", "domains", "addresses"];
+    const mode = validModes.includes(filter_mode) ? filter_mode : "all";
+
+    let domains: string[] = [];
+    if (typeof filter_domains === "string") {
+      domains = filter_domains.split(",").map((d: string) => d.trim().toLowerCase().replace(/^@/, "")).filter(Boolean);
+    }
+
+    let addresses: string[] = [];
+    if (typeof filter_addresses === "string") {
+      addresses = filter_addresses.split(",").map((a: string) => a.trim().toLowerCase()).filter(Boolean);
+    } else if (Array.isArray(filter_addresses)) {
+      addresses = filter_addresses.map((a: string) => a.trim().toLowerCase()).filter(Boolean);
+    }
+
+    setSetting("gmail_email_rules", JSON.stringify({ mode, domains, addresses }));
+    res.redirect(303, "/integrations?flash=Gmail+email+rules+saved");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.redirect(303, "/integrations?flash=Gmail+rules+error:+" + encodeURIComponent(message));
   }
 });
 

@@ -163,6 +163,50 @@
           </div>
         <% } %>
 
+        <% const hasGmail = googleAccounts.some(a => a.services.includes('gmail')); %>
+        <% if (hasGmail) { %>
+          <form method="POST" action="/integrations/google/email-rules" style="padding: 12px 0; border-bottom: 1px solid var(--rule-light);">
+            <div class="form-group">
+              <label><strong>Gmail Email Rules</strong></label>
+              <div class="hint" style="margin-bottom: 8px;">Control who your agent can read and respond to via Gmail.</div>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                  <input type="radio" name="filter_mode" value="all" <%= gmailFilter.mode === 'all' ? 'checked' : '' %> class="gmail-filter-radio">
+                  <span>Everyone</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                  <input type="radio" name="filter_mode" value="domains" <%= gmailFilter.mode === 'domains' ? 'checked' : '' %> class="gmail-filter-radio">
+                  <span>All from the domain(s)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                  <input type="radio" name="filter_mode" value="addresses" <%= gmailFilter.mode === 'addresses' ? 'checked' : '' %> class="gmail-filter-radio">
+                  <span>Anyone on this list</span>
+                </label>
+              </div>
+            </div>
+
+            <div id="gmail-domains-group" class="form-group" style="display: none;">
+              <label for="gmail_filter_domains">Allowed Domains</label>
+              <input type="text" id="gmail_filter_domains" name="filter_domains" value="<%= gmailFilter.domains.join(', ') %>" placeholder="e.g. hustlefund.com, example.com">
+              <div class="hint">Comma-separated. Only emails from @these-domains will be processed.</div>
+            </div>
+
+            <div id="gmail-addresses-group" style="display: none;">
+              <div class="form-group">
+                <label>Allowed Addresses</label>
+                <div style="display: flex; gap: 8px;">
+                  <input type="email" id="gmail_address_input" placeholder="alice@example.com" style="flex: 1;">
+                  <button type="button" id="gmail-add-address-btn" class="btn" style="padding: 8px 16px;">Add</button>
+                </div>
+              </div>
+              <div id="gmail-address-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;"></div>
+              <input type="hidden" id="gmail_filter_addresses_hidden" name="filter_addresses" value="">
+            </div>
+
+            <button type="submit" class="btn">Save Rules</button>
+          </form>
+        <% } %>
+
         <% const connectedServices = googleAccounts.flatMap(a => a.services); %>
         <div style="<%= googleAccounts.length > 0 ? 'padding-top: 12px;' : '' %>">
           <form method="POST" action="/integrations/google/connect">
@@ -374,6 +418,69 @@
 
   updateVisibility();
   renderTags();
+})();
+
+// Gmail email rules
+(function () {
+  var radios = document.querySelectorAll(".gmail-filter-radio");
+  if (!radios.length) return;
+
+  var domainsGroup = document.getElementById("gmail-domains-group");
+  var addressesGroup = document.getElementById("gmail-addresses-group");
+  var addressInput = document.getElementById("gmail_address_input");
+  var addBtn = document.getElementById("gmail-add-address-btn");
+  var tagsContainer = document.getElementById("gmail-address-tags");
+  var hiddenInput = document.getElementById("gmail_filter_addresses_hidden");
+
+  var addresses = <%= JSON.stringify((typeof gmailFilter !== 'undefined' && gmailFilter.addresses) || []) %>;
+
+  function updateGmailVisibility() {
+    var checked = document.querySelector(".gmail-filter-radio:checked");
+    var mode = checked ? checked.value : "all";
+    domainsGroup.style.display = mode === "domains" ? "block" : "none";
+    addressesGroup.style.display = mode === "addresses" ? "block" : "none";
+  }
+
+  function renderGmailTags() {
+    tagsContainer.innerHTML = "";
+    hiddenInput.value = addresses.join(",");
+    addresses.forEach(function (addr, i) {
+      var tag = document.createElement("span");
+      tag.style.cssText = "display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: var(--tag-bg); color: var(--accent); border-radius: 12px; font-size: 13px;";
+      tag.textContent = addr;
+      var removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.textContent = "\u00d7";
+      removeBtn.style.cssText = "border: none; background: none; color: var(--accent); cursor: pointer; font-size: 16px; padding: 0; line-height: 1;";
+      removeBtn.onclick = function () {
+        addresses.splice(i, 1);
+        renderGmailTags();
+      };
+      tag.appendChild(removeBtn);
+      tagsContainer.appendChild(tag);
+    });
+  }
+
+  function addGmailAddress() {
+    var val = addressInput.value.trim().toLowerCase();
+    if (val && val.includes("@") && addresses.indexOf(val) === -1) {
+      addresses.push(val);
+      renderGmailTags();
+      addressInput.value = "";
+    }
+    addressInput.focus();
+  }
+
+  addBtn.addEventListener("click", addGmailAddress);
+  addressInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); addGmailAddress(); }
+  });
+  radios.forEach(function (r) {
+    r.addEventListener("change", updateGmailVisibility);
+  });
+
+  updateGmailVisibility();
+  renderGmailTags();
 })();
 </script>
 <%- include('partials/foot') %>
