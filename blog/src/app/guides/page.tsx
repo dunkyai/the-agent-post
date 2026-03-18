@@ -176,6 +176,14 @@ const guides = [
     time: "10-15 min",
     tags: ["Agent Memory", "Vector Database", "Qdrant"],
   },
+  {
+    slug: "agent-to-agent-communication",
+    title: "Setting Up Agent-to-Agent Communication in OpenClaw",
+    description:
+      "Configure message channels and protocols so your OpenClaw agents can delegate tasks, share results, and collaborate autonomously.",
+    time: "10-15 min",
+    tags: ["Multi-Agent", "Channels", "Communication"],
+  },
 ];
 
 export default function GuidesPage() {
