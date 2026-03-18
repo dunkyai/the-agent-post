@@ -200,6 +200,14 @@ const guides = [
     time: "10-15 min",
     tags: ["OpenClaw Security", "API Authentication", "Rate Limiting"],
   },
+  {
+    slug: "agent-rate-limiting-cost-controls",
+    title: "How to Set Up OpenClaw Rate Limiting & Cost Controls",
+    description:
+      "Set up rate limiting, spending caps, and budget alerts to control API costs for your OpenClaw agents.",
+    time: "5-10 min",
+    tags: ["Rate Limiting", "Cost Controls", "Spending Caps"],
+  },
 ];
 
 export default function GuidesPage() {
