@@ -54,8 +54,8 @@ export default function HostedPage() {
   }
 
   return (
-    <div className="px-4 py-6 sm:py-10">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 max-w-5xl mx-auto">
+    <div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16">
         {/* Left — Form */}
         <div className="flex flex-col justify-center">
           <p className="text-xs font-bold uppercase tracking-widest text-accent mb-3">
