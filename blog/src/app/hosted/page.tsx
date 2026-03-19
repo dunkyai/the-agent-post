@@ -65,7 +65,7 @@ export default function HostedPage() {
             Your AI agent, always&nbsp;on.
           </h1>
           <p className="text-text-secondary text-base leading-relaxed mb-8">
-            We run 24/7, can chat with you in Slack, email, and&nbsp;more.
+            We run 24/7 and can chat with you in Slack, email, and&nbsp;more.
           </p>
 
           <div className="bg-accent/5 border border-accent/10 rounded-lg p-6 sm:p-8">
