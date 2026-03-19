@@ -99,34 +99,24 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: "Please review our conversation and save the important details, decisions, and preferences to your memory so you remember them in the future." }),
       })
-        .then(function (res) {
-          if (!res.body) throw new Error("No response");
-          var reader = res.body.getReader();
-          var decoder = new TextDecoder();
-          var buf = "";
-          function read() {
-            return reader.read().then(function (result) {
-              if (result.done) return;
-              buf += decoder.decode(result.value, { stream: true });
-              var parts = buf.split("\n\n");
-              buf = parts.pop() || "";
-              for (var p = 0; p < parts.length; p++) {
-                var lines = parts[p].split("\n");
-                var evType = null, evData = null;
-                for (var l = 0; l < lines.length; l++) {
-                  if (lines[l].indexOf("event: ") === 0) evType = lines[l].slice(7);
-                  else if (lines[l].indexOf("data: ") === 0) evData = lines[l].slice(6);
-                }
-                if (evType === "done" && evData) {
-                  var parsed = JSON.parse(evData);
+        .then(function () {
+          // Poll until done
+          function pollMemory() {
+            fetch("/chat/poll").then(function (r) { return r.json(); }).then(function (data) {
+              if (data.done) {
+                if (data.result) {
                   link.innerHTML = '<span style="color: var(--text-secondary);">Saved to memory</span>';
-                  addMessage("assistant", parsed.content);
+                  addMessage("assistant", data.result.content);
+                } else {
+                  link.innerHTML = '<span style="color: var(--danger);">Failed to save</span>';
+                  memorySaved = false;
                 }
+              } else {
+                setTimeout(pollMemory, 1000);
               }
-              return read();
             });
           }
-          return read();
+          setTimeout(pollMemory, 2000);
         })
         .catch(function () {
           link.innerHTML = '<span style="color: var(--danger);">Failed to save</span>';
@@ -191,81 +181,75 @@
     messages.appendChild(thinking);
     scrollToBottom();
 
-    var xhr = new XMLHttpRequest();
-    xhr.open("POST", "/chat/message");
-    xhr.setRequestHeader("Content-Type", "application/json");
-    var lastIndex = 0;
-
-    function parseSSE(raw) {
-      var parts = raw.split("\n\n");
-      for (var p = 0; p < parts.length; p++) {
-        var lines = parts[p].split("\n");
-        var eventType = null;
-        var dataLines = [];
-        for (var l = 0; l < lines.length; l++) {
-          if (lines[l].indexOf("event: ") === 0) eventType = lines[l].slice(7);
-          else if (lines[l].indexOf("data: ") === 0) dataLines.push(lines[l].slice(6));
+    // Submit message
+    fetch("/chat/message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text }),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.error) {
+          var t = messages.querySelector(".thinking-indicator");
+          if (t) t.remove();
+          errorEl.textContent = data.error;
+          input.disabled = false;
+          sendBtn.disabled = false;
+          sendBtn.textContent = "Send";
+          input.focus();
+          return;
         }
-        var eventData = dataLines.length > 0 ? dataLines.join("\n") : null;
-        if (!eventType || eventData === null) continue;
-
-        if (eventType === "status") {
-          var thinkingText = messages.querySelector(".thinking-text");
-          if (thinkingText) thinkingText.textContent = eventData;
-          scrollToBottom();
-        } else if (eventType === "done") {
-          try {
-            var parsed = JSON.parse(eventData);
-            var t = messages.querySelector(".thinking-indicator");
-            if (t) t.remove();
-            addMessage("assistant", parsed.content);
-            maybeShowMemoryLink();
-          } catch (e) {
-            console.error("Failed to parse done event:", e, eventData);
-          }
-        } else if (eventType === "error") {
-          try {
-            var errData = JSON.parse(eventData);
-            var t = messages.querySelector(".thinking-indicator");
-            if (t) t.remove();
-            errorEl.textContent = errData.error;
-          } catch (e) {
-            var t = messages.querySelector(".thinking-indicator");
-            if (t) t.remove();
-            errorEl.textContent = eventData;
-          }
-        }
-      }
-    }
-
-    xhr.onprogress = function () {
-      var newData = xhr.responseText.substring(lastIndex);
-      lastIndex = xhr.responseText.length;
-      if (newData) parseSSE(newData);
-    };
-
-    xhr.onload = function () {
-      // Parse any remaining data
-      var remaining = xhr.responseText.substring(lastIndex);
-      if (remaining) parseSSE(remaining);
-      input.disabled = false;
-      sendBtn.disabled = false;
-      sendBtn.textContent = "Send";
-      input.focus();
-    };
-
-    xhr.onerror = function () {
-      var t = messages.querySelector(".thinking-indicator");
-      if (t) t.remove();
-      errorEl.textContent = "Connection error";
-      input.disabled = false;
-      sendBtn.disabled = false;
-      sendBtn.textContent = "Send";
-      input.focus();
-    };
-
-    xhr.send(JSON.stringify({ message: text }));
+        // Start polling for status updates
+        pollForResult();
+      })
+      .catch(function (err) {
+        var t = messages.querySelector(".thinking-indicator");
+        if (t) t.remove();
+        errorEl.textContent = err.message || "Connection error";
+        input.disabled = false;
+        sendBtn.disabled = false;
+        sendBtn.textContent = "Send";
+        input.focus();
+      });
   });
+
+  function pollForResult() {
+    fetch("/chat/poll")
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.done) {
+          var t = messages.querySelector(".thinking-indicator");
+          if (t) t.remove();
+
+          if (data.status === "error") {
+            errorEl.textContent = data.error || "Something went wrong";
+          } else if (data.result) {
+            addMessage("assistant", data.result.content);
+            maybeShowMemoryLink();
+          }
+
+          input.disabled = false;
+          sendBtn.disabled = false;
+          sendBtn.textContent = "Send";
+          input.focus();
+          return;
+        }
+
+        // Update thinking text with current status
+        var thinkingText = messages.querySelector(".thinking-text");
+        if (thinkingText && data.status) {
+          thinkingText.textContent = data.status;
+        }
+        scrollToBottom();
+
+        // Poll again in 1 second
+        setTimeout(pollForResult, 1000);
+      })
+      .catch(function () {
+        // Network error during poll — retry
+        setTimeout(pollForResult, 2000);
+      });
+  }
 
   scrollToBottom();
 })();
