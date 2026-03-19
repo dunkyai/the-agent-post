@@ -232,6 +232,14 @@ const guides = [
     time: "10-15 min",
     tags: ["Windows", "WSL", "Setup"],
   },
+  {
+    slug: "openclaw-postgresql-mcp",
+    title: "Connecting OpenClaw to PostgreSQL via MCP",
+    description:
+      "Give your OpenClaw agents direct read and write access to a PostgreSQL database using the Model Context Protocol.",
+    time: "10-15 min",
+    tags: ["PostgreSQL", "MCP", "Database"],
+  },
 ];
 
 export default function GuidesPage() {
