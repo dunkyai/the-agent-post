@@ -162,11 +162,15 @@ export async function type(
 
 export async function screenshot(
   instanceId: string
-): Promise<{ title: string; url: string; elements: any[] }> {
+): Promise<{ title: string; url: string; elements: any[]; screenshot: string }> {
   const session = await getOrCreateSession(instanceId);
 
   const title = await session.page.title();
   const url = session.page.url();
+
+  // Capture visual screenshot as base64 PNG
+  const screenshotBuffer = await session.page.screenshot({ type: "png", fullPage: false });
+  const screenshotBase64 = screenshotBuffer.toString("base64");
 
   // Extract visible interactive elements
   const elements = await session.page.evaluate(() => {
@@ -223,7 +227,7 @@ export async function screenshot(
     return result.slice(0, 50); // Limit to 50 elements
   });
 
-  return { title, url, elements };
+  return { title, url, elements, screenshot: screenshotBase64 };
 }
 
 export async function getContent(
