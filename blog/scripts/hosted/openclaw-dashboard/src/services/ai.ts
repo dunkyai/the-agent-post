@@ -334,7 +334,7 @@ const BROWSER_TOOLS = [
   },
   {
     name: "browser_screenshot",
-    description: "Get a description of the current page including the title, URL, and all visible interactive elements (links, buttons, inputs, etc.) with their selectors. Use this to understand what's on the page before clicking or typing.",
+    description: "Take a screenshot of the current page and get a list of all visible interactive elements with their selectors. The screenshot shows you exactly what the page looks like. Use this to understand the page layout and find elements before clicking or typing.",
     input_schema: {
       type: "object" as const,
       properties: {},
@@ -350,7 +350,7 @@ const BROWSER_TOOLS = [
   },
 ];
 
-async function executeBrowserTool(toolName: string, input: any): Promise<string> {
+async function executeBrowserTool(toolName: string, input: any): Promise<string | any[]> {
   const provisioningUrl = process.env.PROVISIONING_URL;
   const instanceId = process.env.INSTANCE_ID;
   const gatewayToken = process.env.GATEWAY_TOKEN;
@@ -403,7 +403,18 @@ async function executeBrowserTool(toolName: string, input: any): Promise<string>
       return JSON.stringify({ error });
     }
 
-    return JSON.stringify(await res.json());
+    const data: any = await res.json();
+
+    // For screenshots, return multipart content with the image + element descriptions
+    if (toolName === "browser_screenshot" && data.screenshot) {
+      const { screenshot: img, ...rest } = data;
+      return [
+        { type: "image", source: { type: "base64", media_type: "image/png", data: img } },
+        { type: "text", text: JSON.stringify(rest) },
+      ];
+    }
+
+    return JSON.stringify(data);
   } catch (err) {
     return JSON.stringify({ error: err instanceof Error ? err.message : "Browser action failed" });
   }
@@ -1514,7 +1525,7 @@ async function callAnthropic(
           continue;
         }
 
-        let result: string;
+        let result: string | any[];
         if (memoryTools.includes(toolBlock.name)) {
           result = executeMemoryTool(toolBlock.name, toolBlock.input);
         } else if (codeTools.includes(toolBlock.name)) {
@@ -1538,12 +1549,12 @@ async function callAnthropic(
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input);
         }
-        console.log(`Tool result: ${toolBlock.name}`, result.slice(0, 300));
+        console.log(`Tool result: ${toolBlock.name}`, typeof result === "string" ? result.slice(0, 300) : "[multipart content]");
         toolResults.push({
           type: "tool_result",
           tool_use_id: toolBlock.id,
           content: result,
-        });
+        } as any);
       }
 
       apiMessages.push({ role: "user", content: toolResults });
