@@ -1108,10 +1108,10 @@ async function pollGmail(): Promise<void> {
     if (gmailLastChecked) {
       const epoch = Math.floor(new Date(gmailLastChecked).getTime() / 1000);
       query += ` after:${epoch}`;
-    } else {
-      query += " newer_than:1h";
     }
+    // No time filter on first run — pick up all unread in inbox
 
+    console.log(`Gmail poll: searching (${accountId}) q="${query}"`);
     const params = new URLSearchParams({ q: query, maxResults: "10" });
     const res = await googleFetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`,
@@ -1119,17 +1119,35 @@ async function pollGmail(): Promise<void> {
       accountId
     );
     if (!res.ok) {
-      console.error(`Gmail poll search failed (${res.status})`);
+      const body = await res.text();
+      console.error(`Gmail poll search failed (${res.status}): ${body}`);
       return;
     }
 
     const data: any = await res.json();
     const messageIds: string[] = (data.messages || []).map((m: any) => m.id);
 
+    console.log(`Gmail poll: ${messageIds.length} unread email(s) found`);
     if (messageIds.length === 0) return;
 
-    console.log(`Gmail poll: found ${messageIds.length} new email(s)`);
     const replyMode = getSetting("gmail_reply_mode") || "draft";
+    const ownEmail = accountId.toLowerCase();
+
+    // Build set of thread IDs that already have drafts
+    const draftThreadIds = new Set<string>();
+    try {
+      const draftsRes = await googleFetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/drafts?maxResults=50`,
+        {},
+        accountId
+      );
+      if (draftsRes.ok) {
+        const draftsData: any = await draftsRes.json();
+        for (const d of draftsData.drafts || []) {
+          if (d.message?.threadId) draftThreadIds.add(d.message.threadId);
+        }
+      }
+    } catch {}
 
     for (const msgId of messageIds) {
       try {
@@ -1157,9 +1175,41 @@ async function pollGmail(): Promise<void> {
         // Check sender against rules
         if (!isGmailSenderAllowed(from)) {
           console.log(`Gmail poll: filtered out email from ${from}`);
-          // Mark as read so we don't re-process
           await markAsRead(msgId, accountId);
           continue;
+        }
+
+        // Skip if there's already a draft for this thread
+        if (threadId && draftThreadIds.has(threadId)) {
+          console.log(`Gmail poll: skipped (draft already exists) — ${subject}`);
+          await markAsRead(msgId, accountId);
+          continue;
+        }
+
+        // Skip if the last message in the thread is from our account (we already replied)
+        if (threadId) {
+          try {
+            const threadRes = await googleFetch(
+              `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=metadata&metadataHeaders=From`,
+              {},
+              accountId
+            );
+            if (threadRes.ok) {
+              const threadData: any = await threadRes.json();
+              const threadMsgs = threadData.messages || [];
+              if (threadMsgs.length > 0) {
+                const lastMsg = threadMsgs[threadMsgs.length - 1];
+                const lastFrom = (lastMsg.payload?.headers || [])
+                  .find((h: any) => h.name.toLowerCase() === "from")?.value || "";
+                const lastFromEmail = lastFrom.toLowerCase().match(/<([^>]+)>/)?.[1] || lastFrom.toLowerCase().trim();
+                if (lastFromEmail === ownEmail) {
+                  console.log(`Gmail poll: skipped (already replied) — ${subject}`);
+                  await markAsRead(msgId, accountId);
+                  continue;
+                }
+              }
+            }
+          } catch {}
         }
 
         // Extract body text
@@ -1195,7 +1245,6 @@ async function pollGmail(): Promise<void> {
 
         // Collect CC: all original To/CC minus the user's own email
         const allRecipients = [to, cc].filter(Boolean).join(", ");
-        const ownEmail = accountId.toLowerCase();
         const replyCc = allRecipients
           .split(",")
           .map(r => r.trim())
@@ -1212,6 +1261,8 @@ async function pollGmail(): Promise<void> {
         } else {
           await gmailCreateDraft(replyTo, replySubject, reply, accountId, undefined, replyCc, threadId, messageIdHeader);
           console.log(`Gmail poll: drafted reply to ${from}`);
+          // Track so we don't create another draft in this same cycle
+          if (threadId) draftThreadIds.add(threadId);
         }
 
         // Mark as read
