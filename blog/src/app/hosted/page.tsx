@@ -21,15 +21,6 @@ const BENEFITS = [
   },
 ];
 
-const INCLUDES = [
-  "Dedicated always-on instance",
-  "Unlimited messages",
-  "All integrations included",
-  "Web dashboard",
-  "60-second setup",
-  "Cancel anytime",
-];
-
 export default function HostedPage() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
@@ -63,8 +54,8 @@ export default function HostedPage() {
   }
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12 sm:py-20">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 max-w-5xl w-full">
+    <div className="px-4 py-6 sm:py-10">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 max-w-5xl mx-auto">
         {/* Left — Form */}
         <div className="flex flex-col justify-center">
           <p className="text-xs font-bold uppercase tracking-widest text-accent mb-3">
@@ -84,7 +75,7 @@ export default function HostedPage() {
               <span className="text-text-secondary text-sm">/month</span>
             </div>
             <p className="text-text-secondary text-sm mb-6">
-              Everything included. Cancel anytime.
+              Just log in to start. Cancel anytime.
             </p>
 
             <form onSubmit={handleCheckout} className="space-y-3">
@@ -108,68 +99,42 @@ export default function HostedPage() {
             {status === "error" && (
               <p className="text-red-500 text-xs mt-3">{errorMessage}</p>
             )}
-
-            <ul className="mt-6 space-y-2">
-              {INCLUDES.map((item) => (
-                <li
-                  key={item}
-                  className="flex items-center gap-2 text-sm text-text-secondary"
-                >
-                  <span className="text-accent font-bold">&check;</span>
-                  {item}
-                </li>
-              ))}
-            </ul>
           </div>
         </div>
 
-        {/* Right — Value Proposition */}
-        <div className="flex flex-col justify-center space-y-6">
-          {BENEFITS.map((b) => (
-            <div
-              key={b.title}
-              className="border-l-2 border-accent/30 pl-5 py-1"
-            >
-              <h3 className="font-serif font-bold text-lg mb-1">{b.title}</h3>
-              <p className="text-text-secondary text-sm leading-relaxed">
-                {b.desc}
-              </p>
+        {/* Right — Visual + Benefits */}
+        <div className="flex flex-col justify-center gap-8">
+          {/* Placeholder illustration */}
+          <div className="bg-accent/5 border border-accent/10 rounded-lg p-8 sm:p-10 flex flex-col items-center justify-center text-center">
+            <div className="text-5xl mb-4" role="img" aria-label="Agent illustration">
+              <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-accent">
+                <rect x="8" y="16" width="64" height="48" rx="6" stroke="currentColor" strokeWidth="2.5" fill="none" />
+                <circle cx="30" cy="38" r="4" fill="currentColor" opacity="0.6" />
+                <circle cx="50" cy="38" r="4" fill="currentColor" opacity="0.6" />
+                <path d="M28 48 C32 52, 48 52, 52 48" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+                <line x1="40" y1="4" x2="40" y2="16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                <circle cx="40" cy="4" r="3" fill="currentColor" opacity="0.4" />
+              </svg>
             </div>
-          ))}
+            <p className="font-serif font-bold text-lg mb-1">Your agent, your rules</p>
+            <p className="text-text-secondary text-sm">
+              Configure once, reach everywhere. One dashboard for all your integrations.
+            </p>
+          </div>
 
-          <div className="border-t border-rule-light pt-6 mt-2">
-            <h3 className="font-serif font-bold text-base mb-3">
-              How it works
-            </h3>
-            <ol className="space-y-3">
-              <li className="flex gap-3 text-sm">
-                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-accent text-white text-xs font-bold flex items-center justify-center">
-                  1
-                </span>
-                <span className="text-text-secondary">
-                  <strong className="text-foreground">Subscribe</strong> &mdash;
-                  enter your email, complete checkout. Agent ready in 60 seconds.
-                </span>
-              </li>
-              <li className="flex gap-3 text-sm">
-                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-accent text-white text-xs font-bold flex items-center justify-center">
-                  2
-                </span>
-                <span className="text-text-secondary">
-                  <strong className="text-foreground">Configure</strong> &mdash;
-                  add your API key, set personality and system prompt.
-                </span>
-              </li>
-              <li className="flex gap-3 text-sm">
-                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-accent text-white text-xs font-bold flex items-center justify-center">
-                  3
-                </span>
-                <span className="text-text-secondary">
-                  <strong className="text-foreground">Connect</strong> &mdash;
-                  link Telegram, Slack, or Email. Your agent starts responding immediately.
-                </span>
-              </li>
-            </ol>
+          {/* Benefits */}
+          <div className="space-y-4">
+            {BENEFITS.map((b) => (
+              <div
+                key={b.title}
+                className="border-l-2 border-accent/30 pl-5 py-1"
+              >
+                <h3 className="font-serif font-bold text-base mb-0.5">{b.title}</h3>
+                <p className="text-text-secondary text-sm leading-relaxed">
+                  {b.desc}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       </div>
