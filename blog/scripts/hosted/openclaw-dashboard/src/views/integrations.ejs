@@ -41,17 +41,75 @@
         </div>
       </details>
 
-      <!-- Email (disabled) -->
-      <details class="integration-tile tile-disabled">
+      <!-- Email -->
+      <details class="integration-tile">
         <summary class="integration-tile-summary">
           <span class="integration-icon" style="background: #EA4335;">E</span>
           <div class="integration-tile-info">
             <h3>Email</h3>
             <p>Send and receive email as your agent</p>
           </div>
-          <span class="status-badge status-disconnected">coming soon</span>
+          <span class="status-badge status-<%= email.status %>"><%= email.status %></span>
         </summary>
-        <div class="integration-tile-body"></div>
+        <div class="integration-tile-body">
+          <% if (email.error_message) { %>
+            <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= email.error_message %></p>
+          <% } %>
+
+          <% if (email.status === 'connected') { %>
+            <div style="margin-bottom: 12px;">
+              <label style="font-size: 13px; color: var(--text-secondary);">Agent Email Address</label>
+              <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                <code id="email-address" style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px; flex: 1;"><%= email.email_address %></code>
+                <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('email-address').textContent).then(() => this.textContent = 'Copied!').catch(() => {}); setTimeout(() => this.textContent = 'Copy', 1500);" class="btn btn-sm" style="padding: 6px 12px; font-size: 13px;">Copy</button>
+              </div>
+              <div class="hint" style="margin-top: 6px; font-size: 12px; color: var(--text-secondary);">Send emails to this address and your agent will respond via AI. Replies require a Tier 1+ LobsterMail API key.</div>
+            </div>
+            <form method="POST" action="/integrations/email/filter" style="margin-bottom: 12px; padding-top: 12px; border-top: 1px solid var(--rule-light);">
+              <div class="form-group">
+                <label for="email_filter_mode">Filter Incoming Emails</label>
+                <select id="email_filter_mode" name="filter_mode">
+                  <option value="all" <%= email.filter_mode === 'all' ? 'selected' : '' %>>Allow all</option>
+                  <option value="domain" <%= email.filter_mode === 'domain' ? 'selected' : '' %>>Allow only from a domain</option>
+                  <option value="addresses" <%= email.filter_mode === 'addresses' ? 'selected' : '' %>>Allow only specific addresses</option>
+                </select>
+              </div>
+
+              <div id="filter-domain-group" class="form-group" style="display: none;">
+                <label for="filter_domain">Allowed Domain</label>
+                <input type="text" id="filter_domain" name="filter_domain" value="<%= email.filter_domain || '' %>" placeholder="e.g. acme.com">
+                <div class="hint">Only emails from @this-domain will be processed</div>
+              </div>
+
+              <div id="filter-addresses-group" style="display: none;">
+                <div class="form-group">
+                  <label>Allowed Addresses</label>
+                  <div style="display: flex; gap: 8px;">
+                    <input type="email" id="filter_address_input" placeholder="alice@example.com" style="flex: 1;">
+                    <button type="button" id="add-address-btn" class="btn btn-sm" style="padding: 8px 16px;">Add</button>
+                  </div>
+                </div>
+                <div id="address-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;"></div>
+                <input type="hidden" id="filter_addresses_hidden" name="filter_addresses" value="">
+              </div>
+
+              <button type="submit" class="btn btn-sm">Save Filter</button>
+            </form>
+
+            <form method="POST" action="/integrations/email/disconnect">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+            </form>
+          <% } else { %>
+            <form method="POST" action="/integrations/email/connect">
+              <div class="form-group">
+                <label for="email_api_key">LobsterMail API Key <span style="color: var(--text-secondary); font-weight: normal;">(optional)</span></label>
+                <input type="password" id="email_api_key" name="api_key" placeholder="lm_sk_live_...">
+                <div class="hint">Leave blank to auto-provision a free inbox (receive only). Paste a Tier 1+ key to enable replies.</div>
+              </div>
+              <button type="submit" class="btn">Connect Email</button>
+            </form>
+          <% } %>
+        </div>
       </details>
 
       <!-- Google -->
