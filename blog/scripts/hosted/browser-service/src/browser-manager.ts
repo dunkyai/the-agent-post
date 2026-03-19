@@ -101,7 +101,7 @@ function truncate(text: string): string {
 export async function navigate(
   instanceId: string,
   url: string
-): Promise<{ title: string; url: string; content: string }> {
+): Promise<{ title: string; url: string; content: string; images?: string[] }> {
   const session = await getOrCreateSession(instanceId);
   await session.page.goto(url, {
     waitUntil: "domcontentloaded",
@@ -113,7 +113,28 @@ export async function navigate(
   const title = await session.page.title();
   const content = await session.page.innerText("body").catch(() => "");
 
-  return { title, url: session.page.url(), content: truncate(content) };
+  // Extract image URLs from the page (direct URLs only, skip tiny icons/tracking pixels)
+  const images = await session.page.evaluate(() => {
+    const imgs = Array.from(document.querySelectorAll("img"));
+    const urls: string[] = [];
+    const seen = new Set<string>();
+    for (const img of imgs) {
+      const src = img.src || img.getAttribute("data-src") || "";
+      if (!src || !src.startsWith("http")) continue;
+      // Skip tiny images (icons, tracking pixels)
+      const w = img.naturalWidth || img.width || 0;
+      const h = img.naturalHeight || img.height || 0;
+      if (w > 0 && w < 50 && h > 0 && h < 50) continue;
+      // Skip data URIs and SVG placeholders
+      if (src.startsWith("data:")) continue;
+      if (seen.has(src)) continue;
+      seen.add(src);
+      urls.push(src);
+    }
+    return urls.slice(0, 10); // Return up to 10 image URLs
+  }).catch(() => [] as string[]);
+
+  return { title, url: session.page.url(), content: truncate(content), images };
 }
 
 export async function click(
