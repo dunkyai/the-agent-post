@@ -1423,9 +1423,15 @@ async function callAnthropic(
       continue;
     }
 
-    // No more custom tool calls — extract final text
-    const textBlocks = (data.content || []).filter((b: any) => b.type === "text");
-    const text = textBlocks.map((b: any) => b.text).join("\n\n").trim();
+    // No more custom tool calls — extract final text (and inline images)
+    const parts: string[] = [];
+    for (const block of data.content || []) {
+      if (block.type === "text") parts.push(block.text);
+      else if (block.type === "image" && block.source?.type === "base64") {
+        parts.push(`![image](data:${block.source.media_type};base64,${block.source.data})`);
+      }
+    }
+    const text = parts.join("\n\n").trim();
     return { role: "assistant", content: text || "(Action completed.)" };
   }
 
