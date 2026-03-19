@@ -14,7 +14,6 @@ import {
   docsCreate, docsRead, docsAppend, docsInsert,
   sheetsCreate, sheetsRead, sheetsWrite, sheetsAppend, sheetsListSheets,
 } from "./google";
-import { sendTelegramMessage, isTelegramRunning } from "./telegram";
 import { sendSlackMessage, isSlackRunning, getChannelMembers } from "./slack";
 import { sendEmailMessage, isEmailRunning, checkInbox } from "./email";
 import {
@@ -56,15 +55,15 @@ function getApiKey(provider: "anthropic" | "openai"): string {
 const SCHEDULING_TOOLS = [
   {
     name: "create_scheduled_job",
-    description: "Create a new scheduled job that runs on a cron schedule. Use this when the user asks to be reminded of something, schedule a recurring task, or set up periodic actions. IMPORTANT: Before creating a job, you MUST ask the user where they want the results delivered (e.g. Slack channel, Gmail, Telegram). Do NOT default to dashboard — results shown in the dashboard chat are unreliable. Only create the job once the user has confirmed a delivery channel.",
+    description: "Create a new scheduled job that runs on a cron schedule. Use this when the user asks to be reminded of something, schedule a recurring task, or set up periodic actions. IMPORTANT: Before creating a job, you MUST ask the user where they want the results delivered (e.g. Slack channel, Gmail, email). Do NOT default to dashboard — results shown in the dashboard chat are unreliable. Only create the job once the user has confirmed a delivery channel.",
     input_schema: {
       type: "object" as const,
       properties: {
         name: { type: "string", description: "A short descriptive name for the job" },
         schedule: { type: "string", description: "A 5-field cron expression. Examples: '0 9 * * 1' (Monday 9am), '*/30 * * * *' (every 30 min), '0 0 * * *' (daily midnight). Fields: minute hour day-of-month month day-of-week." },
         prompt: { type: "string", description: "The prompt/instruction sent to the AI when the job fires" },
-        target_source: { type: "string", enum: ["slack", "telegram", "email"], description: "Where to deliver results. Must be one of: slack, telegram, email." },
-        target_external_id: { type: "string", description: "The delivery target ID. For Slack: must be a real Slack channel ID (C...), DM ID (D...), or user ID (U...) — e.g. C01HCS46FPB or U07FQCAACN8. NEVER use placeholder values like 'scheduler' or 'dashboard'. If you don't know the ID, ask the user. For Telegram: chat ID. For email: recipient email address." },
+        target_source: { type: "string", enum: ["slack", "email"], description: "Where to deliver results. Must be one of: slack, email." },
+        target_external_id: { type: "string", description: "The delivery target ID. For Slack: must be a real Slack channel ID (C...), DM ID (D...), or user ID (U...) — e.g. C01HCS46FPB or U07FQCAACN8. NEVER use placeholder values like 'scheduler' or 'dashboard'. If you don't know the ID, ask the user. For email: recipient email address." },
       },
       required: ["name", "schedule", "prompt", "target_source", "target_external_id"],
     },
@@ -452,21 +451,6 @@ const MEMORY_TOOLS = [
 
 // --- Messaging Tools (cross-channel) ---
 
-const TELEGRAM_MESSAGING_TOOLS = [
-  {
-    name: "send_telegram",
-    description: "Send a message to a Telegram chat. Use when the user asks you to message someone on Telegram, or when you need to proactively reach out via Telegram.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        chat_id: { type: "string", description: "The Telegram chat ID to send to" },
-        message: { type: "string", description: "The message text to send" },
-      },
-      required: ["chat_id", "message"],
-    },
-  },
-];
-
 const SLACK_MESSAGING_TOOLS = [
   {
     name: "send_slack",
@@ -523,9 +507,6 @@ const EMAIL_MESSAGING_TOOLS = [
 async function executeMessagingTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
-      case "send_telegram":
-        await sendTelegramMessage(input.chat_id, input.message);
-        return JSON.stringify({ success: true, channel: "telegram", chat_id: input.chat_id });
       case "send_slack":
         await sendSlackMessage(input.channel, input.message, input.thread_ts);
         return JSON.stringify({ success: true, channel: "slack", channel_id: input.channel });
@@ -1334,9 +1315,9 @@ function executeSchedulingTool(toolName: string, input: any): string {
         return JSON.stringify({ error: `Invalid cron expression: "${input.schedule}"` });
       }
       if (!input.target_source || !input.target_external_id) {
-        return JSON.stringify({ error: "You must specify target_source and target_external_id. Ask the user where they want results delivered (Slack, Telegram, or email)." });
+        return JSON.stringify({ error: "You must specify target_source and target_external_id. Ask the user where they want results delivered (Slack or email)." });
       }
-      const validSources = ["slack", "telegram", "email"];
+      const validSources = ["slack", "email"];
       if (!validSources.includes(input.target_source)) {
         return JSON.stringify({ error: `target_source must be one of: ${validSources.join(", ")}` });
       }
@@ -1408,7 +1389,6 @@ async function callAnthropic(
   ];
 
   // Conditionally add messaging tools based on connected integrations
-  if (isTelegramRunning()) tools.push(...TELEGRAM_MESSAGING_TOOLS);
   if (isSlackRunning()) tools.push(...SLACK_MESSAGING_TOOLS);
   if (isEmailRunning()) tools.push(...EMAIL_MESSAGING_TOOLS);
   if (isSupabaseRunning()) {
@@ -1504,7 +1484,7 @@ async function callAnthropic(
         "sheets_create", "sheets_read", "sheets_write", "sheets_append", "sheets_list_sheets",
       ];
       const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
-      const messagingToolNames = ["send_telegram", "send_slack", "slack_channel_members", "send_lobstermail", "check_lobstermail"];
+      const messagingToolNames = ["send_slack", "slack_channel_members", "send_lobstermail", "check_lobstermail"];
       const supabaseToolNames = ["supabase_list_tables", "supabase_describe_table", "supabase_query", "supabase_insert", "supabase_update"];
       const airtableToolNames = ["airtable_list_bases", "airtable_list_tables", "airtable_list_records"];
       const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
@@ -1681,7 +1661,6 @@ export async function processMessage(
   // Inject cross-channel messaging context
   {
     const channels: string[] = [];
-    if (isTelegramRunning()) channels.push("Telegram (use send_telegram tool)");
     if (isSlackRunning()) channels.push("Slack (use send_slack tool to message other channels — never use it to reply to the current Slack conversation)");
     if (isEmailRunning()) channels.push("Email/LobsterMail (use check_lobstermail to check inbox, send_lobstermail to send)");
     if (channels.length > 0) {
@@ -1808,10 +1787,10 @@ If you encounter sensitive data while searching emails, reading documents, or br
       const jobSummaries = allJobs.map(
         (j) => `- #${j.id} "${j.name}" (${describeCron(j.schedule)}) ${j.enabled ? "enabled" : "disabled"}`
       ).join("\n");
-      const schedContext = `You can create, list, and delete scheduled jobs. When creating a job, you MUST ask the user where to deliver results — Slack channel, email address, or Telegram. Never default to the dashboard.\nCurrent jobs:\n${jobSummaries}`;
+      const schedContext = `You can create, list, and delete scheduled jobs. When creating a job, you MUST ask the user where to deliver results — Slack channel or email address. Never default to the dashboard.\nCurrent jobs:\n${jobSummaries}`;
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${schedContext}` : schedContext;
     } else {
-      const schedContext = "You can create, list, and delete scheduled jobs using the scheduling tools. When creating a job, you MUST ask the user where to deliver results — Slack channel, email address, or Telegram. Never default to the dashboard. No jobs are currently scheduled.";
+      const schedContext = "You can create, list, and delete scheduled jobs using the scheduling tools. When creating a job, you MUST ask the user where to deliver results — Slack channel or email address. Never default to the dashboard. No jobs are currently scheduled.";
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${schedContext}` : schedContext;
     }
   } catch {}

@@ -79,14 +79,7 @@ async function deliverResult(
 ): Promise<void> {
   if (job.target_source === "dashboard") return;
 
-  if (job.target_source === "telegram") {
-    try {
-      const { sendTelegramMessage } = require("./telegram");
-      await sendTelegramMessage(job.target_external_id, result);
-    } catch (err: unknown) {
-      console.error(`Job "${job.name}" Telegram delivery failed:`, err instanceof Error ? err.message : err);
-    }
-  } else if (job.target_source === "slack") {
+  if (job.target_source === "slack") {
     try {
       const { sendSlackMessage } = require("./slack");
       await sendSlackMessage(job.target_external_id, result);
