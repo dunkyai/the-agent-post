@@ -255,7 +255,7 @@ export async function gmailSearch(query: string, maxResults = 10, accountId?: st
     })
   );
 
-  return JSON.stringify({ messages, total: data.resultSizeEstimate || messages.length });
+  return JSON.stringify({ messages, total: messages.length });
 }
 
 export async function gmailReadMessage(messageId: string, accountId?: string): Promise<string> {
@@ -1103,13 +1103,15 @@ async function pollGmail(): Promise<void> {
   const accountId = account.google_email;
 
   try {
-    // Build search query — include read emails too (drafts dedup prevents double-processing)
-    let query = "in:inbox";
+    // Build search query — only Primary tab to avoid promotions/social/updates
+    let query = "in:inbox category:primary";
     if (gmailLastChecked) {
       const epoch = Math.floor(new Date(gmailLastChecked).getTime() / 1000);
       query += ` after:${epoch}`;
+    } else {
+      // First run: only process unread to avoid processing entire inbox history
+      query += " is:unread";
     }
-    // No time filter on first run — pick up all unread in inbox
 
     console.log(`Gmail poll: searching (${accountId}) q="${query}"`);
     const params = new URLSearchParams({ q: query, maxResults: "10" });
