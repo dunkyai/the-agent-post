@@ -465,6 +465,13 @@ async function executeBrowserTool(toolName: string, input: any): Promise<string 
       ];
     }
 
+    // For browse_webpage, highlight discovered image URLs so the AI can embed them
+    if (toolName === "browse_webpage" && Array.isArray(data.images) && data.images.length > 0) {
+      const imageList = data.images.map((url: string) => `  - ${url}`).join("\n");
+      const hint = `\n\n--- Images found on this page ---\n${imageList}\n\nTo show an image to the user, embed it in your response using markdown: ![description](url)`;
+      return JSON.stringify({ ...data, content: (data.content || "") + hint });
+    }
+
     return JSON.stringify(data);
   } catch (err) {
     return JSON.stringify({ error: err instanceof Error ? err.message : "Browser action failed" });
