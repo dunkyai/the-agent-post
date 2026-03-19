@@ -1780,6 +1780,12 @@ If you encounter sensitive data while searching emails, reading documents, or br
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${clarificationDirective}` : clarificationDirective;
   }
 
+  // Inject image/markdown guidance
+  {
+    const imageDirective = "The chat supports markdown formatting including images. To show an image to the user, include it as a markdown image: ![description](url). For example, if you find an image URL via web_search, embed it directly: ![A hippo](https://example.com/hippo.jpg). When the user asks to see a picture, use web_search to find a direct image URL (ending in .jpg, .png, .gif, .webp) and embed it in your response.";
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${imageDirective}` : imageDirective;
+  }
+
   // Inject scheduling context
   try {
     const allJobs = getAllScheduledJobs();
