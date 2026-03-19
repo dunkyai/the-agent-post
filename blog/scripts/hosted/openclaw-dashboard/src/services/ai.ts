@@ -359,6 +359,23 @@ async function executeBrowserTool(toolName: string, input: any): Promise<string 
   }
 
   try {
+    // Block search engines and image search sites — force use of web_search instead
+    if (toolName === "browse_webpage" && input.url) {
+      const blockedPatterns = [
+        "google.com", "bing.com", "yahoo.com", "duckduckgo.com",
+        "images.google", "google.com/search", "google.com/sorry",
+        "pixabay.com", "unsplash.com", "pexels.com", "shutterstock.com",
+        "gettyimages.com", "istockphoto.com", "flickr.com/search",
+      ];
+      const url = input.url.toLowerCase();
+      const blocked = blockedPatterns.find((p) => url.includes(p));
+      if (blocked) {
+        return JSON.stringify({
+          error: `Cannot browse ${blocked} — this site blocks automated browsers. Use web_search to find information or image URLs instead. To show an image, find a direct image URL (e.g. from Wikipedia/Wikimedia Commons) and embed it in your response as ![description](https://example.com/image.jpg).`,
+        });
+      }
+    }
+
     const actionMap: Record<string, string> = {
       browse_webpage: "navigate",
       browser_click: "click",
