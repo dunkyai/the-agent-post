@@ -33,6 +33,11 @@ import {
   isBufferRunning,
   bufferListProfiles, bufferCreatePost, bufferGetPendingPosts, bufferGetSentPosts,
 } from "./buffer";
+import {
+  isLumaRunning, getLumaUserName,
+  lumaListEvents, lumaGetEvent, lumaCreateEvent, lumaUpdateEvent,
+  lumaGetGuests, lumaAddGuests, lumaSendInvites,
+} from "./luma";
 
 interface AIResponse {
   role: string;
@@ -928,6 +933,141 @@ async function executeBufferTool(toolName: string, input: any): Promise<string> 
   }
 }
 
+// --- Luma Tools ---
+
+const LUMA_TOOLS = [
+  {
+    name: "luma_list_events",
+    description: "List upcoming events from your Luma calendar. Returns event names, dates, URLs, and visibility.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        after: { type: "string", description: "ISO 8601 datetime — only events after this time (default: now)" },
+        before: { type: "string", description: "ISO 8601 datetime — only events before this time (optional)" },
+        limit: { type: "number", description: "Max events to return (default: 20, max: 50)" },
+      },
+    },
+  },
+  {
+    name: "luma_get_event",
+    description: "Get full details of a specific Luma event by its ID. Returns name, description, dates, location, meeting URL, hosts, and visibility.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        event_id: { type: "string", description: "The Luma event ID" },
+      },
+      required: ["event_id"],
+    },
+  },
+  {
+    name: "luma_create_event",
+    description: "Create a new event on the user's Luma calendar. IMPORTANT: Before calling this tool, you MUST ask the user to confirm or provide: (1) exact date and time, (2) timezone, (3) duration/end time, (4) whether it's virtual or in-person, and (5) any description. Do NOT guess or use defaults for these fields — always clarify with the user first.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "Event title" },
+        start_at: { type: "string", description: "ISO 8601 datetime for event start (e.g. 2026-04-01T18:00:00Z)" },
+        end_at: { type: "string", description: "ISO 8601 datetime for event end" },
+        timezone: { type: "string", description: "IANA timezone (e.g. America/New_York, America/Los_Angeles)" },
+        description: { type: "string", description: "Event description (plain text)" },
+        meeting_url: { type: "string", description: "Virtual meeting link (Zoom, Google Meet, etc.)" },
+        visibility: { type: "string", enum: ["public", "members-only", "private"], description: "Event visibility (default: public)" },
+      },
+      required: ["name", "start_at", "end_at", "timezone"],
+    },
+  },
+  {
+    name: "luma_update_event",
+    description: "Update an existing Luma event. Provide the event ID and any fields to change.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        event_id: { type: "string", description: "The Luma event ID" },
+        name: { type: "string", description: "New event title" },
+        start_at: { type: "string", description: "New start time (ISO 8601)" },
+        end_at: { type: "string", description: "New end time (ISO 8601)" },
+        timezone: { type: "string", description: "New timezone (IANA format)" },
+        description: { type: "string", description: "New description" },
+        meeting_url: { type: "string", description: "New meeting link (or empty to remove)" },
+        visibility: { type: "string", enum: ["public", "members-only", "private"], description: "New visibility" },
+      },
+      required: ["event_id"],
+    },
+  },
+  {
+    name: "luma_get_guests",
+    description: "List guests/RSVPs for a Luma event. Shows attendee names, emails, and approval status.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        event_id: { type: "string", description: "The Luma event ID" },
+        approval_status: { type: "string", enum: ["approved", "pending_approval", "invited", "declined", "waitlist"], description: "Filter by RSVP status (optional)" },
+        limit: { type: "number", description: "Max guests to return (default: 50)" },
+      },
+      required: ["event_id"],
+    },
+  },
+  {
+    name: "luma_add_guests",
+    description: "Add guests to a Luma event. Each guest needs at least an email address.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        event_id: { type: "string", description: "The Luma event ID" },
+        guests: {
+          type: "array",
+          description: "Array of guest objects with email (required) and name (optional)",
+          items: {
+            type: "object",
+            properties: {
+              email: { type: "string", description: "Guest email address" },
+              name: { type: "string", description: "Guest name (optional)" },
+            },
+            required: ["email"],
+          },
+        },
+      },
+      required: ["event_id", "guests"],
+    },
+  },
+  {
+    name: "luma_send_invites",
+    description: "Send email invitations to guests who haven't been notified yet for a Luma event.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        event_id: { type: "string", description: "The Luma event ID" },
+      },
+      required: ["event_id"],
+    },
+  },
+];
+
+async function executeLumaTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "luma_list_events":
+        return await lumaListEvents({ after: input.after, before: input.before, limit: input.limit });
+      case "luma_get_event":
+        return await lumaGetEvent(input.event_id);
+      case "luma_create_event":
+        return await lumaCreateEvent(input);
+      case "luma_update_event":
+        return await lumaUpdateEvent(input);
+      case "luma_get_guests":
+        return await lumaGetGuests(input.event_id, { approval_status: input.approval_status, limit: input.limit });
+      case "luma_add_guests":
+        return await lumaAddGuests(input.event_id, input.guests);
+      case "luma_send_invites":
+        return await lumaSendInvites(input.event_id);
+      default:
+        return JSON.stringify({ error: `Unknown Luma tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Luma operation failed" });
+  }
+}
+
 // --- Public Google Doc Tool (no OAuth needed) ---
 
 const PUBLIC_GDOC_TOOLS = [
@@ -1560,6 +1700,13 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   buffer_create_post: "Creating a social post...",
   buffer_get_pending: "Checking pending posts...",
   buffer_get_sent: "Checking sent posts...",
+  luma_list_events: "Checking Luma events...",
+  luma_get_event: "Reading event details...",
+  luma_create_event: "Creating a Luma event...",
+  luma_update_event: "Updating a Luma event...",
+  luma_get_guests: "Checking guest list...",
+  luma_add_guests: "Adding guests to event...",
+  luma_send_invites: "Sending event invitations...",
   create_scheduled_job: "Creating a scheduled job...",
   list_scheduled_jobs: "Listing scheduled jobs...",
   delete_scheduled_job: "Deleting a scheduled job...",
@@ -1597,6 +1744,7 @@ async function callAnthropic(
   if (isAirtableRunning()) tools.push(...AIRTABLE_TOOLS);
   if (isNotionRunning()) tools.push(...NOTION_TOOLS);
   if (isBufferRunning()) tools.push(...BUFFER_TOOLS);
+  if (isLumaRunning()) tools.push(...LUMA_TOOLS);
 
   // Conditionally add Google tools based on connected services
   const googleServices = getConnectedServices();
@@ -1696,6 +1844,7 @@ async function callAnthropic(
       const airtableToolNames = ["airtable_list_bases", "airtable_list_tables", "airtable_list_records"];
       const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
       const bufferToolNames = ["buffer_list_profiles", "buffer_create_post", "buffer_get_pending", "buffer_get_sent"];
+      const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
 
@@ -1742,6 +1891,8 @@ async function callAnthropic(
           result = await executeNotionTool(toolBlock.name, toolBlock.input);
         } else if (bufferToolNames.includes(toolBlock.name)) {
           result = await executeBufferTool(toolBlock.name, toolBlock.input);
+        } else if (lumaToolNames.includes(toolBlock.name)) {
+          result = await executeLumaTool(toolBlock.name, toolBlock.input);
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input);
         }
@@ -1779,7 +1930,17 @@ async function callAnthropic(
     if (lastScreenshot && !hasImage) {
       parts.push(`![screenshot](data:image/png;base64,${lastScreenshot})`);
     }
-    const text = parts.join("\n\n").trim();
+
+    // Auto-convert bare image URLs in the response to markdown images
+    let text = parts.join("\n\n").trim();
+    text = text.replace(/(^|[\s(])((https?:\/\/[^\s"'<>)]+\.(jpg|jpeg|png|gif|webp|svg)(\?[^\s"'<>)]*)?))(?=[\s),.]|$)/gim, (match, prefix, url) => {
+      // Don't convert if already inside markdown image syntax
+      const pos = text.indexOf(match);
+      const before = text.slice(Math.max(0, pos - 5), pos);
+      if (before.includes("](")) return match;
+      return `${prefix}\n\n![image](${url})\n\n`;
+    });
+
     return { role: "assistant", content: text || "(Action completed.)" };
   }
 
@@ -1974,6 +2135,13 @@ CRITICAL Supabase query rules:
   if (isBufferRunning()) {
     const bufferContext = "You are connected to Buffer for social media scheduling. You can list connected social profiles, create and schedule posts, and view pending and sent posts using the buffer_* tools. Use buffer_list_profiles first to see which social accounts are connected, then buffer_create_post to publish or schedule posts. Set now=true to post immediately, or provide a scheduled_at time.";
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${bufferContext}` : bufferContext;
+  }
+
+  // Inject Luma context
+  if (isLumaRunning()) {
+    const lumaUser = getLumaUserName();
+    const lumaContext = `You are connected to Luma (lu.ma) for event management${lumaUser ? ` as ${lumaUser}` : ""}. You can list upcoming events, get event details, create and update events, view guest lists/RSVPs, add guests, and send invitations using the luma_* tools. Use luma_list_events to see upcoming events first. All times should be in ISO 8601 format with an IANA timezone. IMPORTANT: When creating events, always ask the user to confirm or provide the exact date/time, timezone, duration, whether it's virtual or in-person, and a description before calling luma_create_event.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${lumaContext}` : lumaContext;
   }
 
   // Inject long-term memories

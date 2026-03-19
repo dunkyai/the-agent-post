@@ -203,6 +203,19 @@ async function reconnectIntegrations() {
     console.error("Failed to reconnect Buffer:", err instanceof Error ? err.message : err);
   }
 
+  // Luma
+  try {
+    const luma = getIntegration("luma");
+    if (luma && luma.status === "connected") {
+      const config = JSON.parse(decrypt(luma.config));
+      const { startLuma } = require("./services/luma");
+      startLuma(config);
+      console.log(`Luma reconnected${config.user_name ? ` (${config.user_name})` : ""}`);
+    }
+  } catch (err: unknown) {
+    console.error("Failed to reconnect Luma:", err instanceof Error ? err.message : err);
+  }
+
   try {
     const googleRows = getGoogleIntegrations();
     for (const row of googleRows) {
