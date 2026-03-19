@@ -2057,12 +2057,57 @@ async function callOpenAI(
   maxTokens: number,
   onStatus?: StatusCallback
 ): Promise<AIResponse> {
-  const allMessages: { role: string; content: string }[] = [];
+  // Build tools list (same as Anthropic minus server-side web_search)
+  const customTools: any[] = [
+    ...SCHEDULING_TOOLS,
+    ...MEMORY_TOOLS,
+    ...CODE_EXECUTION_TOOLS,
+    ...PDF_TOOLS,
+    ...BROWSER_TOOLS,
+    ...IMAGE_SEARCH_TOOLS,
+  ];
+  if (isSlackRunning()) customTools.push(...SLACK_MESSAGING_TOOLS);
+  if (isEmailRunning()) customTools.push(...EMAIL_MESSAGING_TOOLS);
+  if (isSupabaseRunning()) {
+    const perms = getSupabasePermissions();
+    customTools.push(...SUPABASE_READ_TOOLS);
+    if (perms.includes("insert")) customTools.push(...SUPABASE_INSERT_TOOLS);
+    if (perms.includes("update")) customTools.push(...SUPABASE_UPDATE_TOOLS);
+  }
+  if (isAirtableRunning()) customTools.push(...AIRTABLE_TOOLS);
+  if (isNotionRunning()) customTools.push(...NOTION_TOOLS);
+  if (isBufferRunning()) customTools.push(...BUFFER_TOOLS);
+  if (isLumaRunning()) customTools.push(...LUMA_TOOLS);
+  const googleServices = getConnectedServices();
+  if (googleServices) {
+    if (googleServices.includes("gmail")) {
+      customTools.push(...GOOGLE_GMAIL_TOOLS);
+      if (googleServices.includes("gmail_send")) customTools.push(...GOOGLE_GMAIL_SEND_TOOLS);
+    }
+    if (googleServices.includes("calendar")) customTools.push(...GOOGLE_CALENDAR_TOOLS);
+    if (googleServices.includes("drive")) customTools.push(...GOOGLE_DRIVE_TOOLS);
+    if (googleServices.includes("contacts")) customTools.push(...GOOGLE_CONTACTS_TOOLS);
+    if (googleServices.includes("docs")) customTools.push(...GOOGLE_DOCS_TOOLS);
+    if (googleServices.includes("sheets")) customTools.push(...GOOGLE_SHEETS_TOOLS);
+  }
+  if (!googleServices || !googleServices.includes("drive")) {
+    customTools.push(...PUBLIC_GDOC_TOOLS);
+  }
 
+  // Convert to OpenAI function calling format
+  const openaiTools = customTools.map((tool) => ({
+    type: "function" as const,
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.input_schema,
+    },
+  }));
+
+  const allMessages: any[] = [];
   if (systemPrompt) {
     allMessages.push({ role: "system", content: systemPrompt });
   }
-
   allMessages.push(
     ...messages.map((m) => ({
       role: m.role === "user" ? "user" : "assistant",
@@ -2070,36 +2115,161 @@ async function callOpenAI(
     }))
   );
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
+  // Tool dispatch categories
+  const memoryTools = ["save_memory", "list_memories", "delete_memory"];
+  const codeTools = ["run_command", "read_file", "write_file"];
+  const pdfTools = ["pdf_get_fields", "pdf_fill_form", "pdf_read_text"];
+  const googleToolNames = [
+    "gmail_search", "gmail_read_message", "gmail_send", "gmail_create_draft", "gmail_label", "gmail_list_aliases",
+    "calendar_list_events", "calendar_create_event", "calendar_update_event",
+    "drive_search", "drive_read_file", "drive_open_url",
+    "contacts_search",
+    "docs_create", "docs_read", "docs_append", "docs_insert",
+    "sheets_create", "sheets_read", "sheets_write", "sheets_append", "sheets_list_sheets",
+  ];
+  const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
+  const messagingToolNames = ["send_slack", "slack_channel_members", "send_lobstermail", "check_lobstermail"];
+  const supabaseToolNames = ["supabase_list_tables", "supabase_describe_table", "supabase_query", "supabase_insert", "supabase_update"];
+  const airtableToolNames = ["airtable_list_bases", "airtable_list_tables", "airtable_list_records"];
+  const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
+  const bufferToolNames = ["buffer_list_profiles", "buffer_create_post", "buffer_get_pending", "buffer_get_sent"];
+  const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
+
+  const MAX_TOOL_ROUNDS = 25;
+  const toolCallLog: string[] = [];
+  const MAX_REPEAT_CALLS = 2;
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    onStatus?.("Thinking...");
+
+    const reqBody: any = {
       model,
       messages: allMessages,
       temperature,
       max_tokens: maxTokens,
-    }),
-  });
+    };
+    if (openaiTools.length > 0) reqBody.tools = openaiTools;
 
-  if (!res.ok) {
-    const body = await res.text();
-    if (body.includes("insufficient_quota") || body.includes("billing") || res.status === 402 || res.status === 429) {
-      setSetting("credit_warning", "Your OpenAI API credit balance is too low. Please add credits at platform.openai.com to continue using your agent.");
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(reqBody),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      if (body.includes("insufficient_quota") || body.includes("billing") || res.status === 402 || res.status === 429) {
+        setSetting("credit_warning", "Your OpenAI API credit balance is too low. Please add credits at platform.openai.com to continue using your agent.");
+      }
+      throw new Error(`OpenAI API error (${res.status}): ${body}`);
     }
-    throw new Error(`OpenAI API error (${res.status}): ${body}`);
+
+    // Clear credit warning on successful API call
+    if (getSetting("credit_warning")) {
+      setSetting("credit_warning", "");
+    }
+
+    const data: any = await res.json();
+    const choice = data.choices?.[0];
+    const message = choice?.message;
+
+    // Check for tool calls
+    if (message?.tool_calls && message.tool_calls.length > 0) {
+      // Append assistant message (includes tool_calls metadata)
+      allMessages.push(message);
+
+      for (const toolCall of message.tool_calls) {
+        const toolName = toolCall.function.name;
+        let toolInput: any;
+        try {
+          toolInput = JSON.parse(toolCall.function.arguments);
+        } catch {
+          toolInput = {};
+        }
+
+        console.log(`Tool call: ${toolName}`, JSON.stringify(toolInput).slice(0, 200));
+
+        // Emit tool-specific status
+        const statusEntry = TOOL_STATUS_MAP[toolName];
+        if (statusEntry && onStatus) {
+          onStatus(typeof statusEntry === "function" ? statusEntry(toolInput) : statusEntry);
+        }
+
+        // Loop detection
+        const fingerprint = `${toolName}:${JSON.stringify(toolInput)}`;
+        const repeatCount = toolCallLog.filter((f) => f === fingerprint).length;
+        toolCallLog.push(fingerprint);
+        if (repeatCount >= MAX_REPEAT_CALLS) {
+          console.log(`Loop detected: ${toolName} called ${repeatCount + 1} times with same input, skipping`);
+          allMessages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({ error: "This tool was already called with the same input. Try a different approach." }),
+          });
+          continue;
+        }
+
+        let result: string | any[];
+        if (memoryTools.includes(toolName)) {
+          result = executeMemoryTool(toolName, toolInput);
+        } else if (codeTools.includes(toolName)) {
+          result = await executeCodeTool(toolName, toolInput);
+        } else if (pdfTools.includes(toolName)) {
+          result = await executePdfTool(toolName, toolInput);
+        } else if (toolName === "open_google_doc") {
+          result = await executePublicGDocTool(toolInput);
+        } else if (toolName === "find_image") {
+          result = await executeFindImage(toolInput);
+        } else if (browserToolNames.includes(toolName)) {
+          result = await executeBrowserTool(toolName, toolInput);
+        } else if (messagingToolNames.includes(toolName)) {
+          result = await executeMessagingTool(toolName, toolInput);
+        } else if (googleToolNames.includes(toolName)) {
+          result = await executeGoogleTool(toolName, toolInput);
+        } else if (supabaseToolNames.includes(toolName)) {
+          result = await executeSupabaseTool(toolName, toolInput);
+        } else if (airtableToolNames.includes(toolName)) {
+          result = await executeAirtableTool(toolName, toolInput);
+        } else if (notionToolNames.includes(toolName)) {
+          result = await executeNotionTool(toolName, toolInput);
+        } else if (bufferToolNames.includes(toolName)) {
+          result = await executeBufferTool(toolName, toolInput);
+        } else if (lumaToolNames.includes(toolName)) {
+          result = await executeLumaTool(toolName, toolInput);
+        } else {
+          result = executeSchedulingTool(toolName, toolInput);
+        }
+
+        console.log(`Tool result: ${toolName}`, typeof result === "string" ? result.slice(0, 300) : "[multipart content]");
+
+        // OpenAI tool results must be strings
+        const resultStr = typeof result === "string" ? result : JSON.stringify(result);
+
+        allMessages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: resultStr,
+        });
+      }
+      continue;
+    }
+
+    // No tool calls — return final text
+    onStatus?.("Writing response...");
+    let text = (message?.content || "").trim();
+
+    // Clean up malformed markdown
+    text = text.replace(/!\[[^\]]*\]\(\s*\n*!\[([^\]]*)\]\(([^)\s]+)\)\s*\n*\)/g, '![$1]($2)');
+    text = text.replace(/!\[[^\]]*\]\(\s*\)/g, '');
+    text = text.replace(/\n{3,}/g, '\n\n');
+
+    return { role: "assistant", content: text || "(Action completed.)" };
   }
 
-  // Clear credit warning on successful API call
-  if (getSetting("credit_warning")) {
-    setSetting("credit_warning", "");
-  }
-
-  const data: any = await res.json();
-  const text = (data.choices?.[0]?.message?.content || "").trim();
-  return { role: "assistant", content: text || "(Action completed.)" };
+  return { role: "assistant", content: "Hmmm...this was pretty complex and I hit a tool limit. Could you break this into smaller steps or ask again in a simpler way? For example, instead of asking me to do everything at once, try one piece at a time." };
 }
 
 export async function processMessage(
