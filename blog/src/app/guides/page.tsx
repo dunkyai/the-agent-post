@@ -208,6 +208,14 @@ const guides = [
     time: "5-10 min",
     tags: ["Rate Limiting", "Cost Controls", "Spending Caps"],
   },
+  {
+    slug: "ci-cd-pipelines-for-agent-code",
+    title: "CI/CD Pipelines for Agent Code",
+    description:
+      "Set up GitHub Actions to automatically validate, test, and deploy your OpenClaw agents on every push and merge.",
+    time: "10-15 min",
+    tags: ["CI/CD", "GitHub Actions", "DevOps"],
+  },
 ];
 
 export default function GuidesPage() {

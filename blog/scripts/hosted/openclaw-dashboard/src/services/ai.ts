@@ -25,6 +25,11 @@ import {
   isAirtableRunning,
   airtableListBases, airtableListTables, airtableListRecords, airtableCreateRecords, airtableUpdateRecords,
 } from "./airtable";
+import {
+  isNotionRunning, getNotionWorkspaceName,
+  notionSearch, notionGetPage, notionGetPageContent, notionCreatePage, notionUpdatePage,
+  notionQueryDatabase, notionGetDatabase,
+} from "./notion";
 
 interface AIResponse {
   role: string;
@@ -566,6 +571,123 @@ async function executeAirtableTool(toolName: string, input: any): Promise<string
     }
   } catch (err) {
     return JSON.stringify({ error: err instanceof Error ? err.message : "Airtable operation failed" });
+  }
+}
+
+// --- Notion Tools ---
+
+const NOTION_TOOLS = [
+  {
+    name: "notion_search",
+    description: "Search for pages and databases in the connected Notion workspace.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Search query text" },
+        filter_type: { type: "string", enum: ["page", "database"], description: "Filter results by type (optional)" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "notion_get_page",
+    description: "Get a Notion page's properties (title, dates, status, etc).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        page_id: { type: "string", description: "The Notion page ID" },
+      },
+      required: ["page_id"],
+    },
+  },
+  {
+    name: "notion_get_page_content",
+    description: "Read the content blocks of a Notion page (paragraphs, headings, lists, etc).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        page_id: { type: "string", description: "The Notion page ID" },
+      },
+      required: ["page_id"],
+    },
+  },
+  {
+    name: "notion_create_page",
+    description: "Create a new page in Notion, either as a child of a database or another page.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        parent_id: { type: "string", description: "The parent database or page ID" },
+        parent_type: { type: "string", enum: ["database_id", "page_id"], description: "Whether the parent is a database or page" },
+        title: { type: "string", description: "Title of the new page" },
+        properties: { type: "object", description: "Page properties (for database parents, match the database schema)" },
+      },
+      required: ["parent_id", "parent_type", "title"],
+    },
+  },
+  {
+    name: "notion_update_page",
+    description: "Update properties of an existing Notion page.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        page_id: { type: "string", description: "The Notion page ID to update" },
+        properties: { type: "object", description: "Properties to update (use Notion property format)" },
+      },
+      required: ["page_id", "properties"],
+    },
+  },
+  {
+    name: "notion_query_database",
+    description: "Query a Notion database with optional filters and sorts.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        database_id: { type: "string", description: "The Notion database ID" },
+        filter: { type: "object", description: "Notion filter object (optional)" },
+        sorts: { type: "array", description: "Array of sort objects, e.g. [{property: 'Name', direction: 'ascending'}]" },
+        page_size: { type: "number", description: "Max results to return (default: 20)" },
+      },
+      required: ["database_id"],
+    },
+  },
+  {
+    name: "notion_get_database",
+    description: "Get a Notion database's schema (properties and their types). Use this before querying to understand the structure.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        database_id: { type: "string", description: "The Notion database ID" },
+      },
+      required: ["database_id"],
+    },
+  },
+];
+
+async function executeNotionTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "notion_search": {
+        const filter = input.filter_type ? { property: "object", value: input.filter_type } : undefined;
+        return await notionSearch(input.query, filter);
+      }
+      case "notion_get_page":
+        return await notionGetPage(input.page_id);
+      case "notion_get_page_content":
+        return await notionGetPageContent(input.page_id);
+      case "notion_create_page":
+        return await notionCreatePage(input.parent_id, input.parent_type, input.title, input.properties);
+      case "notion_update_page":
+        return await notionUpdatePage(input.page_id, input.properties);
+      case "notion_query_database":
+        return await notionQueryDatabase(input.database_id, input.filter, input.sorts, input.page_size);
+      case "notion_get_database":
+        return await notionGetDatabase(input.database_id);
+      default:
+        return JSON.stringify({ error: `Unknown Notion tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Notion operation failed" });
   }
 }
 
@@ -1161,6 +1283,7 @@ async function callAnthropic(
     if (perms.includes("update")) tools.push(...SUPABASE_UPDATE_TOOLS);
   }
   if (isAirtableRunning()) tools.push(...AIRTABLE_TOOLS);
+  if (isNotionRunning()) tools.push(...NOTION_TOOLS);
 
   // Conditionally add Google tools based on connected services
   const googleServices = getConnectedServices();
@@ -1248,6 +1371,7 @@ async function callAnthropic(
       const messagingToolNames = ["send_telegram", "send_slack", "slack_channel_members", "send_lobstermail", "check_lobstermail"];
       const supabaseToolNames = ["supabase_list_tables", "supabase_describe_table", "supabase_query", "supabase_insert", "supabase_update"];
       const airtableToolNames = ["airtable_list_bases", "airtable_list_tables", "airtable_list_records"];
+      const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
 
@@ -1282,6 +1406,8 @@ async function callAnthropic(
           result = await executeSupabaseTool(toolBlock.name, toolBlock.input);
         } else if (airtableToolNames.includes(toolBlock.name)) {
           result = await executeAirtableTool(toolBlock.name, toolBlock.input);
+        } else if (notionToolNames.includes(toolBlock.name)) {
+          result = await executeNotionTool(toolBlock.name, toolBlock.input);
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input);
         }
@@ -1482,6 +1608,13 @@ CRITICAL Supabase query rules:
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${airtableContext}` : airtableContext;
   }
 
+  // Inject Notion context
+  if (isNotionRunning()) {
+    const workspaceName = getNotionWorkspaceName();
+    const notionContext = `You are connected to Notion${workspaceName ? ` (workspace: ${workspaceName})` : ""}. You can search pages and databases, read page content, create and update pages, and query databases using the notion_* tools. Use notion_search to find content, notion_get_database to see a database's schema before querying it, and notion_query_database to list records. You can create pages with notion_create_page and update them with notion_update_page. You cannot delete pages or databases.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${notionContext}` : notionContext;
+  }
+
   // Inject long-term memories
   try {
     const memories = getAllMemories();
@@ -1555,4 +1688,99 @@ If you encounter sensitive data while searching emails, reading documents, or br
   }
 
   return response.content;
+}
+
+// --- Research & System Prompt Generation ---
+
+export async function researchUser(linkedinUrl: string): Promise<string> {
+  const model = getSetting("model") || "claude-sonnet-4-20250514";
+  const provider = getProvider(model);
+  const apiKey = getApiKey(provider);
+
+  const prompt = `I need you to research a person based on their LinkedIn profile URL. Visit or search for information about this profile and provide a concise summary.
+
+LinkedIn URL: ${linkedinUrl}
+
+Provide a brief summary including:
+- Full name
+- Current role and company
+- Industry
+- Key skills or expertise
+- Any notable background info
+
+Keep it to 3-5 sentences. If you cannot find information, say so clearly.`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 1024,
+      tools: [{ type: "web_search_20250305", name: "web_search" }],
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`API error (${res.status}): ${body}`);
+  }
+
+  const data: any = await res.json();
+  const textBlocks = (data.content || []).filter((b: any) => b.type === "text");
+  return textBlocks.map((b: any) => b.text).join("\n") || "No information found.";
+}
+
+export async function generateSystemPrompt(context: {
+  research: string;
+  company: string;
+  role: string;
+  agentPurpose: string;
+  tone: string;
+  agentName: string;
+}): Promise<string> {
+  const model = getSetting("model") || "claude-sonnet-4-20250514";
+  const provider = getProvider(model);
+  const apiKey = getApiKey(provider);
+
+  const parts: string[] = [];
+  if (context.agentName) parts.push(`Agent name: ${context.agentName}`);
+  if (context.research) parts.push(`Research about the user:\n${context.research}`);
+  if (context.company) parts.push(`Company: ${context.company}`);
+  if (context.role) parts.push(`User's role: ${context.role}`);
+  if (context.agentPurpose) parts.push(`Agent should help with: ${context.agentPurpose}`);
+  parts.push(`Desired tone: ${context.tone}`);
+
+  const prompt = `Based on the following information, write a system prompt for an AI assistant. The system prompt should define the assistant's personality, role, knowledge areas, and communication style. Write ONLY the system prompt text — no explanations or preamble.
+
+${parts.join("\n\n")}
+
+Write a clear, concise system prompt (3-8 sentences) that will make the AI assistant effective for this specific user and their needs.`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 1024,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`API error (${res.status}): ${body}`);
+  }
+
+  const data: any = await res.json();
+  const textBlocks = (data.content || []).filter((b: any) => b.type === "text");
+  return textBlocks.map((b: any) => b.text).join("\n") || "Failed to generate prompt.";
 }

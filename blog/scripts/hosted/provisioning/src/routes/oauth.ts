@@ -280,4 +280,248 @@ router.get("/slack/callback", async (req, res) => {
   }
 });
 
+// GET /oauth/airtable/callback — Airtable redirects here after user consent
+router.get("/airtable/callback", async (req, res) => {
+  const { code, state, error } = req.query;
+
+  if (error) {
+    try {
+      const statePayload = JSON.parse(
+        Buffer.from(state as string, "base64url").toString()
+      );
+      const instance = store.getInstance(statePayload.instance_id);
+      if (instance) {
+        res.redirect(
+          `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Airtable+connection+cancelled`
+        );
+        return;
+      }
+    } catch {}
+    res.status(400).send("Airtable connection was cancelled.");
+    return;
+  }
+
+  if (!code || !state) {
+    res.status(400).send("Missing code or state parameter");
+    return;
+  }
+
+  let statePayload: { instance_id: string; hmac: string; code_verifier: string };
+  try {
+    statePayload = JSON.parse(
+      Buffer.from(state as string, "base64url").toString()
+    );
+  } catch {
+    res.status(400).send("Invalid state parameter");
+    return;
+  }
+
+  const instance = store.getInstance(statePayload.instance_id);
+  if (!instance) {
+    res.status(404).send("Instance not found");
+    return;
+  }
+
+  // Verify HMAC
+  const expectedHmac = crypto
+    .createHmac("sha256", instance.gatewayToken)
+    .update(instance.id)
+    .digest("hex");
+  if (statePayload.hmac !== expectedHmac) {
+    res.status(403).send("Invalid state signature");
+    return;
+  }
+
+  try {
+    const clientId = process.env.AIRTABLE_CLIENT_ID!;
+    const clientSecret = process.env.AIRTABLE_CLIENT_SECRET!;
+
+    // Exchange authorization code for tokens (Airtable uses PKCE + Basic auth)
+    const tokenRes = await fetch("https://airtable.com/oauth2/v1/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
+      },
+      body: new URLSearchParams({
+        code: code as string,
+        redirect_uri: "https://api.agents.theagentpost.co/oauth/airtable/callback",
+        grant_type: "authorization_code",
+        code_verifier: statePayload.code_verifier,
+      }),
+    });
+
+    if (!tokenRes.ok) {
+      const body = await tokenRes.text();
+      console.error("Airtable token exchange failed:", body);
+      res.redirect(
+        `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Airtable+token+exchange+failed`
+      );
+      return;
+    }
+
+    const tokens: any = await tokenRes.json();
+
+    // Deliver tokens to the instance
+    const deliverRes = await fetch(
+      `http://localhost:${instance.port}/webhook/airtable/tokens`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${instance.gatewayToken}`,
+        },
+        body: JSON.stringify({
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          expires_in: tokens.expires_in,
+        }),
+      }
+    );
+
+    if (!deliverRes.ok) {
+      console.error(
+        "Airtable token delivery to instance failed:",
+        await deliverRes.text()
+      );
+      res.redirect(
+        `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Failed+to+deliver+Airtable+tokens`
+      );
+      return;
+    }
+
+    console.log(`Airtable connected for instance ${instance.id}`);
+    res.redirect(
+      `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Airtable+connected+successfully`
+    );
+  } catch (err) {
+    console.error("Airtable OAuth callback error:", err);
+    res.redirect(
+      `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Airtable+connection+failed`
+    );
+  }
+});
+
+// GET /oauth/notion/callback — Notion redirects here after user consent
+router.get("/notion/callback", async (req, res) => {
+  const { code, state, error } = req.query;
+
+  if (error) {
+    try {
+      const statePayload = JSON.parse(
+        Buffer.from(state as string, "base64url").toString()
+      );
+      const instance = store.getInstance(statePayload.instance_id);
+      if (instance) {
+        res.redirect(
+          `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Notion+connection+cancelled`
+        );
+        return;
+      }
+    } catch {}
+    res.status(400).send("Notion connection was cancelled.");
+    return;
+  }
+
+  if (!code || !state) {
+    res.status(400).send("Missing code or state parameter");
+    return;
+  }
+
+  let statePayload: { instance_id: string; hmac: string };
+  try {
+    statePayload = JSON.parse(
+      Buffer.from(state as string, "base64url").toString()
+    );
+  } catch {
+    res.status(400).send("Invalid state parameter");
+    return;
+  }
+
+  const instance = store.getInstance(statePayload.instance_id);
+  if (!instance) {
+    res.status(404).send("Instance not found");
+    return;
+  }
+
+  // Verify HMAC (prevents state forgery)
+  const expectedHmac = crypto
+    .createHmac("sha256", instance.gatewayToken)
+    .update(instance.id)
+    .digest("hex");
+  if (statePayload.hmac !== expectedHmac) {
+    res.status(403).send("Invalid state signature");
+    return;
+  }
+
+  try {
+    const clientId = process.env.NOTION_CLIENT_ID!;
+    const clientSecret = process.env.NOTION_CLIENT_SECRET!;
+
+    const tokenRes = await fetch("https://api.notion.com/v1/oauth/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
+      },
+      body: JSON.stringify({
+        grant_type: "authorization_code",
+        code: code as string,
+        redirect_uri:
+          "https://api.agents.theagentpost.co/oauth/notion/callback",
+      }),
+    });
+
+    if (!tokenRes.ok) {
+      const body = await tokenRes.text();
+      console.error("Notion token exchange failed:", body);
+      res.redirect(
+        `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Notion+token+exchange+failed`
+      );
+      return;
+    }
+
+    const data: any = await tokenRes.json();
+
+    // Deliver tokens to the instance
+    const deliverRes = await fetch(
+      `http://localhost:${instance.port}/webhook/notion/tokens`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${instance.gatewayToken}`,
+        },
+        body: JSON.stringify({
+          access_token: data.access_token,
+          workspace_name: data.workspace_name,
+          workspace_id: data.workspace_id,
+          bot_id: data.bot_id,
+        }),
+      }
+    );
+
+    if (!deliverRes.ok) {
+      console.error(
+        "Notion token delivery to instance failed:",
+        await deliverRes.text()
+      );
+      res.redirect(
+        `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Failed+to+deliver+Notion+tokens`
+      );
+      return;
+    }
+
+    console.log(`Notion connected for instance ${instance.id} (workspace: ${data.workspace_name})`);
+    res.redirect(
+      `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Notion+connected+successfully`
+    );
+  } catch (err) {
+    console.error("Notion OAuth callback error:", err);
+    res.redirect(
+      `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Notion+connection+failed`
+    );
+  }
+});
+
 export default router;

@@ -4,9 +4,10 @@ import { encrypt, decrypt } from "../services/encryption";
 import { startTelegram, stopTelegram, isTelegramRunning } from "../services/telegram";
 import { buildSlackOAuthUrl, stopSlack, isSlackRunning } from "../services/slack";
 import { signupAndCreateInbox, createInbox, startEmail, stopEmail, isEmailRunning } from "../services/email";
-import { buildOAuthUrl, stopGoogle, isGoogleRunning } from "../services/google";
+import { buildOAuthUrl, stopGoogle, isGoogleRunning, startGmailPolling, stopGmailPolling } from "../services/google";
 import { startSupabase, stopSupabase, testSupabaseConnection, probeSupabaseHealth } from "../services/supabase";
 import { buildAirtableOAuthUrl, stopAirtable } from "../services/airtable";
+import { buildNotionOAuthUrl, stopNotion, getNotionWorkspaceName } from "../services/notion";
 
 const router = Router();
 
@@ -56,6 +57,15 @@ router.get("/integrations", (req: Request, res: Response) => {
     } catch {}
   }
 
+  let notionWorkspaceName: string | null = null;
+  const notionIntegration = integrationMap["notion"];
+  if (notionIntegration && notionIntegration.status === "connected") {
+    try {
+      const config = JSON.parse(decrypt(notionIntegration.config));
+      notionWorkspaceName = config.workspace_name || null;
+    } catch {}
+  }
+
   let supabaseProjectUrl: string | null = null;
   let supabasePermissions: string[] = ["read"];
   const supabaseIntegration = integrationMap["supabase"];
@@ -67,12 +77,14 @@ router.get("/integrations", (req: Request, res: Response) => {
     } catch {}
   }
 
-  // Gmail email rules
-  let gmailFilter = { mode: "all", domains: [] as string[], addresses: [] as string[] };
+  // Gmail email rules + polling settings
+  let gmailFilter: Record<string, any> = { mode: "all", domains: [], addresses: [], poll_interval: "0", reply_mode: "draft" };
   try {
     const raw = getSetting("gmail_email_rules");
     if (raw) gmailFilter = { ...gmailFilter, ...JSON.parse(raw) };
   } catch {}
+  gmailFilter.poll_interval = getSetting("gmail_poll_interval") || "0";
+  gmailFilter.reply_mode = getSetting("gmail_reply_mode") || "draft";
 
   res.render("integrations", {
     telegram: integrationMap["telegram"] || { status: "disconnected", error_message: null },
@@ -95,6 +107,10 @@ router.get("/integrations", (req: Request, res: Response) => {
       permissions: supabasePermissions,
     },
     airtable: integrationMap["airtable"] || { status: "disconnected", error_message: null },
+    notion: {
+      ...(integrationMap["notion"] || { status: "disconnected", error_message: null }),
+      workspace_name: notionWorkspaceName,
+    },
     flash: req.query.flash || null,
   });
 });
@@ -381,7 +397,20 @@ router.post("/integrations/google/email-rules", (req: Request, res: Response) =>
     }
 
     setSetting("gmail_email_rules", JSON.stringify({ mode, domains, addresses }));
-    res.redirect(303, "/integrations?flash=Gmail+email+rules+saved");
+
+    // Save polling settings
+    const { poll_interval, reply_mode } = req.body;
+    const validIntervals = ["0", "300000", "900000", "1800000", "3600000"];
+    setSetting("gmail_poll_interval", validIntervals.includes(poll_interval) ? poll_interval : "0");
+    setSetting("gmail_reply_mode", reply_mode === "send" ? "send" : "draft");
+
+    // Restart polling with new settings
+    stopGmailPolling();
+    if (poll_interval && poll_interval !== "0") {
+      startGmailPolling();
+    }
+
+    res.redirect(303, "/integrations?flash=Gmail+settings+saved");
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     res.redirect(303, "/integrations?flash=Gmail+rules+error:+" + encodeURIComponent(message));
@@ -402,6 +431,22 @@ router.post("/integrations/airtable/disconnect", async (req: Request, res: Respo
   stopAirtable();
   upsertIntegration("airtable", "{}", "disconnected");
   res.redirect(303, "/integrations?flash=Airtable+disconnected");
+});
+
+router.post("/integrations/notion/connect", (req: Request, res: Response) => {
+  try {
+    const url = buildNotionOAuthUrl();
+    res.redirect(url);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.redirect(303, "/integrations?flash=Notion+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/notion/disconnect", async (req: Request, res: Response) => {
+  stopNotion();
+  upsertIntegration("notion", "{}", "disconnected");
+  res.redirect(303, "/integrations?flash=Notion+disconnected");
 });
 
 export default router;

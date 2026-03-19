@@ -1,363 +1,433 @@
 <%- include('partials/head', { title: 'Integrations' }) %>
 <div class="app">
   <%- include('partials/nav', { active: 'integrations' }) %>
-  <div class="main">
+  <div class="main" style="max-width: 900px;">
     <h2>Integrations</h2>
     <%- include('partials/flash', { flash }) %>
 
-    <!-- Telegram (disabled) -->
-    <details class="card card-collapsible" style="opacity: 0.5; pointer-events: none;">
-      <summary class="integration-toggle">
-        <div class="integration-header">
-          <h3>Telegram <span style="font-size: 12px; font-weight: normal; color: var(--text-secondary);">(Coming soon)</span></h3>
-          <span class="status-badge status-disconnected">disabled</span>
-        </div>
-        <span class="toggle-arrow"></span>
-      </summary>
-      <div class="integration-body">
-      </div>
-    </details>
+    <div class="integration-grid">
 
-    <!-- Slack -->
-    <details class="card card-collapsible">
-      <summary class="integration-toggle">
-        <div class="integration-header">
-          <h3>Slack</h3>
+      <!-- Telegram -->
+      <details class="integration-tile tile-disabled">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #229ED9;">T</span>
+          <div class="integration-tile-info">
+            <h3>Telegram</h3>
+            <p>Message your agent on Telegram</p>
+          </div>
+          <span class="status-badge status-disconnected">coming soon</span>
+        </summary>
+        <div class="integration-tile-body"></div>
+      </details>
+
+      <!-- Slack -->
+      <details class="integration-tile">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #4A154B;">S</span>
+          <div class="integration-tile-info">
+            <h3>Slack</h3>
+            <p>Chat with your agent in Slack channels</p>
+          </div>
           <span class="status-badge status-<%= slack.status %>"><%= slack.status %></span>
-        </div>
-        <span class="toggle-arrow"></span>
-      </summary>
-      <div class="integration-body">
-        <% if (slack.error_message) { %>
-          <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= slack.error_message %></p>
-        <% } %>
+        </summary>
+        <div class="integration-tile-body">
+          <% if (slack.error_message) { %>
+            <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= slack.error_message %></p>
+          <% } %>
 
-        <% if (slack.status === 'connected') { %>
-          <div style="margin-bottom: 12px;">
-            <label style="font-size: 13px; color: var(--muted);">Connected Workspace</label>
-            <div style="margin-top: 4px;">
-              <code style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px;"><%= slack.team_name || 'Unknown' %></code>
-            </div>
-          </div>
-          <form method="POST" action="/integrations/slack/disconnect">
-            <button type="submit" class="btn btn-danger">Disconnect</button>
-          </form>
-        <% } else { %>
-          <form method="POST" action="/integrations/slack/connect">
-            <p style="font-size: 14px; margin-bottom: 12px;">Connect your Slack workspace to chat with your agent in any channel it's invited to.</p>
-            <button type="submit" class="btn">Connect to Slack</button>
-          </form>
-        <% } %>
-      </div>
-    </details>
-
-    <!-- Email (LobsterMail) -->
-    <details class="card card-collapsible">
-      <summary class="integration-toggle">
-        <div class="integration-header">
-          <h3>Email</h3>
-          <span class="status-badge status-<%= email.status %>"><%= email.status %></span>
-        </div>
-        <span class="toggle-arrow"></span>
-      </summary>
-      <div class="integration-body">
-        <% if (email.error_message) { %>
-          <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= email.error_message %></p>
-        <% } %>
-
-        <% if (email.status === 'connected') { %>
-          <div style="margin-bottom: 12px;">
-            <label style="font-size: 13px; color: var(--muted);">Agent Email Address</label>
-            <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
-              <code id="email-address" style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; flex: 1;"><%= email.email_address %></code>
-              <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('email-address').textContent).then(() => this.textContent = 'Copied!').catch(() => {}); setTimeout(() => this.textContent = 'Copy', 1500);" class="btn" style="padding: 6px 12px; font-size: 13px;">Copy</button>
-            </div>
-            <div class="hint" style="margin-top: 6px;">Send emails to this address and your agent will respond via AI. Replies require a Tier 1+ LobsterMail API key.</div>
-          </div>
-          <form method="POST" action="/integrations/email/filter" style="margin-bottom: 12px; padding-top: 12px; border-top: 1px solid var(--rule-light);">
-            <div class="form-group">
-              <label for="email_filter_mode">Filter Incoming Emails</label>
-              <select id="email_filter_mode" name="filter_mode">
-                <option value="all" <%= email.filter_mode === 'all' ? 'selected' : '' %>>Allow all</option>
-                <option value="domain" <%= email.filter_mode === 'domain' ? 'selected' : '' %>>Allow only from a domain</option>
-                <option value="addresses" <%= email.filter_mode === 'addresses' ? 'selected' : '' %>>Allow only specific addresses</option>
-              </select>
-            </div>
-
-            <div id="filter-domain-group" class="form-group" style="display: none;">
-              <label for="filter_domain">Allowed Domain</label>
-              <input type="text" id="filter_domain" name="filter_domain" value="<%= email.filter_domain || '' %>" placeholder="e.g. acme.com">
-              <div class="hint">Only emails from @this-domain will be processed</div>
-            </div>
-
-            <div id="filter-addresses-group" style="display: none;">
-              <div class="form-group">
-                <label>Allowed Addresses</label>
-                <div style="display: flex; gap: 8px;">
-                  <input type="email" id="filter_address_input" placeholder="alice@example.com" style="flex: 1;">
-                  <button type="button" id="add-address-btn" class="btn" style="padding: 8px 16px;">Add</button>
-                </div>
+          <% if (slack.status === 'connected') { %>
+            <div style="margin-bottom: 12px;">
+              <label style="font-size: 13px; color: var(--text-secondary);">Connected Workspace</label>
+              <div style="margin-top: 4px;">
+                <code style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px;"><%= slack.team_name || 'Unknown' %></code>
               </div>
-              <div id="address-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;"></div>
-              <input type="hidden" id="filter_addresses_hidden" name="filter_addresses" value="">
             </div>
+            <form method="POST" action="/integrations/slack/disconnect">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+            </form>
+          <% } else { %>
+            <form method="POST" action="/integrations/slack/connect">
+              <p style="font-size: 14px; margin-bottom: 12px;">Connect your Slack workspace to chat with your agent in any channel it's invited to.</p>
+              <button type="submit" class="btn">Connect to Slack</button>
+            </form>
+          <% } %>
+        </div>
+      </details>
 
-            <button type="submit" class="btn">Save Filter</button>
-          </form>
+      <!-- Email -->
+      <details class="integration-tile">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #EA4335;">E</span>
+          <div class="integration-tile-info">
+            <h3>Email</h3>
+            <p>Send and receive email as your agent</p>
+          </div>
+          <span class="status-badge status-<%= email.status %>"><%= email.status %></span>
+        </summary>
+        <div class="integration-tile-body">
+          <% if (email.error_message) { %>
+            <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= email.error_message %></p>
+          <% } %>
 
-          <form method="POST" action="/integrations/email/disconnect">
-            <button type="submit" class="btn btn-danger">Disconnect</button>
-          </form>
-        <% } else { %>
-          <form method="POST" action="/integrations/email/connect">
-            <div class="form-group">
-              <label for="email_api_key">LobsterMail API Key <span style="color: var(--muted); font-weight: normal;">(optional)</span></label>
-              <input type="password" id="email_api_key" name="api_key" placeholder="lm_sk_live_...">
-              <div class="hint">Leave blank to auto-provision a free inbox (receive only). Paste a Tier 1+ key to enable replies.</div>
+          <% if (email.status === 'connected') { %>
+            <div style="margin-bottom: 12px;">
+              <label style="font-size: 13px; color: var(--text-secondary);">Agent Email Address</label>
+              <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                <code id="email-address" style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px; flex: 1;"><%= email.email_address %></code>
+                <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('email-address').textContent).then(() => this.textContent = 'Copied!').catch(() => {}); setTimeout(() => this.textContent = 'Copy', 1500);" class="btn btn-sm" style="padding: 6px 12px; font-size: 13px;">Copy</button>
+              </div>
+              <div class="hint" style="margin-top: 6px; font-size: 12px; color: var(--text-secondary);">Send emails to this address and your agent will respond via AI. Replies require a Tier 1+ LobsterMail API key.</div>
             </div>
-            <button type="submit" class="btn">Connect Email</button>
-          </form>
-        <% } %>
-      </div>
-    </details>
+            <form method="POST" action="/integrations/email/filter" style="margin-bottom: 12px; padding-top: 12px; border-top: 1px solid var(--rule-light);">
+              <div class="form-group">
+                <label for="email_filter_mode">Filter Incoming Emails</label>
+                <select id="email_filter_mode" name="filter_mode">
+                  <option value="all" <%= email.filter_mode === 'all' ? 'selected' : '' %>>Allow all</option>
+                  <option value="domain" <%= email.filter_mode === 'domain' ? 'selected' : '' %>>Allow only from a domain</option>
+                  <option value="addresses" <%= email.filter_mode === 'addresses' ? 'selected' : '' %>>Allow only specific addresses</option>
+                </select>
+              </div>
 
-    <!-- Google (multi-account) -->
-    <details class="card card-collapsible">
-      <summary class="integration-toggle">
-        <div class="integration-header">
-          <h3>Google</h3>
+              <div id="filter-domain-group" class="form-group" style="display: none;">
+                <label for="filter_domain">Allowed Domain</label>
+                <input type="text" id="filter_domain" name="filter_domain" value="<%= email.filter_domain || '' %>" placeholder="e.g. acme.com">
+                <div class="hint">Only emails from @this-domain will be processed</div>
+              </div>
+
+              <div id="filter-addresses-group" style="display: none;">
+                <div class="form-group">
+                  <label>Allowed Addresses</label>
+                  <div style="display: flex; gap: 8px;">
+                    <input type="email" id="filter_address_input" placeholder="alice@example.com" style="flex: 1;">
+                    <button type="button" id="add-address-btn" class="btn btn-sm" style="padding: 8px 16px;">Add</button>
+                  </div>
+                </div>
+                <div id="address-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;"></div>
+                <input type="hidden" id="filter_addresses_hidden" name="filter_addresses" value="">
+              </div>
+
+              <button type="submit" class="btn btn-sm">Save Filter</button>
+            </form>
+
+            <form method="POST" action="/integrations/email/disconnect">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+            </form>
+          <% } else { %>
+            <form method="POST" action="/integrations/email/connect">
+              <div class="form-group">
+                <label for="email_api_key">LobsterMail API Key <span style="color: var(--text-secondary); font-weight: normal;">(optional)</span></label>
+                <input type="password" id="email_api_key" name="api_key" placeholder="lm_sk_live_...">
+                <div class="hint">Leave blank to auto-provision a free inbox (receive only). Paste a Tier 1+ key to enable replies.</div>
+              </div>
+              <button type="submit" class="btn">Connect Email</button>
+            </form>
+          <% } %>
+        </div>
+      </details>
+
+      <!-- Google -->
+      <details class="integration-tile">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #4285F4;">G</span>
+          <div class="integration-tile-info">
+            <h3>Google</h3>
+            <p>Gmail, Calendar, Drive, Docs, Sheets</p>
+          </div>
           <% if (googleAccounts.length > 0) { %>
             <span class="status-badge status-connected"><%= googleAccounts.length %> account<%= googleAccounts.length > 1 ? 's' : '' %></span>
           <% } else { %>
             <span class="status-badge status-disconnected">disconnected</span>
           <% } %>
-        </div>
-        <span class="toggle-arrow"></span>
-      </summary>
-      <div class="integration-body">
-        <% const allAvailableServices = ['gmail', 'gmail_send', 'calendar', 'drive', 'contacts', 'docs', 'sheets']; %>
-        <% for (const acct of googleAccounts) { %>
-          <% const missingServices = allAvailableServices.filter(s => !acct.services.includes(s)); %>
-          <div style="padding: 12px 0; border-bottom: 1px solid var(--rule-light);">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-              <code style="font-size: 14px; padding: 4px 8px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px;"><%= acct.email %></code>
-              <form method="POST" action="/integrations/google/disconnect" style="margin: 0;">
-                <input type="hidden" name="account" value="<%= acct.email %>">
-                <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
-              </form>
-            </div>
-            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-              <% for (const svc of acct.services) { %>
-                <% if (svc === 'gmail_send') { %>
-                  <span class="status-badge status-connected">Draft & Send</span>
-                <% } else { %>
-                  <span class="status-badge status-connected"><%= svc.charAt(0).toUpperCase() + svc.slice(1) %></span>
+        </summary>
+        <div class="integration-tile-body">
+          <% const allAvailableServices = ['gmail', 'gmail_send', 'calendar', 'drive', 'contacts', 'docs', 'sheets']; %>
+          <% for (const acct of googleAccounts) { %>
+            <% const missingServices = allAvailableServices.filter(s => !acct.services.includes(s)); %>
+            <div style="padding: 12px 0; border-bottom: 1px solid var(--rule-light);">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <code style="font-size: 14px; padding: 4px 8px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px;"><%= acct.email %></code>
+                <form method="POST" action="/integrations/google/disconnect" style="margin: 0;">
+                  <input type="hidden" name="account" value="<%= acct.email %>">
+                  <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+                </form>
+              </div>
+              <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <% for (const svc of acct.services) { %>
+                  <% if (svc === 'gmail_send') { %>
+                    <span class="status-badge status-connected">Draft & Send</span>
+                  <% } else { %>
+                    <span class="status-badge status-connected"><%= svc.charAt(0).toUpperCase() + svc.slice(1) %></span>
+                  <% } %>
                 <% } %>
+              </div>
+              <% if (missingServices.length > 0) { %>
+                <div style="margin-top: 8px; font-size: 13px; color: var(--text-secondary);">
+                  To add more services (e.g. Docs, Sheets), disconnect and reconnect with the services you want.
+                </div>
               <% } %>
             </div>
-            <% if (missingServices.length > 0) { %>
-              <div style="margin-top: 8px; font-size: 13px; color: var(--text-secondary);">
-                To add more services (e.g. Docs, Sheets), disconnect and reconnect with the services you want.
-              </div>
-            <% } %>
-          </div>
-        <% } %>
+          <% } %>
 
-        <% const hasGmail = googleAccounts.some(a => a.services.includes('gmail')); %>
-        <% if (hasGmail) { %>
-          <form method="POST" action="/integrations/google/email-rules" style="padding: 12px 0; border-bottom: 1px solid var(--rule-light);">
-            <div class="form-group">
-              <label><strong>Gmail Email Rules</strong></label>
-              <div class="hint" style="margin-bottom: 8px;">Control who your agent can read and respond to via Gmail.</div>
-              <div style="display: flex; flex-direction: column; gap: 8px;">
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="radio" name="filter_mode" value="all" <%= gmailFilter.mode === 'all' ? 'checked' : '' %> class="gmail-filter-radio">
-                  <span>Everyone</span>
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="radio" name="filter_mode" value="domains" <%= gmailFilter.mode === 'domains' ? 'checked' : '' %> class="gmail-filter-radio">
-                  <span>All from the domain(s)</span>
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="radio" name="filter_mode" value="addresses" <%= gmailFilter.mode === 'addresses' ? 'checked' : '' %> class="gmail-filter-radio">
-                  <span>Anyone on this list</span>
-                </label>
-              </div>
-            </div>
-
-            <div id="gmail-domains-group" class="form-group" style="display: none;">
-              <label for="gmail_filter_domains">Allowed Domains</label>
-              <input type="text" id="gmail_filter_domains" name="filter_domains" value="<%= gmailFilter.domains.join(', ') %>" placeholder="e.g. hustlefund.com, example.com">
-              <div class="hint">Comma-separated. Only emails from @these-domains will be processed.</div>
-            </div>
-
-            <div id="gmail-addresses-group" style="display: none;">
+          <% const hasGmail = googleAccounts.some(a => a.services.includes('gmail')); %>
+          <% if (hasGmail) { %>
+            <form method="POST" action="/integrations/google/email-rules" style="padding: 12px 0; border-bottom: 1px solid var(--rule-light);">
               <div class="form-group">
-                <label>Allowed Addresses</label>
-                <div style="display: flex; gap: 8px;">
-                  <input type="email" id="gmail_address_input" placeholder="alice@example.com" style="flex: 1;">
-                  <button type="button" id="gmail-add-address-btn" class="btn" style="padding: 8px 16px;">Add</button>
+                <label><strong>Gmail Email Rules</strong></label>
+                <div class="hint" style="margin-bottom: 8px;">Control who your agent can read and respond to via Gmail.</div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="radio" name="filter_mode" value="all" <%= gmailFilter.mode === 'all' ? 'checked' : '' %> class="gmail-filter-radio">
+                    <span>Everyone</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="radio" name="filter_mode" value="domains" <%= gmailFilter.mode === 'domains' ? 'checked' : '' %> class="gmail-filter-radio">
+                    <span>All from the domain(s)</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="radio" name="filter_mode" value="addresses" <%= gmailFilter.mode === 'addresses' ? 'checked' : '' %> class="gmail-filter-radio">
+                    <span>Anyone on this list</span>
+                  </label>
                 </div>
               </div>
-              <div id="gmail-address-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;"></div>
-              <input type="hidden" id="gmail_filter_addresses_hidden" name="filter_addresses" value="">
-            </div>
 
-            <button type="submit" class="btn">Save Rules</button>
-          </form>
-        <% } %>
-
-        <% const connectedServices = googleAccounts.flatMap(a => a.services); %>
-        <div style="<%= googleAccounts.length > 0 ? 'padding-top: 12px;' : '' %>">
-          <form method="POST" action="/integrations/google/connect">
-            <div class="form-group">
-              <label>Select Google services to connect:</label>
-              <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="checkbox" name="services" value="gmail" <%= connectedServices.includes('gmail') || googleAccounts.length === 0 ? 'checked' : '' %>>
-                  <strong>Gmail</strong> &mdash; Read and label emails
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; padding-left: 28px;">
-                  <input type="checkbox" name="services" value="gmail_send" <%= connectedServices.includes('gmail_send') ? 'checked' : '' %>>
-                  <strong>Draft &amp; Send</strong> &mdash; Create drafts and send emails
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="checkbox" name="services" value="calendar" <%= connectedServices.includes('calendar') ? 'checked' : '' %>>
-                  <strong>Calendar</strong> &mdash; View and create events
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="checkbox" name="services" value="drive" <%= connectedServices.includes('drive') ? 'checked' : '' %>>
-                  <strong>Drive</strong> &mdash; Search and read files
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="checkbox" name="services" value="contacts" <%= connectedServices.includes('contacts') ? 'checked' : '' %>>
-                  <strong>Contacts</strong> &mdash; Search contacts
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="checkbox" name="services" value="docs" <%= connectedServices.includes('docs') ? 'checked' : '' %>>
-                  <strong>Docs</strong> &mdash; Create and edit Google Docs
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="checkbox" name="services" value="sheets" <%= connectedServices.includes('sheets') ? 'checked' : '' %>>
-                  <strong>Sheets</strong> &mdash; Create, read, and write spreadsheets
-                </label>
+              <div id="gmail-domains-group" class="form-group" style="display: none;">
+                <label for="gmail_filter_domains">Allowed Domains</label>
+                <input type="text" id="gmail_filter_domains" name="filter_domains" value="<%= gmailFilter.domains.join(', ') %>" placeholder="e.g. hustlefund.com, example.com">
+                <div class="hint">Comma-separated. Only emails from @these-domains will be processed.</div>
               </div>
-              <div class="hint" style="margin-top: 8px;">At least one service must be selected. Your agent will only access services you enable.</div>
-            </div>
-            <button type="submit" class="btn"><%= googleAccounts.length > 0 ? 'Add Another Google Account' : 'Connect with Google' %></button>
-          </form>
+
+              <div id="gmail-addresses-group" style="display: none;">
+                <div class="form-group">
+                  <label>Allowed Addresses</label>
+                  <div style="display: flex; gap: 8px;">
+                    <input type="email" id="gmail_address_input" placeholder="alice@example.com" style="flex: 1;">
+                    <button type="button" id="gmail-add-address-btn" class="btn btn-sm" style="padding: 8px 16px;">Add</button>
+                  </div>
+                </div>
+                <div id="gmail-address-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;"></div>
+                <input type="hidden" id="gmail_filter_addresses_hidden" name="filter_addresses" value="">
+              </div>
+
+              <div class="form-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rule-light);">
+                <label for="gmail_poll_interval">Check for new emails</label>
+                <select id="gmail_poll_interval" name="poll_interval">
+                  <option value="0" <%= gmailFilter.poll_interval === '0' || !gmailFilter.poll_interval ? 'selected' : '' %>>Off</option>
+                  <option value="300000" <%= gmailFilter.poll_interval === '300000' ? 'selected' : '' %>>Every 5 minutes</option>
+                  <option value="900000" <%= gmailFilter.poll_interval === '900000' ? 'selected' : '' %>>Every 15 minutes</option>
+                  <option value="1800000" <%= gmailFilter.poll_interval === '1800000' ? 'selected' : '' %>>Every 30 minutes</option>
+                  <option value="3600000" <%= gmailFilter.poll_interval === '3600000' ? 'selected' : '' %>>Every hour</option>
+                </select>
+                <div class="hint">Automatically check Gmail for new unread emails and respond.</div>
+              </div>
+
+              <div class="form-group">
+                <label>When a new email arrives</label>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="radio" name="reply_mode" value="draft" <%= gmailFilter.reply_mode !== 'send' ? 'checked' : '' %>>
+                    <span><strong>Create draft</strong> &mdash; Review before sending</span>
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="radio" name="reply_mode" value="send" <%= gmailFilter.reply_mode === 'send' ? 'checked' : '' %>>
+                    <span><strong>Send immediately</strong> &mdash; Fully automated</span>
+                  </label>
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-sm">Save Rules</button>
+            </form>
+          <% } %>
+
+          <% const connectedServices = googleAccounts.flatMap(a => a.services); %>
+          <div style="<%= googleAccounts.length > 0 ? 'padding-top: 12px;' : '' %>">
+            <form method="POST" action="/integrations/google/connect">
+              <div class="form-group">
+                <label>Select Google services to connect:</label>
+                <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="checkbox" name="services" value="gmail" <%= connectedServices.includes('gmail') || googleAccounts.length === 0 ? 'checked' : '' %>>
+                    <strong>Gmail</strong> &mdash; Read and label emails
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; padding-left: 28px;">
+                    <input type="checkbox" name="services" value="gmail_send" <%= connectedServices.includes('gmail_send') ? 'checked' : '' %>>
+                    <strong>Draft &amp; Send</strong> &mdash; Create drafts and send emails
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="checkbox" name="services" value="calendar" <%= connectedServices.includes('calendar') ? 'checked' : '' %>>
+                    <strong>Calendar</strong> &mdash; View and create events
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="checkbox" name="services" value="drive" <%= connectedServices.includes('drive') ? 'checked' : '' %>>
+                    <strong>Drive</strong> &mdash; Search and read files
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="checkbox" name="services" value="contacts" <%= connectedServices.includes('contacts') ? 'checked' : '' %>>
+                    <strong>Contacts</strong> &mdash; Search contacts
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="checkbox" name="services" value="docs" <%= connectedServices.includes('docs') ? 'checked' : '' %>>
+                    <strong>Docs</strong> &mdash; Create and edit Google Docs
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="checkbox" name="services" value="sheets" <%= connectedServices.includes('sheets') ? 'checked' : '' %>>
+                    <strong>Sheets</strong> &mdash; Create, read, and write spreadsheets
+                  </label>
+                </div>
+                <div class="hint" style="margin-top: 8px;">At least one service must be selected. Your agent will only access services you enable.</div>
+              </div>
+              <button type="submit" class="btn"><%= googleAccounts.length > 0 ? 'Add Another Google Account' : 'Connect with Google' %></button>
+            </form>
+          </div>
         </div>
-      </div>
-    </details>
-    <!-- Supabase -->
-    <details class="card card-collapsible">
-      <summary class="integration-toggle">
-        <div class="integration-header">
-          <h3>Supabase</h3>
+      </details>
+
+      <!-- Supabase -->
+      <details class="integration-tile">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #3ECF8E;">S</span>
+          <div class="integration-tile-info">
+            <h3>Supabase</h3>
+            <p>Query and manage your database</p>
+          </div>
           <span class="status-badge status-<%= supabase.status %>"><%= supabase.status %></span>
+        </summary>
+        <div class="integration-tile-body">
+          <% if (supabase.error_message) { %>
+            <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= supabase.error_message %></p>
+          <% } %>
+
+          <% if (supabase.status === 'connected') { %>
+            <div style="margin-bottom: 12px;">
+              <label style="font-size: 13px; color: var(--text-secondary);">Project URL</label>
+              <div style="margin-top: 4px;">
+                <code style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px;"><%= supabase.project_url %></code>
+              </div>
+            </div>
+            <form method="POST" action="/integrations/supabase/permissions" style="margin-bottom: 12px; padding-top: 12px; border-top: 1px solid var(--rule-light);">
+              <div class="form-group">
+                <label>Agent Permissions</label>
+                <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="checkbox" name="permissions" value="read" checked disabled>
+                    <strong>Read</strong> &mdash; Query and list tables
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="checkbox" name="permissions" value="insert" <%= supabase.permissions.includes('insert') ? 'checked' : '' %>>
+                    <strong>Insert</strong> &mdash; Add new records
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="checkbox" name="permissions" value="update" <%= supabase.permissions.includes('update') ? 'checked' : '' %>>
+                    <strong>Update</strong> &mdash; Modify existing records
+                  </label>
+                </div>
+              </div>
+              <button type="submit" class="btn btn-sm">Save Permissions</button>
+            </form>
+            <form method="POST" action="/integrations/supabase/disconnect">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+            </form>
+          <% } else { %>
+            <form method="POST" action="/integrations/supabase/connect">
+              <p style="font-size: 14px; margin-bottom: 12px;">Connect your Supabase project so your agent can query your database. Here's where to <a href="https://theagentpost.co/guides/find-your-api-key#supabase" target="_blank" style="color: var(--accent); text-decoration: underline;">find your Project URL and API key</a></p>
+              <div class="form-group">
+                <label for="supabase_project_url">Project URL</label>
+                <input type="url" id="supabase_project_url" name="project_url" placeholder="https://your-project.supabase.co" required>
+                <div class="hint">Find this in your Supabase dashboard under Settings &rarr; API</div>
+              </div>
+              <div class="form-group">
+                <label for="supabase_api_key">API Key</label>
+                <input type="password" id="supabase_api_key" name="api_key" placeholder="eyJhbGciOiJIUzI1NiIs..." required>
+                <div class="hint">Use the <code>anon</code> key for read-only, or <code>service_role</code> key if you want insert/update access</div>
+              </div>
+              <div class="form-group">
+                <label>Agent Permissions</label>
+                <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="checkbox" name="permissions" value="read" checked disabled>
+                    <strong>Read</strong> &mdash; Query and list tables
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="checkbox" name="permissions" value="insert">
+                    <strong>Insert</strong> &mdash; Add new records
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="checkbox" name="permissions" value="update">
+                    <strong>Update</strong> &mdash; Modify existing records
+                  </label>
+                </div>
+              </div>
+              <button type="submit" class="btn">Connect</button>
+            </form>
+          <% } %>
         </div>
-        <span class="toggle-arrow"></span>
-      </summary>
-      <div class="integration-body">
-        <% if (supabase.error_message) { %>
-          <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= supabase.error_message %></p>
-        <% } %>
+      </details>
 
-        <% if (supabase.status === 'connected') { %>
-          <div style="margin-bottom: 12px;">
-            <label style="font-size: 13px; color: var(--muted);">Project URL</label>
-            <div style="margin-top: 4px;">
-              <code style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px;"><%= supabase.project_url %></code>
-            </div>
+      <!-- Airtable -->
+      <details class="integration-tile">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #18BFFF;">A</span>
+          <div class="integration-tile-info">
+            <h3>Airtable</h3>
+            <p>Read and write to your bases</p>
           </div>
-          <form method="POST" action="/integrations/supabase/permissions" style="margin-bottom: 12px; padding-top: 12px; border-top: 1px solid var(--rule-light);">
-            <div class="form-group">
-              <label>Agent Permissions</label>
-              <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="checkbox" name="permissions" value="read" checked disabled>
-                  <strong>Read</strong> &mdash; Query and list tables
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="checkbox" name="permissions" value="insert" <%= supabase.permissions.includes('insert') ? 'checked' : '' %>>
-                  <strong>Insert</strong> &mdash; Add new records
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="checkbox" name="permissions" value="update" <%= supabase.permissions.includes('update') ? 'checked' : '' %>>
-                  <strong>Update</strong> &mdash; Modify existing records
-                </label>
-              </div>
-            </div>
-            <button type="submit" class="btn btn-sm">Save Permissions</button>
-          </form>
-          <form method="POST" action="/integrations/supabase/disconnect">
-            <button type="submit" class="btn btn-danger">Disconnect</button>
-          </form>
-        <% } else { %>
-          <form method="POST" action="/integrations/supabase/connect">
-            <p style="font-size: 14px; margin-bottom: 12px;">Connect your Supabase project so your agent can query your database. Here's where to <a href="https://theagentpost.co/guides/find-your-api-key#supabase" target="_blank" style="color: var(--accent); text-decoration: underline;">find your Project URL and API key</a></p>
-            <div class="form-group">
-              <label for="supabase_project_url">Project URL</label>
-              <input type="url" id="supabase_project_url" name="project_url" placeholder="https://your-project.supabase.co" required>
-              <div class="hint">Find this in your Supabase dashboard under Settings &rarr; API</div>
-            </div>
-            <div class="form-group">
-              <label for="supabase_api_key">API Key</label>
-              <input type="password" id="supabase_api_key" name="api_key" placeholder="eyJhbGciOiJIUzI1NiIs..." required>
-              <div class="hint">Use the <code>anon</code> key for read-only, or <code>service_role</code> key if you want insert/update access</div>
-            </div>
-            <div class="form-group">
-              <label>Agent Permissions</label>
-              <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="checkbox" name="permissions" value="read" checked disabled>
-                  <strong>Read</strong> &mdash; Query and list tables
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="checkbox" name="permissions" value="insert">
-                  <strong>Insert</strong> &mdash; Add new records
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
-                  <input type="checkbox" name="permissions" value="update">
-                  <strong>Update</strong> &mdash; Modify existing records
-                </label>
-              </div>
-            </div>
-            <button type="submit" class="btn">Connect</button>
-          </form>
-        <% } %>
-      </div>
-    </details>
-
-    <!-- Airtable -->
-    <details class="card card-collapsible">
-      <summary class="integration-toggle">
-        <div class="integration-header">
-          <h3>Airtable</h3>
           <span class="status-badge status-<%= airtable.status %>"><%= airtable.status %></span>
-        </div>
-        <span class="toggle-arrow"></span>
-      </summary>
-      <div class="integration-body">
-        <% if (airtable.error_message) { %>
-          <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= airtable.error_message %></p>
-        <% } %>
+        </summary>
+        <div class="integration-tile-body">
+          <% if (airtable.error_message) { %>
+            <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= airtable.error_message %></p>
+          <% } %>
 
-        <% if (airtable.status === 'connected') { %>
-          <div style="margin-bottom: 12px;">
-            <p style="font-size: 14px;">Your Airtable account is connected. Your agent can list bases, read and write records.</p>
+          <% if (airtable.status === 'connected') { %>
+            <div style="margin-bottom: 12px;">
+              <p style="font-size: 14px;">Your Airtable account is connected. Your agent can list bases, read and write records.</p>
+            </div>
+            <form method="POST" action="/integrations/airtable/disconnect">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+            </form>
+          <% } else { %>
+            <form method="POST" action="/integrations/airtable/connect">
+              <p style="font-size: 14px; margin-bottom: 12px;">Connect your Airtable account so your agent can read and write to your bases.</p>
+              <button type="submit" class="btn">Connect to Airtable</button>
+            </form>
+          <% } %>
+        </div>
+      </details>
+
+      <!-- Notion -->
+      <details class="integration-tile">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #000;">N</span>
+          <div class="integration-tile-info">
+            <h3>Notion</h3>
+            <p>Search, read, and update pages</p>
           </div>
-          <form method="POST" action="/integrations/airtable/disconnect">
-            <button type="submit" class="btn btn-danger">Disconnect</button>
-          </form>
-        <% } else { %>
-          <form method="POST" action="/integrations/airtable/connect">
-            <p style="font-size: 14px; margin-bottom: 12px;">Connect your Airtable account so your agent can read and write to your bases.</p>
-            <button type="submit" class="btn">Connect to Airtable</button>
-          </form>
-        <% } %>
-      </div>
-    </details>
+          <span class="status-badge status-<%= notion.status %>"><%= notion.status %></span>
+        </summary>
+        <div class="integration-tile-body">
+          <% if (notion.error_message) { %>
+            <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= notion.error_message %></p>
+          <% } %>
+
+          <% if (notion.status === 'connected') { %>
+            <div style="margin-bottom: 12px;">
+              <label style="font-size: 13px; color: var(--text-secondary);">Connected Workspace</label>
+              <div style="margin-top: 4px;">
+                <code style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px;"><%= notion.workspace_name || 'Unknown' %></code>
+              </div>
+            </div>
+            <form method="POST" action="/integrations/notion/disconnect">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+            </form>
+          <% } else { %>
+            <form method="POST" action="/integrations/notion/connect">
+              <p style="font-size: 14px; margin-bottom: 12px;">Connect your Notion workspace so your agent can search, read, and update your pages and databases.</p>
+              <button type="submit" class="btn">Connect to Notion</button>
+            </form>
+          <% } %>
+        </div>
+      </details>
+
+    </div><!-- /integration-grid -->
   </div>
 </div>
 <script>

@@ -190,6 +190,19 @@ async function reconnectIntegrations() {
     console.error("Failed to reconnect Airtable:", err instanceof Error ? err.message : err);
   }
 
+  // Notion
+  try {
+    const notion = getIntegration("notion");
+    if (notion && notion.status === "connected") {
+      const config = JSON.parse(decrypt(notion.config));
+      const { startNotion } = require("./services/notion");
+      startNotion(config);
+      console.log(`Notion reconnected (workspace: ${config.workspace_name})`);
+    }
+  } catch (err: unknown) {
+    console.error("Failed to reconnect Notion:", err instanceof Error ? err.message : err);
+  }
+
   try {
     const googleRows = getGoogleIntegrations();
     for (const row of googleRows) {
@@ -203,6 +216,9 @@ async function reconnectIntegrations() {
         console.error(`Failed to reconnect Google (${row.type}):`, err instanceof Error ? err.message : err);
       }
     }
+    // Start Gmail polling if enabled
+    const { startGmailPolling } = require("./services/google");
+    startGmailPolling();
   } catch (err: unknown) {
     console.error("Failed to reconnect Google accounts:", err instanceof Error ? err.message : err);
   }
