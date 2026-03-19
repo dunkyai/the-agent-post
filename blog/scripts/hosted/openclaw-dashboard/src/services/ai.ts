@@ -1930,7 +1930,17 @@ async function callAnthropic(
     if (lastScreenshot && !hasImage) {
       parts.push(`![screenshot](data:image/png;base64,${lastScreenshot})`);
     }
-    const text = parts.join("\n\n").trim();
+
+    // Auto-convert bare image URLs in the response to markdown images
+    let text = parts.join("\n\n").trim();
+    text = text.replace(/(^|[\s(])((https?:\/\/[^\s"'<>)]+\.(jpg|jpeg|png|gif|webp|svg)(\?[^\s"'<>)]*)?))(?=[\s),.]|$)/gim, (match, prefix, url) => {
+      // Don't convert if already inside markdown image syntax
+      const pos = text.indexOf(match);
+      const before = text.slice(Math.max(0, pos - 5), pos);
+      if (before.includes("](")) return match;
+      return `${prefix}\n\n![image](${url})\n\n`;
+    });
+
     return { role: "assistant", content: text || "(Action completed.)" };
   }
 
