@@ -8,6 +8,7 @@ import { startSupabase, stopSupabase, testSupabaseConnection, probeSupabaseHealt
 import { buildAirtableOAuthUrl, stopAirtable } from "../services/airtable";
 import { buildNotionOAuthUrl, stopNotion, getNotionWorkspaceName } from "../services/notion";
 import { buildBufferOAuthUrl, stopBuffer } from "../services/buffer";
+import { startLuma, stopLuma, testLumaConnection } from "../services/luma";
 
 const router = Router();
 
@@ -111,6 +112,16 @@ router.get("/integrations", (req: Request, res: Response) => {
       workspace_name: notionWorkspaceName,
     },
     buffer: integrationMap["buffer"] || { status: "disconnected", error_message: null },
+    luma: {
+      ...(integrationMap["luma"] || { status: "disconnected", error_message: null }),
+      user_name: (() => {
+        const li = integrationMap["luma"];
+        if (li && li.status === "connected") {
+          try { return JSON.parse(decrypt(li.config)).user_name || null; } catch { return null; }
+        }
+        return null;
+      })(),
+    },
     flash: req.query.flash || null,
   });
 });
@@ -438,6 +449,36 @@ router.post("/integrations/buffer/disconnect", async (req: Request, res: Respons
   stopBuffer();
   upsertIntegration("buffer", "{}", "disconnected");
   res.redirect(303, "/integrations?flash=Buffer+disconnected");
+});
+
+router.post("/integrations/luma/connect", async (req: Request, res: Response) => {
+  try {
+    const apiKey = (req.body.api_key || "").trim();
+    if (!apiKey) {
+      res.redirect(303, "/integrations?flash=API+key+is+required");
+      return;
+    }
+
+    console.log("Luma connect: testing API key");
+    const { user_name } = await testLumaConnection(apiKey);
+    console.log(`Luma connect: test passed (${user_name})`);
+
+    const config = encrypt(JSON.stringify({ api_key: apiKey, user_name }));
+    startLuma({ api_key: apiKey, user_name });
+    upsertIntegration("luma", config, "connected");
+    res.redirect(303, "/integrations?flash=Luma+connected");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("Luma connect error:", message);
+    upsertIntegration("luma", "{}", "error", message);
+    res.redirect(303, "/integrations?flash=Luma+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/luma/disconnect", (req: Request, res: Response) => {
+  stopLuma();
+  upsertIntegration("luma", "{}", "disconnected");
+  res.redirect(303, "/integrations?flash=Luma+disconnected");
 });
 
 export default router;
