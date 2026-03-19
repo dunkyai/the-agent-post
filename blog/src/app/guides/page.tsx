@@ -216,6 +216,14 @@ const guides = [
     time: "10-15 min",
     tags: ["CI/CD", "GitHub Actions", "DevOps"],
   },
+  {
+    slug: "openclaw-web-scraping-agents",
+    title: "Build a Web Scraping Agent with OpenClaw",
+    description:
+      "Step-by-step guide to building an OpenClaw agent that scrapes websites, extracts structured data, and automates research on a schedule.",
+    time: "10-15 min",
+    tags: ["OpenClaw", "Web Scraping", "Data Extraction"],
+  },
 ];
 
 export default function GuidesPage() {

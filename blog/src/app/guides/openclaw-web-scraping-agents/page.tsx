@@ -2,140 +2,159 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Build a Web Scraping Agent with OpenClaw — The Agent Post",
+  title:
+    "Build a Web Scraping Agent with OpenClaw — The Agent Post",
   description:
-    "Learn how to build and schedule an OpenClaw web scraping agent in 10 minutes. Extract structured data from any website with this step-by-step tutorial.",
+    "Step-by-step guide to building an OpenClaw web scraping agent. Install the scraper plugin, define extraction rules, and automate data collection on a schedule.",
 };
 
 const steps: Record<string, any>[] = [
   {
     number: 1,
-    title: "Verify your OpenClaw installation",
+    title: "Verify your OpenClaw installation and daemon",
     description:
-      "Before building your web scraping agent, confirm that OpenClaw is installed and running on your machine. You should see a version number like \"0.9.x\" or higher.",
-    code: "openclaw --version",
-    label: "Check OpenClaw version",
-    tip: "If you don't have OpenClaw yet, follow our OpenClaw Setup Guide first.",
+      "Before building your web scraping agent, confirm that OpenClaw is installed and the gateway daemon is running. The scraper plugin requires version 0.9 or higher.",
+    code: "openclaw --version && openclaw daemon status",
+    label: "Verify OpenClaw and daemon",
+    output:
+      "openclaw 0.9.3\nDaemon: running (pid 41082)\nGateway: http://127.0.0.1:18789",
+    tip: 'Don\'t have OpenClaw yet? Follow our OpenClaw Setup Guide first.',
   },
   {
     number: 2,
-    title: "Install the OpenClaw web scraping plugin",
+    title: "Install the OpenClaw scraper plugin",
     description:
-      "OpenClaw ships with an official web scraping plugin that gives your agents the ability to fetch pages, parse HTML, and extract structured data. Install it from the OpenClaw plugin registry.",
+      "The OpenClaw scraper plugin gives your agents the ability to fetch web pages, parse HTML, take screenshots, and extract structured data. It handles JavaScript-rendered pages out of the box using a bundled headless browser.",
     code: "openclaw plugin install @openclaw/scraper",
     label: "Install the scraper plugin",
     output:
-      "✓ @openclaw/scraper@1.4.2 installed\n✓ Tools registered: fetch_page, extract_content, screenshot",
+      "Downloading @openclaw/scraper@1.4.2...\n\u2713 Installed @openclaw/scraper@1.4.2\n\u2713 Tools registered: fetch_page, fetch_page_js, extract_content, screenshot",
   },
   {
     number: 3,
-    title: "Create a new web scraping agent",
+    title: "Create a new research agent from a template",
     description:
-      "Scaffold a new agent project using the built-in research template. This gives you a pre-configured web scraping agent with page fetching, content extraction, and a structured JSON output schema.",
-    code: "openclaw agent create my-research-agent --template research",
-    label: "Scaffold a research agent",
+      "Use the built-in research template to scaffold a new agent project. This template comes pre-configured with web fetching tools, a JSON output schema, and a targets file where you list the URLs you want to scrape.",
+    code: "openclaw agent create market-researcher --template research",
+    label: "Create a research agent",
     output:
-      "Created agent: my-research-agent\nDirectory: ./my-research-agent\nTemplate: research",
+      "Created agent: market-researcher\nDirectory: ./market-researcher\nTemplate: research\nFiles: agent.yaml, targets.yaml, results.schema.json",
   },
   {
     number: 4,
-    title: "Review the agent.yaml configuration",
+    title: "Define scraping targets and extraction rules",
     description:
-      "Open the generated agent.yaml configuration file. This is where you define your agent's behavior — its goal, the scraping tools it can use, and how it should format extracted results. The research template comes with sensible defaults.",
-    code: "cat my-research-agent/agent.yaml",
-    label: "View the agent config",
-    output:
-      'name: my-research-agent\ntemplate: research\nmodel: claude-sonnet\ntools:\n  - fetch_page\n  - extract_content\n  - screenshot\noutput:\n  format: json\n  schema: results.schema.json',
-  },
-  {
-    number: 5,
-    title: "Define target URLs and extraction rules",
-    description:
-      "Edit the targets.yaml file to tell your agent which URLs to scrape and what data to extract from each page. Each target has a URL pattern and a list of fields to pull. You can use CSS selectors or describe what you want in plain English — the agent figures out the rest.",
-    code: `# my-research-agent/targets.yaml
+      "Open targets.yaml and list the URLs you want your agent to scrape. Each target includes a name, one or more URLs, and data extraction rules. You can use CSS selectors for precise extraction, or describe what you want in plain English and let the LLM determine the selectors.",
+    code: `# market-researcher/targets.yaml
 targets:
-  - name: tech-news
+  - name: competitor-pricing
+    urls:
+      - https://example.com/pricing
+      - https://competitor.io/plans
+    extract:
+      - field: plan_name
+        selector: ".plan-title"
+      - field: price
+        selector: ".plan-price"
+      - field: features
+        description: "list of included features for each plan"
+
+  - name: industry-news
     urls:
       - https://news.ycombinator.com
-      - https://lobste.rs
+      - https://techcrunch.com
     extract:
-      - field: title
-        selector: ".titleline a"
-      - field: score
-        description: "the point count for each story"
-    schedule: every 6h`,
+      - field: headline
+        selector: "h2 a, .titleline a"
+      - field: summary
+        description: "first paragraph or subtitle of each article"`,
     label: "targets.yaml",
   },
   {
-    number: 6,
-    title: "Set rate limits and honor robots.txt",
+    number: 5,
+    title: "Configure rate limits and robots.txt compliance",
     description:
-      "Responsible web scraping agents respect the sites they visit. Open agent.yaml and add a politeness block to configure rate limiting. This tells the agent to wait between requests, honor robots.txt rules, and identify itself with a proper user-agent string.",
-    code: `# Add to my-research-agent/agent.yaml
+      "Responsible web scraping agents respect the sites they visit. Add a politeness block to agent.yaml to configure a delay between requests, honor robots.txt directives, and limit concurrent connections. This helps avoid getting blocked and keeps your scraping ethical.",
+    code: `# Add to market-researcher/agent.yaml
 politeness:
   delay_ms: 2000
   respect_robots_txt: true
   max_concurrent: 2
   user_agent: "OpenClawBot/1.0 (+https://openclaw.ai/bot)"`,
-    label: "Politeness config in agent.yaml",
-    tip: "Always check a site's robots.txt and terms of service before scraping. Be a good citizen.",
+    label: "Politeness settings in agent.yaml",
+    tip: "Always review a site's robots.txt and terms of service before scraping. When in doubt, add a longer delay.",
+  },
+  {
+    number: 6,
+    title: "Test your scraping agent with a dry run",
+    description:
+      "Before running a full scrape, test your agent with a dry run. This fetches one page per target, extracts a sample of the data, and prints results to your terminal without writing output files. Use the --verbose flag to see exactly what the agent does at each step.",
+    code: "openclaw agent run market-researcher --dry-run --verbose",
+    label: "Dry run the agent",
+    output:
+      '[dry-run] Fetching https://example.com/pricing\n[dry-run] Extracted 3 items from competitor-pricing\n[dry-run] Sample:\n  { "plan_name": "Starter", "price": "$9/mo", "features": ["5 users", "10 GB"] }\n[dry-run] Fetching https://news.ycombinator.com\n[dry-run] Extracted 30 items from industry-news\n[dry-run] Complete \u2014 no data written',
   },
   {
     number: 7,
-    title: "Test your scraping agent with a dry run",
+    title: "Run the web scraping agent",
     description:
-      "Before running your agent in production, do a dry run to verify everything works. This fetches one page from each target, extracts the data, and prints the results to your terminal without saving anything.",
-    code: "openclaw agent run my-research-agent --dry-run --verbose",
-    label: "Dry run the agent",
+      "Once the dry run output looks correct, run your web scraping agent for real. It will crawl all target URLs, extract data according to your rules, and write structured JSON results to the output directory.",
+    code: "openclaw agent run market-researcher",
+    label: "Run the agent",
     output:
-      '[dry-run] Fetching https://news.ycombinator.com\n[dry-run] Extracted 30 items\n[dry-run] Sample:\n  { "title": "Show HN: ...", "score": "142 points" }\n[dry-run] Complete — no data written',
+      "Agent market-researcher started\nProcessing target: competitor-pricing (2 URLs)\n\u2713 6 items extracted\nProcessing target: industry-news (2 URLs)\n\u2713 58 items extracted\nResults written to ./market-researcher/output/2026-03-19.json",
   },
   {
     number: 8,
-    title: "Run the web scraping agent",
+    title: "Add automated research synthesis",
     description:
-      "Once you're happy with the dry run output, launch your web scraping agent. It will crawl your target URLs, extract the data, and write structured JSON results to the output directory.",
-    code: "openclaw agent run my-research-agent",
-    label: "Run the agent",
-    output:
-      "Agent my-research-agent started\nProcessing target: tech-news (2 URLs)\n✓ 60 items extracted\nResults written to ./my-research-agent/output/2026-03-14.json",
+      "OpenClaw agents go beyond basic web scraping \u2014 they can analyze and summarize what they collect. Add a synthesis block to agent.yaml to have the agent generate research reports from scraped data after each run. The output gets written to a separate report file.",
+    code: `# Add to market-researcher/agent.yaml
+synthesis:
+  enabled: true
+  prompt: |
+    Analyze the scraped data and produce a brief research report.
+    Compare competitor pricing tiers. Highlight any significant
+    industry news that could affect our product strategy.
+  output: reports/weekly-summary.md`,
+    label: "Synthesis config in agent.yaml",
+    tip: "Synthesis uses your configured LLM. Keep prompts focused to control token costs.",
   },
   {
     number: 9,
-    title: "Schedule automated recurring scrapes",
+    title: "Schedule recurring scrapes with the daemon",
     description:
-      "If your targets.yaml includes a schedule field, register the agent with the OpenClaw daemon to run scrapes automatically on a recurring basis. The daemon handles retries, deduplication, and log rotation.",
-    code: "openclaw agent schedule my-research-agent",
-    label: "Register the agent with the daemon",
+      "Register your agent with the OpenClaw daemon to automate web scraping on a recurring schedule. Add a schedule field to each target in targets.yaml, then register the agent. The daemon handles retries, deduplication, and log rotation automatically.",
+    code: "openclaw agent schedule market-researcher",
+    label: "Register the scheduled agent",
     output:
-      "Scheduled: my-research-agent\n  tech-news: every 6h (next run: 18:00 UTC)",
-    tip: "View all scheduled agents with: openclaw agent list --scheduled",
+      "Scheduled: market-researcher\n  competitor-pricing: every 24h (next run: 00:00 UTC)\n  industry-news: every 6h (next run: 18:00 UTC)",
   },
   {
     number: 10,
-    title: "View scraped data in the OpenClaw dashboard",
+    title: "Monitor scraping results in the OpenClaw dashboard",
     description:
-      "Open the OpenClaw dashboard in your browser to view your agent's scraped data, run history, and any errors. The research template includes a built-in data viewer that lets you filter and search through all extracted results.",
-    link: "http://127.0.0.1:18789/agents/my-research-agent",
+      "Open your browser and navigate to the OpenClaw dashboard for your agent. You'll see a timeline of past runs, extracted data you can filter and search, generated research reports, and any errors from the scraping process.",
+    link: "http://127.0.0.1:18789/agents/market-researcher",
     linkLabel: "Open agent dashboard",
   },
 ];
 
 const troubleshooting = [
   {
-    problem: "Web scraping agent returns empty results",
+    problem: "OpenClaw agent returns empty results for a scraping target",
     solution:
-      "openclaw agent run my-research-agent --target tech-news --verbose --debug\n# Check if selectors match. JavaScript-rendered pages may need: tools: [fetch_page_js]",
+      'openclaw agent run market-researcher --target competitor-pricing --verbose --debug\n# If the page uses JavaScript rendering, switch to fetch_page_js in agent.yaml:\n# tools: [fetch_page_js, extract_content]',
   },
   {
-    problem: "\"Error: rate limited\" or HTTP 429 responses",
+    problem: "HTTP 429 (rate limited) or HTTP 403 (forbidden) errors",
     solution:
-      "Increase delay_ms in your politeness config, or reduce max_concurrent to 1.",
+      "Increase delay_ms in your politeness config (try 5000) and reduce\nmax_concurrent to 1. Check the site's robots.txt for crawl-delay directives.",
   },
   {
     problem: "Scheduled scraping agent not running on time",
     solution:
-      "openclaw daemon status\n# If the daemon is stopped, restart it with: openclaw daemon start",
+      "openclaw daemon status\n# If the daemon is stopped, restart it:\nopenclaw daemon start\n# Check agent schedule with:\nopenclaw agent list --scheduled",
   },
 ];
 
@@ -151,11 +170,12 @@ export default function WebScrapingAgentsGuidePage() {
         </Link>
 
         <h1 className="font-serif text-4xl sm:text-5xl font-black tracking-tight leading-tight mb-4">
-          How to Build a Web Scraping Agent with OpenClaw
+          Build a Web Scraping Agent with OpenClaw
         </h1>
         <p className="font-serif text-xl text-text-secondary leading-relaxed mb-4">
-          Create an OpenClaw agent that crawls websites, extracts structured
-          data, and schedules automated scrapes &mdash; all from your terminal.
+          Follow this step-by-step tutorial to create an OpenClaw agent that
+          scrapes websites, extracts structured data, generates automated
+          research reports, and runs on a recurring schedule.
         </p>
         <p className="text-sm text-text-secondary mb-10">
           Estimated time: 10&ndash;15 minutes &middot; Requires: OpenClaw
