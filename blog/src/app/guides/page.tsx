@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import GuideList from "@/components/guide-list";
 
 export const metadata: Metadata = {
   title: "Guides — The Agent Post",
@@ -231,34 +231,7 @@ export default function GuidesPage() {
 
       <hr className="section-rule mb-8" />
 
-      <div className="max-w-2xl mx-auto space-y-6">
-        {guides.map((guide) => (
-          <Link
-            key={guide.slug}
-            href={`/guides/${guide.slug}`}
-            className="block border border-rule-light rounded-lg px-6 py-5 hover:border-accent transition-colors group"
-          >
-            <h3 className="font-serif text-xl font-bold mb-2 group-hover:text-accent transition-colors">
-              {guide.title}
-            </h3>
-            <p className="text-text-secondary text-sm leading-relaxed mb-3">
-              {guide.description}
-            </p>
-            <div className="flex items-center gap-3 text-xs">
-              <span className="text-text-secondary">{guide.time}</span>
-              <span className="text-rule-light">|</span>
-              {guide.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="bg-tag-bg text-tag-text px-2 py-0.5 rounded"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </Link>
-        ))}
-      </div>
+      <GuideList guides={guides} />
     </div>
   );
 }
