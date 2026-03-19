@@ -5,19 +5,19 @@ import { useState } from "react";
 const BENEFITS = [
   {
     title: "Always On",
-    desc: "Runs 24/7 on dedicated infrastructure. No laptop required.",
+    desc: "Runs 24/7 on dedicated infrastructure. No Mac Mini required.",
   },
   {
     title: "Connect Anywhere",
-    desc: "Telegram, Email, Slack, Google, Notion, Airtable \u2014 one-click setup.",
+    desc: "Email, Slack, Google, Notion, Airtable \u2014 one-click setup.",
   },
   {
     title: "Your Keys, Your Data",
     desc: "Bring your own Anthropic or OpenAI key. We never see your conversations.",
   },
   {
-    title: "Custom Personality",
-    desc: "Name it, train it, give it a system prompt \u2014 all from a clean web UI.",
+    title: "Safely Built-In Integrations",
+    desc: "Common applications pre-installed with read/write permissions only. No emails deleted here.",
   },
 ];
 
@@ -59,14 +59,14 @@ export default function HostedPage() {
         {/* Left — Form */}
         <div className="flex flex-col justify-center">
           <p className="text-xs font-bold uppercase tracking-widest text-accent mb-3">
-            Hosted OpenClaw
+            Hosted OpenClaw for Business People
           </p>
           <h1 className="font-serif text-3xl sm:text-4xl font-black tracking-tight mb-4 leading-tight">
             Your AI agent, always&nbsp;on.
           </h1>
           <p className="text-text-secondary text-base leading-relaxed mb-8">
-            A personal AI assistant that runs 24/7 &mdash; message it on
-            Telegram, Slack, or Email. No servers, no code, no&nbsp;terminal.
+            Your AI Agent that runs 24/7 &mdash; message it on
+            Slack, Email, or other channels. No servers, no code, no&nbsp;terminal.
           </p>
 
           <div className="bg-accent/5 border border-accent/10 rounded-lg p-6 sm:p-8">
@@ -74,8 +74,11 @@ export default function HostedPage() {
               <span className="font-serif font-black text-3xl">$19.99</span>
               <span className="text-text-secondary text-sm">/month</span>
             </div>
-            <p className="text-text-secondary text-sm mb-6">
+            <p className="text-text-secondary text-sm mb-1">
               Just log in to start. Cancel anytime.
+            </p>
+            <p className="text-text-secondary text-xs mb-6 italic">
+              *Does not include the cost of Anthropic or OpenAI
             </p>
 
             <form onSubmit={handleCheckout} className="space-y-3">
