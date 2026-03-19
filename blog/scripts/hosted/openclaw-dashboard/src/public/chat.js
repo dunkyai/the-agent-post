@@ -191,71 +191,80 @@
     messages.appendChild(thinking);
     scrollToBottom();
 
-    fetch("/chat/message", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text }),
-    })
-      .then(function (res) {
-        if (!res.body) throw new Error("Oops — I can't seem to connect right now. Do you want me to try again?");
-        var reader = res.body.getReader();
-        var decoder = new TextDecoder();
-        var buffer = "";
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", "/chat/message");
+    xhr.setRequestHeader("Content-Type", "application/json");
+    var lastIndex = 0;
 
-        function processChunk() {
-          return reader.read().then(function (result) {
-            if (result.done) return;
-            buffer += decoder.decode(result.value, { stream: true });
-
-            var parts = buffer.split("\n\n");
-            buffer = parts.pop() || "";
-
-            for (var p = 0; p < parts.length; p++) {
-              var lines = parts[p].split("\n");
-              var eventType = null;
-              var dataLines = [];
-              for (var l = 0; l < lines.length; l++) {
-                if (lines[l].indexOf("event: ") === 0) eventType = lines[l].slice(7);
-                else if (lines[l].indexOf("data: ") === 0) dataLines.push(lines[l].slice(6));
-              }
-              var eventData = dataLines.length > 0 ? dataLines.join("\n") : null;
-              if (!eventType || eventData === null) continue;
-
-              if (eventType === "status") {
-                var thinkingText = messages.querySelector(".thinking-text");
-                if (thinkingText) thinkingText.textContent = eventData;
-                scrollToBottom();
-              } else if (eventType === "done") {
-                var parsed = JSON.parse(eventData);
-                var t = messages.querySelector(".thinking-indicator");
-                if (t) t.remove();
-                addMessage("assistant", parsed.content);
-                maybeShowMemoryLink();
-              } else if (eventType === "error") {
-                var errData = JSON.parse(eventData);
-                var t = messages.querySelector(".thinking-indicator");
-                if (t) t.remove();
-                errorEl.textContent = errData.error;
-              }
-            }
-
-            return processChunk();
-          });
+    function parseSSE(raw) {
+      var parts = raw.split("\n\n");
+      for (var p = 0; p < parts.length; p++) {
+        var lines = parts[p].split("\n");
+        var eventType = null;
+        var dataLines = [];
+        for (var l = 0; l < lines.length; l++) {
+          if (lines[l].indexOf("event: ") === 0) eventType = lines[l].slice(7);
+          else if (lines[l].indexOf("data: ") === 0) dataLines.push(lines[l].slice(6));
         }
+        var eventData = dataLines.length > 0 ? dataLines.join("\n") : null;
+        if (!eventType || eventData === null) continue;
 
-        return processChunk();
-      })
-      .catch(function (err) {
-        var t = messages.querySelector(".thinking-indicator");
-        if (t) t.remove();
-        errorEl.textContent = err.message || "Connection error";
-      })
-      .finally(function () {
-        input.disabled = false;
-        sendBtn.disabled = false;
-        sendBtn.textContent = "Send";
-        input.focus();
-      });
+        if (eventType === "status") {
+          var thinkingText = messages.querySelector(".thinking-text");
+          if (thinkingText) thinkingText.textContent = eventData;
+          scrollToBottom();
+        } else if (eventType === "done") {
+          try {
+            var parsed = JSON.parse(eventData);
+            var t = messages.querySelector(".thinking-indicator");
+            if (t) t.remove();
+            addMessage("assistant", parsed.content);
+            maybeShowMemoryLink();
+          } catch (e) {
+            console.error("Failed to parse done event:", e, eventData);
+          }
+        } else if (eventType === "error") {
+          try {
+            var errData = JSON.parse(eventData);
+            var t = messages.querySelector(".thinking-indicator");
+            if (t) t.remove();
+            errorEl.textContent = errData.error;
+          } catch (e) {
+            var t = messages.querySelector(".thinking-indicator");
+            if (t) t.remove();
+            errorEl.textContent = eventData;
+          }
+        }
+      }
+    }
+
+    xhr.onprogress = function () {
+      var newData = xhr.responseText.substring(lastIndex);
+      lastIndex = xhr.responseText.length;
+      if (newData) parseSSE(newData);
+    };
+
+    xhr.onload = function () {
+      // Parse any remaining data
+      var remaining = xhr.responseText.substring(lastIndex);
+      if (remaining) parseSSE(remaining);
+      input.disabled = false;
+      sendBtn.disabled = false;
+      sendBtn.textContent = "Send";
+      input.focus();
+    };
+
+    xhr.onerror = function () {
+      var t = messages.querySelector(".thinking-indicator");
+      if (t) t.remove();
+      errorEl.textContent = "Connection error";
+      input.disabled = false;
+      sendBtn.disabled = false;
+      sendBtn.textContent = "Send";
+      input.focus();
+    };
+
+    xhr.send(JSON.stringify({ message: text }));
   });
 
   scrollToBottom();
