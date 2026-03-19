@@ -12,6 +12,12 @@
 
   // Minimal markdown-to-HTML renderer
   function renderMarkdown(src) {
+    // Clean up malformed nested image markdown before rendering
+    // e.g. ![alt](\n![image](url)\n) -> ![image](url)
+    src = src.replace(/!\[[^\]]*\]\(\s*\n*!\[([^\]]*)\]\(([^)\s]+)\)\s*\n*\)/g, '![$1]($2)');
+    // Remove image tags with empty/whitespace-only URLs
+    src = src.replace(/!\[[^\]]*\]\(\s*\)/g, '');
+
     // Escape HTML entities first (XSS prevention)
     var html = src
       .replace(/&/g, "&amp;")
@@ -27,11 +33,11 @@
     // Inline code (` ... `)
     html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
 
-    // Images ![alt](src)
-    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2">');
+    // Images ![alt](src) — match across whitespace in URL
+    html = html.replace(/!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, '<img alt="$1" src="$2">');
 
-    // Links [text](url)
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    // Links [text](url) — only match if not preceded by !
+    html = html.replace(/(?<!!)\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 
     // Bold **text**
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -187,8 +193,12 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: text }),
     })
-      .then(function (res) { return res.json(); })
+      .then(function (res) {
+        console.log("[post] status:", res.status, "redirected:", res.redirected);
+        return res.json();
+      })
       .then(function (data) {
+        console.log("[post] response:", JSON.stringify(data));
         if (data.error) {
           var t = messages.querySelector(".thinking-indicator");
           if (t) t.remove();
@@ -215,8 +225,25 @@
 
   function pollForResult() {
     fetch("/chat/poll")
-      .then(function (res) { return res.json(); })
+      .then(function (res) {
+        if (!res.ok) {
+          console.error("[poll] HTTP error:", res.status);
+          // Auth redirect — page might need refresh
+          if (res.status === 302 || res.redirected) {
+            errorEl.textContent = "Session expired. Please refresh the page.";
+            input.disabled = false;
+            sendBtn.disabled = false;
+            sendBtn.textContent = "Send";
+            return Promise.reject("redirect");
+          }
+          return res.text().then(function (t) { return { status: "error", error: t, done: true }; });
+        }
+        return res.json();
+      })
       .then(function (data) {
+        if (!data) return;
+        console.log("[poll]", JSON.stringify(data).slice(0, 200));
+
         if (data.done) {
           var t = messages.querySelector(".thinking-indicator");
           if (t) t.remove();
@@ -245,7 +272,9 @@
         // Poll again in 1 second
         setTimeout(pollForResult, 1000);
       })
-      .catch(function () {
+      .catch(function (err) {
+        if (err === "redirect") return;
+        console.error("[poll] error:", err);
         // Network error during poll — retry
         setTimeout(pollForResult, 2000);
       });

@@ -30,8 +30,8 @@ import {
   notionQueryDatabase, notionGetDatabase,
 } from "./notion";
 import {
-  isBufferRunning,
-  bufferListProfiles, bufferCreatePost, bufferGetPendingPosts, bufferGetSentPosts,
+  isBufferRunning, getBufferOrgName,
+  bufferListChannels, bufferCreatePost, bufferListPosts, bufferDeletePost,
 } from "./buffer";
 import {
   isLumaRunning, getLumaUserName,
@@ -357,6 +357,89 @@ const BROWSER_TOOLS = [
     },
   },
 ];
+
+const IMAGE_SEARCH_TOOLS = [
+  {
+    name: "find_image",
+    description: "Search for an image by topic and return direct image URLs you can embed. Use this whenever the user asks to see a picture or image of something. Returns a list of image URLs — pick the best one and embed it in your response as ![description](url).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "What to search for (e.g. 'hippopotamus', 'golden gate bridge')" },
+      },
+      required: ["query"],
+    },
+  },
+];
+
+async function executeFindImage(input: { query: string }): Promise<string> {
+  const provisioningUrl = process.env.PROVISIONING_URL;
+  const instanceId = process.env.INSTANCE_ID;
+  const gatewayToken = process.env.GATEWAY_TOKEN;
+
+  if (!provisioningUrl || !instanceId || !gatewayToken) {
+    return JSON.stringify({ error: "Browser not configured" });
+  }
+
+  try {
+    // Browse Wikipedia directly for the topic
+    const wikiUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(input.query.replace(/ /g, '_'))}`;
+    const res = await fetch(`${provisioningUrl}/instances/${instanceId}/browser/navigate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${gatewayToken}` },
+      body: JSON.stringify({ url: wikiUrl }),
+    });
+
+    if (res.ok) {
+      const data: any = await res.json();
+      const images = (data.images || []).filter((u: string) =>
+        u.includes("upload.wikimedia.org") && !u.includes("/icon") && !u.includes("OOjs") &&
+        !u.includes("edit-ltr") && !u.includes("static/images") && (u.endsWith(".jpg") || u.includes(".jpg/") || u.endsWith(".png") || u.includes(".png/") || u.endsWith(".JPG") || u.includes(".JPG/"))
+      );
+      if (images.length > 0) {
+        // Return higher resolution versions (replace thumbnail size)
+        const fullRes = images.slice(0, 5).map((u: string) =>
+          u.replace(/\/\d+px-/, '/800px-')
+        );
+        return JSON.stringify({
+          source: "Wikipedia",
+          images: fullRes,
+          hint: "Pick the best image and embed it as: ![description](url)",
+        });
+      }
+    }
+
+    // Fallback: try Wikimedia Commons search
+    const commonsUrl = `https://commons.wikimedia.org/w/index.php?search=${encodeURIComponent(input.query)}&title=Special:MediaSearch&type=image`;
+    const res2 = await fetch(`${provisioningUrl}/instances/${instanceId}/browser/navigate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${gatewayToken}` },
+      body: JSON.stringify({ url: commonsUrl }),
+    });
+
+    if (res2.ok) {
+      const data2: any = await res2.json();
+      const images2 = (data2.images || []).filter((u: string) =>
+        u.includes("upload.wikimedia.org") && !u.includes("/icon") && !u.includes("static/images") &&
+        (u.endsWith(".jpg") || u.includes(".jpg/") || u.endsWith(".png") || u.includes(".png/") || u.endsWith(".JPG") || u.includes(".JPG/"))
+      );
+      if (images2.length > 0) {
+        const fullRes2 = images2.slice(0, 5).map((u: string) =>
+          u.replace(/\/\d+px-/, '/800px-')
+        );
+        return JSON.stringify({
+          source: "Wikimedia Commons",
+          images: fullRes2,
+          hint: "Pick the best image and embed it as: ![description](url)",
+        });
+      }
+    }
+
+    return JSON.stringify({ error: "No images found. Try describing what you want differently, or tell the user you couldn't find an image." });
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Image search failed" });
+  }
+}
 
 async function executeBrowserTool(toolName: string, input: any): Promise<string | any[]> {
   const provisioningUrl = process.env.PROVISIONING_URL;
@@ -869,46 +952,47 @@ async function executeNotionTool(toolName: string, input: any): Promise<string> 
 
 const BUFFER_TOOLS = [
   {
-    name: "buffer_list_profiles",
-    description: "List all connected social media profiles in Buffer. Returns the service (twitter, instagram, linkedin, facebook, etc.), username, and post counts for each profile.",
+    name: "buffer_list_channels",
+    description: "List all connected social media channels in Buffer. Returns the service (twitter, instagram, linkedin, facebook, tiktok, mastodon, threads, bluesky, etc.), display name, and channel type for each.",
     input_schema: { type: "object" as const, properties: {} },
   },
   {
     name: "buffer_create_post",
-    description: "Create or schedule a social media post via Buffer. You must specify which profile(s) to post to using their profile IDs (use buffer_list_profiles first). Set now=true to post immediately, or provide scheduled_at for a specific time. By default the post is added to the Buffer queue.",
+    description: "Create or schedule a social media post via Buffer. Use buffer_list_channels first to get channel IDs. Modes: 'add_to_queue' (default — adds to Buffer's queue), 'custom_scheduled' (requires due_at with an ISO 8601 datetime), 'share_now' (post immediately).",
     input_schema: {
       type: "object" as const,
       properties: {
-        profile_ids: { type: "array", items: { type: "string" }, description: "Array of Buffer profile IDs to post to" },
+        channel_id: { type: "string", description: "Buffer channel ID to post to" },
         text: { type: "string", description: "The post text content" },
-        now: { type: "boolean", description: "Post immediately instead of adding to queue (default: false)" },
-        scheduled_at: { type: "string", description: "ISO 8601 datetime to schedule the post (e.g. 2026-03-20T14:00:00Z)" },
-        media_link: { type: "string", description: "URL to attach as a link preview" },
-        media_photo: { type: "string", description: "URL of an image to attach to the post" },
+        mode: { type: "string", enum: ["add_to_queue", "custom_scheduled", "share_now"], description: "Posting mode (default: add_to_queue)" },
+        due_at: { type: "string", description: "ISO 8601 datetime to schedule the post (required when mode is custom_scheduled)" },
+        image_url: { type: "string", description: "URL of an image to attach to the post" },
+        link_url: { type: "string", description: "URL to attach as a link preview" },
       },
-      required: ["profile_ids", "text"],
+      required: ["channel_id", "text"],
     },
   },
   {
-    name: "buffer_get_pending",
-    description: "Get queued/pending posts for a Buffer profile. Shows posts that are scheduled but not yet sent.",
+    name: "buffer_list_posts",
+    description: "List posts from Buffer with optional status filter. Use to view scheduled, sent, or draft posts.",
     input_schema: {
       type: "object" as const,
       properties: {
-        profile_id: { type: "string", description: "The Buffer profile ID" },
+        status: { type: "array", items: { type: "string", enum: ["draft", "scheduled", "sent", "error"] }, description: "Filter by post status (default: all)" },
+        channel_ids: { type: "array", items: { type: "string" }, description: "Filter by channel IDs" },
+        limit: { type: "number", description: "Max posts to return (default: 20, max: 50)" },
       },
-      required: ["profile_id"],
     },
   },
   {
-    name: "buffer_get_sent",
-    description: "Get recently sent posts for a Buffer profile. Shows posts that have already been published, including engagement statistics.",
+    name: "buffer_delete_post",
+    description: "Delete a post from Buffer by its post ID.",
     input_schema: {
       type: "object" as const,
       properties: {
-        profile_id: { type: "string", description: "The Buffer profile ID" },
+        post_id: { type: "string", description: "The Buffer post ID to delete" },
       },
-      required: ["profile_id"],
+      required: ["post_id"],
     },
   },
 ];
@@ -916,22 +1000,25 @@ const BUFFER_TOOLS = [
 async function executeBufferTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
-      case "buffer_list_profiles":
-        return await bufferListProfiles();
-      case "buffer_create_post": {
-        const media = (input.media_link || input.media_photo)
-          ? { link: input.media_link, photo: input.media_photo }
-          : undefined;
-        return await bufferCreatePost(input.profile_ids, input.text, {
-          now: input.now,
-          scheduled_at: input.scheduled_at,
-          media,
+      case "buffer_list_channels":
+        return await bufferListChannels();
+      case "buffer_create_post":
+        return await bufferCreatePost({
+          channel_id: input.channel_id,
+          text: input.text,
+          mode: input.mode || "add_to_queue",
+          due_at: input.due_at,
+          image_url: input.image_url,
+          link_url: input.link_url,
         });
-      }
-      case "buffer_get_pending":
-        return await bufferGetPendingPosts(input.profile_id);
-      case "buffer_get_sent":
-        return await bufferGetSentPosts(input.profile_id);
+      case "buffer_list_posts":
+        return await bufferListPosts({
+          status: input.status,
+          channel_ids: input.channel_ids,
+          limit: input.limit,
+        });
+      case "buffer_delete_post":
+        return await bufferDeletePost(input.post_id);
       default:
         return JSON.stringify({ error: `Unknown Buffer tool: ${toolName}` });
     }
@@ -1648,6 +1735,7 @@ function extractDomain(url?: string): string {
 }
 
 const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
+  find_image: (input) => `Searching for images of ${input?.query || "that"}...`,
   browse_webpage: (input) => `Browsing ${extractDomain(input?.url)}...`,
   browser_click: "Clicking on the page...",
   browser_type: "Typing on the page...",
@@ -1703,10 +1791,10 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   notion_update_page: "Updating a Notion page...",
   notion_query_database: "Querying Notion database...",
   notion_get_database: "Reading Notion database...",
-  buffer_list_profiles: "Listing social profiles...",
+  buffer_list_channels: "Listing social channels...",
   buffer_create_post: "Creating a social post...",
-  buffer_get_pending: "Checking pending posts...",
-  buffer_get_sent: "Checking sent posts...",
+  buffer_list_posts: "Checking Buffer posts...",
+  buffer_delete_post: "Deleting a Buffer post...",
   luma_list_events: "Checking Luma events...",
   luma_get_event: "Reading event details...",
   luma_create_event: "Creating a Luma event...",
@@ -1737,6 +1825,7 @@ async function callAnthropic(
     ...CODE_EXECUTION_TOOLS,
     ...PDF_TOOLS,
     ...BROWSER_TOOLS,
+    ...IMAGE_SEARCH_TOOLS,
   ];
 
   // Conditionally add messaging tools based on connected integrations
@@ -1850,7 +1939,7 @@ async function callAnthropic(
       const supabaseToolNames = ["supabase_list_tables", "supabase_describe_table", "supabase_query", "supabase_insert", "supabase_update"];
       const airtableToolNames = ["airtable_list_bases", "airtable_list_tables", "airtable_list_records"];
       const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
-      const bufferToolNames = ["buffer_list_profiles", "buffer_create_post", "buffer_get_pending", "buffer_get_sent"];
+      const bufferToolNames = ["buffer_list_channels", "buffer_create_post", "buffer_list_posts", "buffer_delete_post"];
       const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
@@ -1884,6 +1973,8 @@ async function callAnthropic(
           result = await executePdfTool(toolBlock.name, toolBlock.input);
         } else if (toolBlock.name === "open_google_doc") {
           result = await executePublicGDocTool(toolBlock.input);
+        } else if (toolBlock.name === "find_image") {
+          result = await executeFindImage(toolBlock.input);
         } else if (browserToolNames.includes(toolBlock.name)) {
           result = await executeBrowserTool(toolBlock.name, toolBlock.input);
         } else if (messagingToolNames.includes(toolBlock.name)) {
@@ -1948,7 +2039,14 @@ async function callAnthropic(
       return `${prefix}\n\n![image](${url})\n\n`;
     });
 
-    return { role: "assistant", content: text || "(Action completed.)" };
+    // Clean up malformed nested image markdown: ![alt](\n![image](url)\n) -> ![image](url)
+    text = text.replace(/!\[[^\]]*\]\(\s*\n*!\[([^\]]*)\]\(([^)\s]+)\)\s*\n*\)/g, '![$1]($2)');
+    // Remove image tags with empty/whitespace-only URLs
+    text = text.replace(/!\[[^\]]*\]\(\s*\)/g, '');
+    // Collapse excessive blank lines
+    text = text.replace(/\n{3,}/g, '\n\n');
+
+    return { role: "assistant", content: text.trim() || "(Action completed.)" };
   }
 
   return { role: "assistant", content: "Hmmm...this was pretty complex and I hit a tool limit. Could you break this into smaller steps or ask again in a simpler way? For example, instead of asking me to do everything at once, try one piece at a time." };
@@ -1963,12 +2061,57 @@ async function callOpenAI(
   maxTokens: number,
   onStatus?: StatusCallback
 ): Promise<AIResponse> {
-  const allMessages: { role: string; content: string }[] = [];
+  // Build tools list (same as Anthropic minus server-side web_search)
+  const customTools: any[] = [
+    ...SCHEDULING_TOOLS,
+    ...MEMORY_TOOLS,
+    ...CODE_EXECUTION_TOOLS,
+    ...PDF_TOOLS,
+    ...BROWSER_TOOLS,
+    ...IMAGE_SEARCH_TOOLS,
+  ];
+  if (isSlackRunning()) customTools.push(...SLACK_MESSAGING_TOOLS);
+  if (isEmailRunning()) customTools.push(...EMAIL_MESSAGING_TOOLS);
+  if (isSupabaseRunning()) {
+    const perms = getSupabasePermissions();
+    customTools.push(...SUPABASE_READ_TOOLS);
+    if (perms.includes("insert")) customTools.push(...SUPABASE_INSERT_TOOLS);
+    if (perms.includes("update")) customTools.push(...SUPABASE_UPDATE_TOOLS);
+  }
+  if (isAirtableRunning()) customTools.push(...AIRTABLE_TOOLS);
+  if (isNotionRunning()) customTools.push(...NOTION_TOOLS);
+  if (isBufferRunning()) customTools.push(...BUFFER_TOOLS);
+  if (isLumaRunning()) customTools.push(...LUMA_TOOLS);
+  const googleServices = getConnectedServices();
+  if (googleServices) {
+    if (googleServices.includes("gmail")) {
+      customTools.push(...GOOGLE_GMAIL_TOOLS);
+      if (googleServices.includes("gmail_send")) customTools.push(...GOOGLE_GMAIL_SEND_TOOLS);
+    }
+    if (googleServices.includes("calendar")) customTools.push(...GOOGLE_CALENDAR_TOOLS);
+    if (googleServices.includes("drive")) customTools.push(...GOOGLE_DRIVE_TOOLS);
+    if (googleServices.includes("contacts")) customTools.push(...GOOGLE_CONTACTS_TOOLS);
+    if (googleServices.includes("docs")) customTools.push(...GOOGLE_DOCS_TOOLS);
+    if (googleServices.includes("sheets")) customTools.push(...GOOGLE_SHEETS_TOOLS);
+  }
+  if (!googleServices || !googleServices.includes("drive")) {
+    customTools.push(...PUBLIC_GDOC_TOOLS);
+  }
 
+  // Convert to OpenAI function calling format
+  const openaiTools = customTools.map((tool) => ({
+    type: "function" as const,
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.input_schema,
+    },
+  }));
+
+  const allMessages: any[] = [];
   if (systemPrompt) {
     allMessages.push({ role: "system", content: systemPrompt });
   }
-
   allMessages.push(
     ...messages.map((m) => ({
       role: m.role === "user" ? "user" : "assistant",
@@ -1976,36 +2119,161 @@ async function callOpenAI(
     }))
   );
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
+  // Tool dispatch categories
+  const memoryTools = ["save_memory", "list_memories", "delete_memory"];
+  const codeTools = ["run_command", "read_file", "write_file"];
+  const pdfTools = ["pdf_get_fields", "pdf_fill_form", "pdf_read_text"];
+  const googleToolNames = [
+    "gmail_search", "gmail_read_message", "gmail_send", "gmail_create_draft", "gmail_label", "gmail_list_aliases",
+    "calendar_list_events", "calendar_create_event", "calendar_update_event",
+    "drive_search", "drive_read_file", "drive_open_url",
+    "contacts_search",
+    "docs_create", "docs_read", "docs_append", "docs_insert",
+    "sheets_create", "sheets_read", "sheets_write", "sheets_append", "sheets_list_sheets",
+  ];
+  const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
+  const messagingToolNames = ["send_slack", "slack_channel_members", "send_lobstermail", "check_lobstermail"];
+  const supabaseToolNames = ["supabase_list_tables", "supabase_describe_table", "supabase_query", "supabase_insert", "supabase_update"];
+  const airtableToolNames = ["airtable_list_bases", "airtable_list_tables", "airtable_list_records"];
+  const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
+  const bufferToolNames = ["buffer_list_profiles", "buffer_create_post", "buffer_get_pending", "buffer_get_sent"];
+  const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
+
+  const MAX_TOOL_ROUNDS = 25;
+  const toolCallLog: string[] = [];
+  const MAX_REPEAT_CALLS = 2;
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    onStatus?.("Thinking...");
+
+    const reqBody: any = {
       model,
       messages: allMessages,
       temperature,
       max_tokens: maxTokens,
-    }),
-  });
+    };
+    if (openaiTools.length > 0) reqBody.tools = openaiTools;
 
-  if (!res.ok) {
-    const body = await res.text();
-    if (body.includes("insufficient_quota") || body.includes("billing") || res.status === 402 || res.status === 429) {
-      setSetting("credit_warning", "Your OpenAI API credit balance is too low. Please add credits at platform.openai.com to continue using your agent.");
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(reqBody),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      if (body.includes("insufficient_quota") || body.includes("billing") || res.status === 402 || res.status === 429) {
+        setSetting("credit_warning", "Your OpenAI API credit balance is too low. Please add credits at platform.openai.com to continue using your agent.");
+      }
+      throw new Error(`OpenAI API error (${res.status}): ${body}`);
     }
-    throw new Error(`OpenAI API error (${res.status}): ${body}`);
+
+    // Clear credit warning on successful API call
+    if (getSetting("credit_warning")) {
+      setSetting("credit_warning", "");
+    }
+
+    const data: any = await res.json();
+    const choice = data.choices?.[0];
+    const message = choice?.message;
+
+    // Check for tool calls
+    if (message?.tool_calls && message.tool_calls.length > 0) {
+      // Append assistant message (includes tool_calls metadata)
+      allMessages.push(message);
+
+      for (const toolCall of message.tool_calls) {
+        const toolName = toolCall.function.name;
+        let toolInput: any;
+        try {
+          toolInput = JSON.parse(toolCall.function.arguments);
+        } catch {
+          toolInput = {};
+        }
+
+        console.log(`Tool call: ${toolName}`, JSON.stringify(toolInput).slice(0, 200));
+
+        // Emit tool-specific status
+        const statusEntry = TOOL_STATUS_MAP[toolName];
+        if (statusEntry && onStatus) {
+          onStatus(typeof statusEntry === "function" ? statusEntry(toolInput) : statusEntry);
+        }
+
+        // Loop detection
+        const fingerprint = `${toolName}:${JSON.stringify(toolInput)}`;
+        const repeatCount = toolCallLog.filter((f) => f === fingerprint).length;
+        toolCallLog.push(fingerprint);
+        if (repeatCount >= MAX_REPEAT_CALLS) {
+          console.log(`Loop detected: ${toolName} called ${repeatCount + 1} times with same input, skipping`);
+          allMessages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({ error: "This tool was already called with the same input. Try a different approach." }),
+          });
+          continue;
+        }
+
+        let result: string | any[];
+        if (memoryTools.includes(toolName)) {
+          result = executeMemoryTool(toolName, toolInput);
+        } else if (codeTools.includes(toolName)) {
+          result = await executeCodeTool(toolName, toolInput);
+        } else if (pdfTools.includes(toolName)) {
+          result = await executePdfTool(toolName, toolInput);
+        } else if (toolName === "open_google_doc") {
+          result = await executePublicGDocTool(toolInput);
+        } else if (toolName === "find_image") {
+          result = await executeFindImage(toolInput);
+        } else if (browserToolNames.includes(toolName)) {
+          result = await executeBrowserTool(toolName, toolInput);
+        } else if (messagingToolNames.includes(toolName)) {
+          result = await executeMessagingTool(toolName, toolInput);
+        } else if (googleToolNames.includes(toolName)) {
+          result = await executeGoogleTool(toolName, toolInput);
+        } else if (supabaseToolNames.includes(toolName)) {
+          result = await executeSupabaseTool(toolName, toolInput);
+        } else if (airtableToolNames.includes(toolName)) {
+          result = await executeAirtableTool(toolName, toolInput);
+        } else if (notionToolNames.includes(toolName)) {
+          result = await executeNotionTool(toolName, toolInput);
+        } else if (bufferToolNames.includes(toolName)) {
+          result = await executeBufferTool(toolName, toolInput);
+        } else if (lumaToolNames.includes(toolName)) {
+          result = await executeLumaTool(toolName, toolInput);
+        } else {
+          result = executeSchedulingTool(toolName, toolInput);
+        }
+
+        console.log(`Tool result: ${toolName}`, typeof result === "string" ? result.slice(0, 300) : "[multipart content]");
+
+        // OpenAI tool results must be strings
+        const resultStr = typeof result === "string" ? result : JSON.stringify(result);
+
+        allMessages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: resultStr,
+        });
+      }
+      continue;
+    }
+
+    // No tool calls — return final text
+    onStatus?.("Writing response...");
+    let text = (message?.content || "").trim();
+
+    // Clean up malformed markdown
+    text = text.replace(/!\[[^\]]*\]\(\s*\n*!\[([^\]]*)\]\(([^)\s]+)\)\s*\n*\)/g, '![$1]($2)');
+    text = text.replace(/!\[[^\]]*\]\(\s*\)/g, '');
+    text = text.replace(/\n{3,}/g, '\n\n');
+
+    return { role: "assistant", content: text || "(Action completed.)" };
   }
 
-  // Clear credit warning on successful API call
-  if (getSetting("credit_warning")) {
-    setSetting("credit_warning", "");
-  }
-
-  const data: any = await res.json();
-  const text = (data.choices?.[0]?.message?.content || "").trim();
-  return { role: "assistant", content: text || "(Action completed.)" };
+  return { role: "assistant", content: "Hmmm...this was pretty complex and I hit a tool limit. Could you break this into smaller steps or ask again in a simpler way? For example, instead of asking me to do everything at once, try one piece at a time." };
 }
 
 export async function processMessage(
@@ -2139,8 +2407,9 @@ CRITICAL Supabase query rules:
   }
 
   // Inject Buffer context
+  const bufferOrg = getBufferOrgName();
   if (isBufferRunning()) {
-    const bufferContext = "You are connected to Buffer for social media scheduling. You can list connected social profiles, create and schedule posts, and view pending and sent posts using the buffer_* tools. Use buffer_list_profiles first to see which social accounts are connected, then buffer_create_post to publish or schedule posts. Set now=true to post immediately, or provide a scheduled_at time.";
+    const bufferContext = `You are connected to Buffer for social media scheduling${bufferOrg ? ` (${bufferOrg})` : ""}. You can list connected social channels, create and schedule posts, view post history, and delete posts using the buffer_* tools. Use buffer_list_channels first to see which social accounts are connected, then buffer_create_post to schedule posts. Modes: add_to_queue (default), custom_scheduled (set due_at), or share_now. Use buffer_list_posts to check scheduled or sent posts.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${bufferContext}` : bufferContext;
   }
 

@@ -1103,8 +1103,8 @@ async function pollGmail(): Promise<void> {
   const accountId = account.google_email;
 
   try {
-    // Build search query for unread emails
-    let query = "is:unread in:inbox";
+    // Build search query — include read emails too (drafts dedup prevents double-processing)
+    let query = "in:inbox";
     if (gmailLastChecked) {
       const epoch = Math.floor(new Date(gmailLastChecked).getTime() / 1000);
       query += ` after:${epoch}`;
@@ -1172,6 +1172,13 @@ async function pollGmail(): Promise<void> {
         const messageIdHeader = headers["message-id"] || "";
         const threadId = msg.threadId;
 
+        // Skip if we already have a draft for this thread
+        if (threadId && draftThreadIds.has(threadId)) {
+          console.log(`Gmail poll: skipped (draft already exists) — ${subject}`);
+          await markAsRead(msgId, accountId);
+          continue;
+        }
+
         // Check sender against rules
         if (!isGmailSenderAllowed(from)) {
           console.log(`Gmail poll: filtered out email from ${from}`);
@@ -1179,14 +1186,7 @@ async function pollGmail(): Promise<void> {
           continue;
         }
 
-        // Skip if there's already a draft for this thread
-        if (threadId && draftThreadIds.has(threadId)) {
-          console.log(`Gmail poll: skipped (draft already exists) — ${subject}`);
-          await markAsRead(msgId, accountId);
-          continue;
-        }
-
-        // Skip if the last message in the thread is from our account (we already replied)
+        // Skip if the last message in the thread is from our account (already replied)
         if (threadId) {
           try {
             const threadRes = await googleFetch(
@@ -1256,16 +1256,23 @@ async function pollGmail(): Promise<void> {
           .join(", ") || undefined;
 
         if (replyMode === "send" && account.services.includes("gmail_send")) {
-          await gmailSend(replyTo, replySubject, reply, accountId, undefined, replyCc, threadId, messageIdHeader);
+          const sendResult = JSON.parse(await gmailSend(replyTo, replySubject, reply, accountId, undefined, replyCc, threadId, messageIdHeader));
+          if (sendResult.error) {
+            console.error(`Gmail poll: failed to send reply to ${from}: ${sendResult.error}`);
+            continue; // Don't mark as read — retry next poll
+          }
           console.log(`Gmail poll: sent reply to ${from}`);
         } else {
-          await gmailCreateDraft(replyTo, replySubject, reply, accountId, undefined, replyCc, threadId, messageIdHeader);
-          console.log(`Gmail poll: drafted reply to ${from}`);
-          // Track so we don't create another draft in this same cycle
+          const draftResult = JSON.parse(await gmailCreateDraft(replyTo, replySubject, reply, accountId, undefined, replyCc, threadId, messageIdHeader));
+          if (draftResult.error) {
+            console.error(`Gmail poll: failed to create draft for ${from}: ${draftResult.error}`);
+            continue; // Don't mark as read — retry next poll
+          }
+          console.log(`Gmail poll: drafted reply to ${from} (draftId: ${draftResult.draftId})`);
           if (threadId) draftThreadIds.add(threadId);
         }
 
-        // Mark as read
+        // Mark as read only after successful draft/send
         await markAsRead(msgId, accountId);
       } catch (err: unknown) {
         console.error(`Gmail poll: error processing message ${msgId}:`, err instanceof Error ? err.message : err);

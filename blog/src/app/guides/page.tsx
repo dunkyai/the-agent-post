@@ -224,6 +224,22 @@ const guides = [
     time: "10-15 min",
     tags: ["OpenClaw", "Web Scraping", "Data Extraction"],
   },
+  {
+    slug: "openclaw-windows-wsl",
+    title: "Setting Up OpenClaw on Windows with WSL",
+    description:
+      "Install WSL, Node.js, and OpenClaw on Windows step by step, then launch your first AI agent from a Linux terminal.",
+    time: "10-15 min",
+    tags: ["Windows", "WSL", "Setup"],
+  },
+  {
+    slug: "openclaw-postgresql-mcp",
+    title: "Connecting OpenClaw to PostgreSQL via MCP",
+    description:
+      "Give your OpenClaw agents direct read and write access to a PostgreSQL database using the Model Context Protocol.",
+    time: "10-15 min",
+    tags: ["PostgreSQL", "MCP", "Database"],
+  },
 ];
 
 export default function GuidesPage() {
