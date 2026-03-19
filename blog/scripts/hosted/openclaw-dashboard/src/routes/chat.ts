@@ -37,6 +37,7 @@ router.post("/chat/message", async (req: Request, res: Response) => {
     }
 
     const sessionId = req.cookies?.openclaw_session || "anon";
+    console.log(`[chat] POST from session: ${sessionId.slice(0, 8)}...`);
     const state: PendingRequest = { status: "Thinking...", result: null, error: null, done: false };
     pending.set(sessionId, state);
 
@@ -68,6 +69,7 @@ router.post("/chat/message", async (req: Request, res: Response) => {
       }
     }
     state.done = true;
+    console.log(`[chat] processMessage completed for ${sessionId.slice(0, 8)}... (result: ${state.result ? "yes" : "no"}, error: ${state.error || "none"})`);
     // Clean up after 30s
     setTimeout(() => pending.delete(sessionId), 30_000);
   } catch (err: unknown) {
@@ -83,6 +85,7 @@ router.post("/chat/message", async (req: Request, res: Response) => {
 router.get("/chat/poll", (req: Request, res: Response) => {
   const sessionId = req.cookies?.openclaw_session || "anon";
   const state = pending.get(sessionId);
+  console.log(`[chat] POLL from ${sessionId.slice(0, 8)}... -> ${state ? `status=${state.status}, done=${state.done}` : "no state"}`);
   if (!state) {
     res.json({ status: "idle", done: true });
     return;

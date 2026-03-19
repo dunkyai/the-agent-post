@@ -358,6 +358,89 @@ const BROWSER_TOOLS = [
   },
 ];
 
+const IMAGE_SEARCH_TOOLS = [
+  {
+    name: "find_image",
+    description: "Search for an image by topic and return direct image URLs you can embed. Use this whenever the user asks to see a picture or image of something. Returns a list of image URLs — pick the best one and embed it in your response as ![description](url).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "What to search for (e.g. 'hippopotamus', 'golden gate bridge')" },
+      },
+      required: ["query"],
+    },
+  },
+];
+
+async function executeFindImage(input: { query: string }): Promise<string> {
+  const provisioningUrl = process.env.PROVISIONING_URL;
+  const instanceId = process.env.INSTANCE_ID;
+  const gatewayToken = process.env.GATEWAY_TOKEN;
+
+  if (!provisioningUrl || !instanceId || !gatewayToken) {
+    return JSON.stringify({ error: "Browser not configured" });
+  }
+
+  try {
+    // Browse Wikipedia directly for the topic
+    const wikiUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(input.query.replace(/ /g, '_'))}`;
+    const res = await fetch(`${provisioningUrl}/instances/${instanceId}/browser/navigate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${gatewayToken}` },
+      body: JSON.stringify({ url: wikiUrl }),
+    });
+
+    if (res.ok) {
+      const data: any = await res.json();
+      const images = (data.images || []).filter((u: string) =>
+        u.includes("upload.wikimedia.org") && !u.includes("/icon") && !u.includes("OOjs") &&
+        !u.includes("edit-ltr") && !u.includes("static/images") && (u.endsWith(".jpg") || u.includes(".jpg/") || u.endsWith(".png") || u.includes(".png/") || u.endsWith(".JPG") || u.includes(".JPG/"))
+      );
+      if (images.length > 0) {
+        // Return higher resolution versions (replace thumbnail size)
+        const fullRes = images.slice(0, 5).map((u: string) =>
+          u.replace(/\/\d+px-/, '/800px-')
+        );
+        return JSON.stringify({
+          source: "Wikipedia",
+          images: fullRes,
+          hint: "Pick the best image and embed it as: ![description](url)",
+        });
+      }
+    }
+
+    // Fallback: try Wikimedia Commons search
+    const commonsUrl = `https://commons.wikimedia.org/w/index.php?search=${encodeURIComponent(input.query)}&title=Special:MediaSearch&type=image`;
+    const res2 = await fetch(`${provisioningUrl}/instances/${instanceId}/browser/navigate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${gatewayToken}` },
+      body: JSON.stringify({ url: commonsUrl }),
+    });
+
+    if (res2.ok) {
+      const data2: any = await res2.json();
+      const images2 = (data2.images || []).filter((u: string) =>
+        u.includes("upload.wikimedia.org") && !u.includes("/icon") && !u.includes("static/images") &&
+        (u.endsWith(".jpg") || u.includes(".jpg/") || u.endsWith(".png") || u.includes(".png/") || u.endsWith(".JPG") || u.includes(".JPG/"))
+      );
+      if (images2.length > 0) {
+        const fullRes2 = images2.slice(0, 5).map((u: string) =>
+          u.replace(/\/\d+px-/, '/800px-')
+        );
+        return JSON.stringify({
+          source: "Wikimedia Commons",
+          images: fullRes2,
+          hint: "Pick the best image and embed it as: ![description](url)",
+        });
+      }
+    }
+
+    return JSON.stringify({ error: "No images found. Try describing what you want differently, or tell the user you couldn't find an image." });
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Image search failed" });
+  }
+}
+
 async function executeBrowserTool(toolName: string, input: any): Promise<string | any[]> {
   const provisioningUrl = process.env.PROVISIONING_URL;
   const instanceId = process.env.INSTANCE_ID;
@@ -1648,6 +1731,7 @@ function extractDomain(url?: string): string {
 }
 
 const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
+  find_image: (input) => `Searching for images of ${input?.query || "that"}...`,
   browse_webpage: (input) => `Browsing ${extractDomain(input?.url)}...`,
   browser_click: "Clicking on the page...",
   browser_type: "Typing on the page...",
@@ -1737,6 +1821,7 @@ async function callAnthropic(
     ...CODE_EXECUTION_TOOLS,
     ...PDF_TOOLS,
     ...BROWSER_TOOLS,
+    ...IMAGE_SEARCH_TOOLS,
   ];
 
   // Conditionally add messaging tools based on connected integrations
@@ -1884,6 +1969,8 @@ async function callAnthropic(
           result = await executePdfTool(toolBlock.name, toolBlock.input);
         } else if (toolBlock.name === "open_google_doc") {
           result = await executePublicGDocTool(toolBlock.input);
+        } else if (toolBlock.name === "find_image") {
+          result = await executeFindImage(toolBlock.input);
         } else if (browserToolNames.includes(toolBlock.name)) {
           result = await executeBrowserTool(toolBlock.name, toolBlock.input);
         } else if (messagingToolNames.includes(toolBlock.name)) {
@@ -1948,7 +2035,14 @@ async function callAnthropic(
       return `${prefix}\n\n![image](${url})\n\n`;
     });
 
-    return { role: "assistant", content: text || "(Action completed.)" };
+    // Clean up malformed nested image markdown: ![alt](\n![image](url)\n) -> ![image](url)
+    text = text.replace(/!\[[^\]]*\]\(\s*\n*!\[([^\]]*)\]\(([^)\s]+)\)\s*\n*\)/g, '![$1]($2)');
+    // Remove image tags with empty/whitespace-only URLs
+    text = text.replace(/!\[[^\]]*\]\(\s*\)/g, '');
+    // Collapse excessive blank lines
+    text = text.replace(/\n{3,}/g, '\n\n');
+
+    return { role: "assistant", content: text.trim() || "(Action completed.)" };
   }
 
   return { role: "assistant", content: "Hmmm...this was pretty complex and I hit a tool limit. Could you break this into smaller steps or ask again in a simpler way? For example, instead of asking me to do everything at once, try one piece at a time." };
