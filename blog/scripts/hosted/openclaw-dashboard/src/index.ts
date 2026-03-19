@@ -96,19 +96,6 @@ function start() {
 }
 
 async function reconnectIntegrations() {
-  // Telegram
-  try {
-    const telegram = getIntegration("telegram");
-    if (telegram && telegram.status === "connected") {
-      const config = JSON.parse(decrypt(telegram.config));
-      const { startTelegram } = require("./services/telegram");
-      startTelegram(config.bot_token);
-      console.log("Telegram bot reconnected");
-    }
-  } catch (err: unknown) {
-    console.error("Failed to reconnect Telegram:", err instanceof Error ? err.message : err);
-  }
-
   // Slack
   try {
     const slack = getIntegration("slack");

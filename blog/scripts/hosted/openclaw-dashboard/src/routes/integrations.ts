@@ -1,7 +1,6 @@
 import { Router, Request, Response } from "express";
 import { getIntegration, upsertIntegration, deleteIntegration, getAllIntegrations, getGoogleIntegrations, getSetting, setSetting } from "../services/db";
 import { encrypt, decrypt } from "../services/encryption";
-import { startTelegram, stopTelegram, isTelegramRunning } from "../services/telegram";
 import { buildSlackOAuthUrl, stopSlack, isSlackRunning } from "../services/slack";
 import { signupAndCreateInbox, createInbox, startEmail, stopEmail, isEmailRunning } from "../services/email";
 import { buildOAuthUrl, stopGoogle, isGoogleRunning, startGmailPolling, stopGmailPolling } from "../services/google";
@@ -87,7 +86,6 @@ router.get("/integrations", (req: Request, res: Response) => {
   gmailFilter.reply_mode = getSetting("gmail_reply_mode") || "draft";
 
   res.render("integrations", {
-    telegram: integrationMap["telegram"] || { status: "disconnected", error_message: null },
     slack: {
       ...(integrationMap["slack"] || { status: "disconnected", error_message: null }),
       team_name: slackTeamName,
@@ -113,31 +111,6 @@ router.get("/integrations", (req: Request, res: Response) => {
     },
     flash: req.query.flash || null,
   });
-});
-
-router.post("/integrations/telegram/connect", async (req: Request, res: Response) => {
-  try {
-    const { bot_token } = req.body;
-    if (!bot_token || !bot_token.trim()) {
-      res.redirect(303, "/integrations?flash=Bot+token+is+required");
-      return;
-    }
-
-    const config = encrypt(JSON.stringify({ bot_token: bot_token.trim() }));
-    startTelegram(bot_token.trim());
-    upsertIntegration("telegram", config, "connected");
-    res.redirect(303, "/integrations?flash=Telegram+connected");
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    upsertIntegration("telegram", "{}", "error", message);
-    res.redirect(303, "/integrations?flash=Telegram+error:+" + encodeURIComponent(message));
-  }
-});
-
-router.post("/integrations/telegram/disconnect", (req: Request, res: Response) => {
-  stopTelegram();
-  upsertIntegration("telegram", "{}", "disconnected");
-  res.redirect(303, "/integrations?flash=Telegram+disconnected");
 });
 
 router.post("/integrations/slack/connect", (req: Request, res: Response) => {
