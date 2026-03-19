@@ -190,6 +190,19 @@ async function reconnectIntegrations() {
     console.error("Failed to reconnect Notion:", err instanceof Error ? err.message : err);
   }
 
+  // Buffer
+  try {
+    const buffer = getIntegration("buffer");
+    if (buffer && buffer.status === "connected") {
+      const config = JSON.parse(decrypt(buffer.config));
+      const { startBuffer } = require("./services/buffer");
+      startBuffer(config);
+      console.log("Buffer reconnected");
+    }
+  } catch (err: unknown) {
+    console.error("Failed to reconnect Buffer:", err instanceof Error ? err.message : err);
+  }
+
   try {
     const googleRows = getGoogleIntegrations();
     for (const row of googleRows) {

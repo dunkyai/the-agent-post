@@ -7,6 +7,7 @@ import { buildOAuthUrl, stopGoogle, isGoogleRunning, startGmailPolling, stopGmai
 import { startSupabase, stopSupabase, testSupabaseConnection, probeSupabaseHealth } from "../services/supabase";
 import { buildAirtableOAuthUrl, stopAirtable } from "../services/airtable";
 import { buildNotionOAuthUrl, stopNotion, getNotionWorkspaceName } from "../services/notion";
+import { buildBufferOAuthUrl, stopBuffer } from "../services/buffer";
 
 const router = Router();
 
@@ -109,6 +110,7 @@ router.get("/integrations", (req: Request, res: Response) => {
       ...(integrationMap["notion"] || { status: "disconnected", error_message: null }),
       workspace_name: notionWorkspaceName,
     },
+    buffer: integrationMap["buffer"] || { status: "disconnected", error_message: null },
     flash: req.query.flash || null,
   });
 });
@@ -420,6 +422,22 @@ router.post("/integrations/notion/disconnect", async (req: Request, res: Respons
   stopNotion();
   upsertIntegration("notion", "{}", "disconnected");
   res.redirect(303, "/integrations?flash=Notion+disconnected");
+});
+
+router.post("/integrations/buffer/connect", (req: Request, res: Response) => {
+  try {
+    const url = buildBufferOAuthUrl();
+    res.redirect(url);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.redirect(303, "/integrations?flash=Buffer+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/buffer/disconnect", async (req: Request, res: Response) => {
+  stopBuffer();
+  upsertIntegration("buffer", "{}", "disconnected");
+  res.redirect(303, "/integrations?flash=Buffer+disconnected");
 });
 
 export default router;
