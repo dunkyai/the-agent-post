@@ -29,6 +29,10 @@ import {
   notionSearch, notionGetPage, notionGetPageContent, notionCreatePage, notionUpdatePage,
   notionQueryDatabase, notionGetDatabase,
 } from "./notion";
+import {
+  isBufferRunning,
+  bufferListProfiles, bufferCreatePost, bufferGetPendingPosts, bufferGetSentPosts,
+} from "./buffer";
 
 interface AIResponse {
   role: string;
@@ -849,6 +853,81 @@ async function executeNotionTool(toolName: string, input: any): Promise<string> 
   }
 }
 
+// --- Buffer Tools ---
+
+const BUFFER_TOOLS = [
+  {
+    name: "buffer_list_profiles",
+    description: "List all connected social media profiles in Buffer. Returns the service (twitter, instagram, linkedin, facebook, etc.), username, and post counts for each profile.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "buffer_create_post",
+    description: "Create or schedule a social media post via Buffer. You must specify which profile(s) to post to using their profile IDs (use buffer_list_profiles first). Set now=true to post immediately, or provide scheduled_at for a specific time. By default the post is added to the Buffer queue.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        profile_ids: { type: "array", items: { type: "string" }, description: "Array of Buffer profile IDs to post to" },
+        text: { type: "string", description: "The post text content" },
+        now: { type: "boolean", description: "Post immediately instead of adding to queue (default: false)" },
+        scheduled_at: { type: "string", description: "ISO 8601 datetime to schedule the post (e.g. 2026-03-20T14:00:00Z)" },
+        media_link: { type: "string", description: "URL to attach as a link preview" },
+        media_photo: { type: "string", description: "URL of an image to attach to the post" },
+      },
+      required: ["profile_ids", "text"],
+    },
+  },
+  {
+    name: "buffer_get_pending",
+    description: "Get queued/pending posts for a Buffer profile. Shows posts that are scheduled but not yet sent.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        profile_id: { type: "string", description: "The Buffer profile ID" },
+      },
+      required: ["profile_id"],
+    },
+  },
+  {
+    name: "buffer_get_sent",
+    description: "Get recently sent posts for a Buffer profile. Shows posts that have already been published, including engagement statistics.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        profile_id: { type: "string", description: "The Buffer profile ID" },
+      },
+      required: ["profile_id"],
+    },
+  },
+];
+
+async function executeBufferTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "buffer_list_profiles":
+        return await bufferListProfiles();
+      case "buffer_create_post": {
+        const media = (input.media_link || input.media_photo)
+          ? { link: input.media_link, photo: input.media_photo }
+          : undefined;
+        return await bufferCreatePost(input.profile_ids, input.text, {
+          now: input.now,
+          scheduled_at: input.scheduled_at,
+          media,
+        });
+      }
+      case "buffer_get_pending":
+        return await bufferGetPendingPosts(input.profile_id);
+      case "buffer_get_sent":
+        return await bufferGetSentPosts(input.profile_id);
+      default:
+        return JSON.stringify({ error: `Unknown Buffer tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Buffer operation failed" });
+  }
+}
+
 // --- Public Google Doc Tool (no OAuth needed) ---
 
 const PUBLIC_GDOC_TOOLS = [
@@ -1477,6 +1556,10 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   notion_update_page: "Updating a Notion page...",
   notion_query_database: "Querying Notion database...",
   notion_get_database: "Reading Notion database...",
+  buffer_list_profiles: "Listing social profiles...",
+  buffer_create_post: "Creating a social post...",
+  buffer_get_pending: "Checking pending posts...",
+  buffer_get_sent: "Checking sent posts...",
   create_scheduled_job: "Creating a scheduled job...",
   list_scheduled_jobs: "Listing scheduled jobs...",
   delete_scheduled_job: "Deleting a scheduled job...",
@@ -1513,6 +1596,7 @@ async function callAnthropic(
   }
   if (isAirtableRunning()) tools.push(...AIRTABLE_TOOLS);
   if (isNotionRunning()) tools.push(...NOTION_TOOLS);
+  if (isBufferRunning()) tools.push(...BUFFER_TOOLS);
 
   // Conditionally add Google tools based on connected services
   const googleServices = getConnectedServices();
@@ -1541,6 +1625,7 @@ async function callAnthropic(
   const MAX_TOOL_ROUNDS = 25;
   const toolCallLog: string[] = []; // track tool+input fingerprints for loop detection
   const MAX_REPEAT_CALLS = 2; // allow same tool+input at most twice
+  let lastScreenshot: string | null = null; // track the most recent screenshot base64
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     onStatus?.("Thinking...");
@@ -1610,6 +1695,7 @@ async function callAnthropic(
       const supabaseToolNames = ["supabase_list_tables", "supabase_describe_table", "supabase_query", "supabase_insert", "supabase_update"];
       const airtableToolNames = ["airtable_list_bases", "airtable_list_tables", "airtable_list_records"];
       const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
+      const bufferToolNames = ["buffer_list_profiles", "buffer_create_post", "buffer_get_pending", "buffer_get_sent"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
 
@@ -1654,10 +1740,19 @@ async function callAnthropic(
           result = await executeAirtableTool(toolBlock.name, toolBlock.input);
         } else if (notionToolNames.includes(toolBlock.name)) {
           result = await executeNotionTool(toolBlock.name, toolBlock.input);
+        } else if (bufferToolNames.includes(toolBlock.name)) {
+          result = await executeBufferTool(toolBlock.name, toolBlock.input);
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input);
         }
         console.log(`Tool result: ${toolBlock.name}`, typeof result === "string" ? result.slice(0, 300) : "[multipart content]");
+
+        // Save the latest screenshot so we can include it in the final response
+        if (toolBlock.name === "browser_screenshot" && Array.isArray(result)) {
+          const imgBlock = result.find((b: any) => b.type === "image" && b.source?.type === "base64");
+          if (imgBlock) lastScreenshot = imgBlock.source.data;
+        }
+
         toolResults.push({
           type: "tool_result",
           tool_use_id: toolBlock.id,
@@ -1676,7 +1771,13 @@ async function callAnthropic(
       if (block.type === "text") parts.push(block.text);
       else if (block.type === "image" && block.source?.type === "base64") {
         parts.push(`![image](data:${block.source.media_type};base64,${block.source.data})`);
+        lastScreenshot = null; // Claude included an image, don't duplicate
       }
+    }
+    // If Claude took a screenshot but didn't include it in the response, append it
+    const hasImage = parts.some((p) => p.includes("![") && (p.includes("data:image") || p.includes("https://")));
+    if (lastScreenshot && !hasImage) {
+      parts.push(`![screenshot](data:image/png;base64,${lastScreenshot})`);
     }
     const text = parts.join("\n\n").trim();
     return { role: "assistant", content: text || "(Action completed.)" };
@@ -1867,6 +1968,12 @@ CRITICAL Supabase query rules:
     const workspaceName = getNotionWorkspaceName();
     const notionContext = `You are connected to Notion${workspaceName ? ` (workspace: ${workspaceName})` : ""}. You can search pages and databases, read page content, create and update pages, and query databases using the notion_* tools. Use notion_search to find content, notion_get_database to see a database's schema before querying it, and notion_query_database to list records. You can create pages with notion_create_page and update them with notion_update_page. You cannot delete pages or databases.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${notionContext}` : notionContext;
+  }
+
+  // Inject Buffer context
+  if (isBufferRunning()) {
+    const bufferContext = "You are connected to Buffer for social media scheduling. You can list connected social profiles, create and schedule posts, and view pending and sent posts using the buffer_* tools. Use buffer_list_profiles first to see which social accounts are connected, then buffer_create_post to publish or schedule posts. Set now=true to post immediately, or provide a scheduled_at time.";
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${bufferContext}` : bufferContext;
   }
 
   // Inject long-term memories

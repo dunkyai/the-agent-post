@@ -414,6 +414,37 @@
         </div>
       </details>
 
+      <!-- Buffer -->
+      <details class="integration-tile">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #168AFF;">B</span>
+          <div class="integration-tile-info">
+            <h3>Buffer</h3>
+            <p>Schedule social media posts</p>
+          </div>
+          <span class="status-badge status-<%= buffer.status %>"><%= buffer.status %></span>
+        </summary>
+        <div class="integration-tile-body">
+          <% if (buffer.error_message) { %>
+            <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= buffer.error_message %></p>
+          <% } %>
+
+          <% if (buffer.status === 'connected') { %>
+            <div style="margin-bottom: 12px;">
+              <p style="font-size: 14px;">Your Buffer account is connected. Your agent can list profiles, create posts, and view scheduled content.</p>
+            </div>
+            <form method="POST" action="/integrations/buffer/disconnect">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+            </form>
+          <% } else { %>
+            <form method="POST" action="/integrations/buffer/connect">
+              <p style="font-size: 14px; margin-bottom: 12px;">Connect your Buffer account so your agent can schedule and publish social media posts across Twitter, Instagram, LinkedIn, and more.</p>
+              <button type="submit" class="btn">Connect to Buffer</button>
+            </form>
+          <% } %>
+        </div>
+      </details>
+
     </div><!-- /integration-grid -->
   </div>
 </div>

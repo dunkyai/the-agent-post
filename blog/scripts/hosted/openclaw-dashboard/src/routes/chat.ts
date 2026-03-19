@@ -30,10 +30,15 @@ router.post("/chat/message", async (req: Request, res: Response) => {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
     res.flushHeaders();
 
     const sendEvent = (event: string, data: string) => {
-      res.write(`event: ${event}\ndata: ${data}\n\n`);
+      console.log(`SSE event: ${event} -> ${data.slice(0, 80)}`);
+      // SSE requires each line of multi-line data to have its own "data:" prefix
+      const lines = data.split("\n").map((line) => `data: ${line}`).join("\n");
+      res.write(`event: ${event}\n${lines}\n\n`);
+      if (typeof (res as any).flush === "function") (res as any).flush();
     };
 
     sendEvent("status", "Thinking...");
