@@ -299,7 +299,7 @@ async function executeCodeTool(toolName: string, input: any): Promise<string> {
 const BROWSER_TOOLS = [
   {
     name: "browse_webpage",
-    description: "Navigate to a URL and get the page content. Use this to visit websites, read articles, check information, or start interacting with a web page. Returns the page title, URL, and text content. IMPORTANT: Do NOT use this to visit Google, Bing, Amazon, or other major sites that block bots. Use web_search to find information and URLs first, then browse to specific smaller sites.",
+    description: "Navigate to a specific URL and get the page content. Use this to visit a known website URL, read articles, or start interacting with a web page. Do NOT use this to visit Google, Bing, Amazon, or other major sites that block bots — use web_search instead. Returns the page title, URL, and text content.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -403,6 +403,32 @@ async function executeBrowserTool(toolName: string, input: any): Promise<string 
     }
 
     const data: any = await res.json();
+
+    // Detect CAPTCHAs and bot-blocking pages
+    const captchaSignals = [
+      "google.com/sorry",
+      "Making sure you're not a bot",
+      "BotStopper",
+      "captcha",
+      "CAPTCHA",
+      "recaptcha",
+      "hCaptcha",
+      "challenge-platform",
+      "Checking your browser",
+      "Just a moment...",       // Cloudflare
+      "Attention Required",     // Cloudflare
+      "Access denied",          // Generic WAF
+      "Please verify you are a human",
+      "unusual traffic",
+    ];
+    const pageContent = JSON.stringify(data);
+    const captchaMatch = captchaSignals.find((s) => pageContent.includes(s));
+    if (captchaMatch) {
+      return JSON.stringify({
+        error: `This website is showing a CAPTCHA or bot detection challenge ("${captchaMatch}"). Automated browsers cannot solve CAPTCHAs. Abandon this site and try a different approach — use web_search to find the information, or try a different website.`,
+        blocked_url: data.url || input.url || "",
+      });
+    }
 
     // For screenshots, return multipart content with the image + element descriptions
     if (toolName === "browser_screenshot" && data.screenshot) {
@@ -1753,7 +1779,15 @@ CRITICAL Supabase query rules:
 
   // Inject browser context
   {
-    const browserContext = "You can browse the web using browser tools. Use browse_webpage to visit any URL, browser_screenshot to see interactive elements, browser_click and browser_type to interact with pages. This lets you fill forms, log into sites, research information, and interact with web applications on behalf of the user.";
+    const browserContext = `You have two ways to access the web:
+
+1. **web_search** (preferred for finding information): Use this for any search query — it returns results instantly without bot detection issues. Always use web_search first when looking up information, images, facts, news, etc.
+
+2. **Browser tools** (for interacting with specific sites): Use browse_webpage to visit a specific URL you already know, browser_screenshot to see the page visually, browser_click and browser_type to interact with forms and buttons. This lets you fill forms, log into sites, and interact with web applications.
+
+IMPORTANT: Never use the browser to search Google, Bing, or other search engines — they block automated browsers. Never navigate to google.com, images.google.com, or similar search pages. Use web_search instead, then use browse_webpage only if you need to visit a specific result URL.
+
+When the user asks you to find or show an image: use web_search to find a relevant page, then use browse_webpage to go to that specific URL, then browser_screenshot to capture and show it.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${browserContext}` : browserContext;
   }
 
