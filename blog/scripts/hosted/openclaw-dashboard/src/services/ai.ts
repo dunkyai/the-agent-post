@@ -1689,3 +1689,98 @@ If you encounter sensitive data while searching emails, reading documents, or br
 
   return response.content;
 }
+
+// --- Research & System Prompt Generation ---
+
+export async function researchUser(linkedinUrl: string): Promise<string> {
+  const model = getSetting("model") || "claude-sonnet-4-20250514";
+  const provider = getProvider(model);
+  const apiKey = getApiKey(provider);
+
+  const prompt = `I need you to research a person based on their LinkedIn profile URL. Visit or search for information about this profile and provide a concise summary.
+
+LinkedIn URL: ${linkedinUrl}
+
+Provide a brief summary including:
+- Full name
+- Current role and company
+- Industry
+- Key skills or expertise
+- Any notable background info
+
+Keep it to 3-5 sentences. If you cannot find information, say so clearly.`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 1024,
+      tools: [{ type: "web_search_20250305", name: "web_search" }],
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`API error (${res.status}): ${body}`);
+  }
+
+  const data: any = await res.json();
+  const textBlocks = (data.content || []).filter((b: any) => b.type === "text");
+  return textBlocks.map((b: any) => b.text).join("\n") || "No information found.";
+}
+
+export async function generateSystemPrompt(context: {
+  research: string;
+  company: string;
+  role: string;
+  agentPurpose: string;
+  tone: string;
+  agentName: string;
+}): Promise<string> {
+  const model = getSetting("model") || "claude-sonnet-4-20250514";
+  const provider = getProvider(model);
+  const apiKey = getApiKey(provider);
+
+  const parts: string[] = [];
+  if (context.agentName) parts.push(`Agent name: ${context.agentName}`);
+  if (context.research) parts.push(`Research about the user:\n${context.research}`);
+  if (context.company) parts.push(`Company: ${context.company}`);
+  if (context.role) parts.push(`User's role: ${context.role}`);
+  if (context.agentPurpose) parts.push(`Agent should help with: ${context.agentPurpose}`);
+  parts.push(`Desired tone: ${context.tone}`);
+
+  const prompt = `Based on the following information, write a system prompt for an AI assistant. The system prompt should define the assistant's personality, role, knowledge areas, and communication style. Write ONLY the system prompt text — no explanations or preamble.
+
+${parts.join("\n\n")}
+
+Write a clear, concise system prompt (3-8 sentences) that will make the AI assistant effective for this specific user and their needs.`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 1024,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`API error (${res.status}): ${body}`);
+  }
+
+  const data: any = await res.json();
+  const textBlocks = (data.content || []).filter((b: any) => b.type === "text");
+  return textBlocks.map((b: any) => b.text).join("\n") || "Failed to generate prompt.";
+}

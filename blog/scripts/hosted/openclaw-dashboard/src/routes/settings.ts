@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { getSetting, setSetting, deleteSetting } from "../services/db";
 import { encrypt, decrypt } from "../services/encryption";
+import { researchUser, generateSystemPrompt } from "../services/ai";
 
 const router = Router();
 
@@ -88,6 +89,39 @@ router.post("/settings", (req: Request, res: Response) => {
   }
 
   res.redirect(303, "/settings?flash=Settings+saved");
+});
+
+router.post("/settings/research", async (req: Request, res: Response) => {
+  try {
+    const { linkedin_url } = req.body;
+    if (!linkedin_url || typeof linkedin_url !== "string") {
+      res.json({ error: "LinkedIn URL is required" });
+      return;
+    }
+    const summary = await researchUser(linkedin_url.trim());
+    res.json({ summary });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Research failed";
+    res.json({ error: message });
+  }
+});
+
+router.post("/settings/generate-prompt", async (req: Request, res: Response) => {
+  try {
+    const { research, company, role, agent_purpose, tone, agent_name } = req.body;
+    const prompt = await generateSystemPrompt({
+      research: research || "",
+      company: company || "",
+      role: role || "",
+      agentPurpose: agent_purpose || "",
+      tone: tone || "friendly",
+      agentName: agent_name || "",
+    });
+    res.json({ prompt });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Generation failed";
+    res.json({ error: message });
+  }
 });
 
 // Redirect old /agent routes to /settings
