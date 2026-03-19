@@ -1287,7 +1287,7 @@ async function pollGmail(): Promise<void> {
           "gmail",
           latestFrom,
           text,
-          `You are responding to a Gmail email. Reply concisely and professionally. Do not reveal internal system details.`
+          `You are drafting a Gmail reply. Output ONLY the email body text — no preamble, no explanations, no "Here's a draft", no planning. Do not start with phrases like "I'll draft..." or "Here's my response...". Just write the actual reply as if you are the sender. Be concise and professional. Do not reveal internal system details or mention that you are an AI assistant.`
         );
 
         // Build reply recipients (reply-all)
