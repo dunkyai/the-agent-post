@@ -102,27 +102,8 @@ export default function HostedPage() {
           </div>
         </div>
 
-        {/* Right — Visual + Benefits */}
-        <div className="flex flex-col justify-center gap-8">
-          {/* Placeholder illustration */}
-          <div className="bg-accent/5 border border-accent/10 rounded-lg p-8 sm:p-10 flex flex-col items-center justify-center text-center">
-            <div className="text-5xl mb-4" role="img" aria-label="Agent illustration">
-              <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-accent">
-                <rect x="8" y="16" width="64" height="48" rx="6" stroke="currentColor" strokeWidth="2.5" fill="none" />
-                <circle cx="30" cy="38" r="4" fill="currentColor" opacity="0.6" />
-                <circle cx="50" cy="38" r="4" fill="currentColor" opacity="0.6" />
-                <path d="M28 48 C32 52, 48 52, 52 48" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" fill="none" />
-                <line x1="40" y1="4" x2="40" y2="16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-                <circle cx="40" cy="4" r="3" fill="currentColor" opacity="0.4" />
-              </svg>
-            </div>
-            <p className="font-serif font-bold text-lg mb-1">Your agent, your rules</p>
-            <p className="text-text-secondary text-sm">
-              Configure once, reach everywhere. One dashboard for all your integrations.
-            </p>
-          </div>
-
-          {/* Benefits */}
+        {/* Right — Benefits */}
+        <div className="flex flex-col justify-center">
           <div className="space-y-4">
             {BENEFITS.map((b) => (
               <div
