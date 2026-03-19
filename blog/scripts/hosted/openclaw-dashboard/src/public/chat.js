@@ -213,11 +213,12 @@
             for (var p = 0; p < parts.length; p++) {
               var lines = parts[p].split("\n");
               var eventType = null;
-              var eventData = null;
+              var dataLines = [];
               for (var l = 0; l < lines.length; l++) {
                 if (lines[l].indexOf("event: ") === 0) eventType = lines[l].slice(7);
-                else if (lines[l].indexOf("data: ") === 0) eventData = lines[l].slice(6);
+                else if (lines[l].indexOf("data: ") === 0) dataLines.push(lines[l].slice(6));
               }
+              var eventData = dataLines.length > 0 ? dataLines.join("\n") : null;
               if (!eventType || eventData === null) continue;
 
               if (eventType === "status") {

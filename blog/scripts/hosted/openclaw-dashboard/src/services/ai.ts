@@ -1625,6 +1625,7 @@ async function callAnthropic(
   const MAX_TOOL_ROUNDS = 25;
   const toolCallLog: string[] = []; // track tool+input fingerprints for loop detection
   const MAX_REPEAT_CALLS = 2; // allow same tool+input at most twice
+  let lastScreenshot: string | null = null; // track the most recent screenshot base64
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     onStatus?.("Thinking...");
@@ -1745,6 +1746,13 @@ async function callAnthropic(
           result = executeSchedulingTool(toolBlock.name, toolBlock.input);
         }
         console.log(`Tool result: ${toolBlock.name}`, typeof result === "string" ? result.slice(0, 300) : "[multipart content]");
+
+        // Save the latest screenshot so we can include it in the final response
+        if (toolBlock.name === "browser_screenshot" && Array.isArray(result)) {
+          const imgBlock = result.find((b: any) => b.type === "image" && b.source?.type === "base64");
+          if (imgBlock) lastScreenshot = imgBlock.source.data;
+        }
+
         toolResults.push({
           type: "tool_result",
           tool_use_id: toolBlock.id,
@@ -1763,7 +1771,13 @@ async function callAnthropic(
       if (block.type === "text") parts.push(block.text);
       else if (block.type === "image" && block.source?.type === "base64") {
         parts.push(`![image](data:${block.source.media_type};base64,${block.source.data})`);
+        lastScreenshot = null; // Claude included an image, don't duplicate
       }
+    }
+    // If Claude took a screenshot but didn't include it in the response, append it
+    const hasImage = parts.some((p) => p.includes("![") && (p.includes("data:image") || p.includes("https://")));
+    if (lastScreenshot && !hasImage) {
+      parts.push(`![screenshot](data:image/png;base64,${lastScreenshot})`);
     }
     const text = parts.join("\n\n").trim();
     return { role: "assistant", content: text || "(Action completed.)" };
