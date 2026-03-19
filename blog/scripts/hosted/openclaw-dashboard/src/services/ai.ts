@@ -299,7 +299,7 @@ async function executeCodeTool(toolName: string, input: any): Promise<string> {
 const BROWSER_TOOLS = [
   {
     name: "browse_webpage",
-    description: "Navigate to a URL and get the page content. Use this to visit websites, read articles, check information, or start interacting with a web page. Returns the page title, URL, and text content.",
+    description: "Navigate to a URL and get the page content. Use this to visit websites, read articles, check information, or start interacting with a web page. Returns the page title, URL, and text content. IMPORTANT: Do NOT use this to visit Google, Bing, Amazon, or other major sites that block bots. Use web_search to find information and URLs first, then browse to specific smaller sites.",
     input_schema: {
       type: "object" as const,
       properties: {
