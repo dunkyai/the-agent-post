@@ -1787,7 +1787,7 @@ CRITICAL Supabase query rules:
 
 IMPORTANT: Never use the browser to search Google, Bing, or other search engines — they block automated browsers. Never navigate to google.com, images.google.com, or similar search pages. Use web_search instead, then use browse_webpage only if you need to visit a specific result URL.
 
-When the user asks you to find or show an image: use web_search to find a relevant page, then use browse_webpage to go to that specific URL, then browser_screenshot to capture and show it.`;
+SHOWING IMAGES: When the user asks you to find or show an image, use web_search to find the image. Then embed it directly in your response using markdown: ![description](https://example.com/image.jpg). The chat supports rendering images from URLs. For best results, use direct image URLs from Wikipedia/Wikimedia Commons (e.g. https://upload.wikimedia.org/...) or other public image hosts. Do NOT use the browser to navigate to image pages and take screenshots — just embed the URL directly.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${browserContext}` : browserContext;
   }
 
