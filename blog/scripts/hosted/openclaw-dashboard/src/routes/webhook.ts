@@ -7,7 +7,7 @@ import { startSlack, handleSlackEvent } from "../services/slack";
 import { isEmailAllowed, sanitizeEmailContent } from "../services/email";
 import { startAirtable } from "../services/airtable";
 import { startNotion } from "../services/notion";
-import { startBuffer } from "../services/buffer";
+
 
 const router = Router();
 
@@ -258,30 +258,6 @@ router.post("/webhook/notion/tokens", async (req: Request, res: Response) => {
   } catch (err: unknown) {
     console.error("Notion token delivery error:", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "Failed to store Notion tokens" });
-  }
-});
-
-// Buffer OAuth — provisioning API delivers tokens here after consent
-router.post("/webhook/buffer/tokens", async (req: Request, res: Response) => {
-  const token = req.headers.authorization?.replace("Bearer ", "");
-  if (token !== process.env.GATEWAY_TOKEN) {
-    res.sendStatus(401);
-    return;
-  }
-
-  try {
-    const { access_token } = req.body;
-
-    const configData = { access_token };
-    const config = encrypt(JSON.stringify(configData));
-    upsertIntegration("buffer", config, "connected");
-    startBuffer(configData);
-
-    console.log("Buffer connected via OAuth");
-    res.json({ ok: true });
-  } catch (err: unknown) {
-    console.error("Buffer token delivery error:", err instanceof Error ? err.message : err);
-    res.status(500).json({ error: "Failed to store Buffer tokens" });
   }
 });
 
