@@ -10,6 +10,73 @@
   var messageCount = messages.querySelectorAll(".chat-message").length;
   var memorySaved = false;
 
+  // Minimal markdown-to-HTML renderer
+  function renderMarkdown(src) {
+    // Escape HTML entities first (XSS prevention)
+    var html = src
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+
+    // Fenced code blocks (``` ... ```)
+    html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, function (_, lang, code) {
+      return '<pre><code>' + code.replace(/\n$/, '') + '</code></pre>';
+    });
+
+    // Inline code (` ... `)
+    html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+
+    // Images ![alt](src)
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2">');
+
+    // Links [text](url)
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+    // Bold **text**
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+    // Italic *text*
+    html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+
+    // Split into paragraphs by double newlines
+    var blocks = html.split(/\n{2,}/);
+    var out = [];
+    for (var i = 0; i < blocks.length; i++) {
+      var block = blocks[i].trim();
+      if (!block) continue;
+
+      // Already wrapped in block-level tag
+      if (/^<(pre|img|ul|ol)/.test(block)) {
+        out.push(block);
+        continue;
+      }
+
+      // Unordered list block
+      if (/^[-*] /.test(block)) {
+        var items = block.split(/\n/).map(function (line) {
+          return '<li>' + line.replace(/^[-*] /, '') + '</li>';
+        }).join('');
+        out.push('<ul>' + items + '</ul>');
+        continue;
+      }
+
+      // Ordered list block
+      if (/^\d+\. /.test(block)) {
+        var items = block.split(/\n/).map(function (line) {
+          return '<li>' + line.replace(/^\d+\. /, '') + '</li>';
+        }).join('');
+        out.push('<ol>' + items + '</ol>');
+        continue;
+      }
+
+      // Regular paragraph — convert single newlines to <br>
+      out.push('<p>' + block.replace(/\n/g, '<br>') + '</p>');
+    }
+
+    return out.join('');
+  }
+
   function scrollToBottom() {
     messages.scrollTop = messages.scrollHeight;
   }
@@ -62,12 +129,23 @@
 
     var bubble = document.createElement("div");
     bubble.className = "bubble";
-    bubble.textContent = content;
+    if (role === "user") {
+      bubble.textContent = content;
+    } else {
+      bubble.innerHTML = renderMarkdown(content);
+    }
 
     div.appendChild(avatar);
     div.appendChild(bubble);
     messages.appendChild(div);
     scrollToBottom();
+  }
+
+  // Re-render server-rendered assistant bubbles with markdown on load
+  var existingBubbles = messages.querySelectorAll(".chat-message.assistant .bubble");
+  for (var i = 0; i < existingBubbles.length; i++) {
+    var raw = existingBubbles[i].textContent || "";
+    existingBubbles[i].innerHTML = renderMarkdown(raw);
   }
 
   form.addEventListener("submit", function (e) {
