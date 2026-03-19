@@ -7,7 +7,7 @@ import { buildOAuthUrl, stopGoogle, isGoogleRunning, startGmailPolling, stopGmai
 import { startSupabase, stopSupabase, testSupabaseConnection, probeSupabaseHealth } from "../services/supabase";
 import { buildAirtableOAuthUrl, stopAirtable } from "../services/airtable";
 import { buildNotionOAuthUrl, stopNotion, getNotionWorkspaceName } from "../services/notion";
-import { buildBufferOAuthUrl, stopBuffer } from "../services/buffer";
+import { startBuffer, stopBuffer, testBufferConnection } from "../services/buffer";
 import { startLuma, stopLuma, testLumaConnection } from "../services/luma";
 
 const router = Router();
@@ -111,7 +111,16 @@ router.get("/integrations", (req: Request, res: Response) => {
       ...(integrationMap["notion"] || { status: "disconnected", error_message: null }),
       workspace_name: notionWorkspaceName,
     },
-    buffer: integrationMap["buffer"] || { status: "disconnected", error_message: null },
+    buffer: {
+      ...(integrationMap["buffer"] || { status: "disconnected", error_message: null }),
+      organization_name: (() => {
+        const bi = integrationMap["buffer"];
+        if (bi && bi.status === "connected") {
+          try { return JSON.parse(decrypt(bi.config)).organization_name || null; } catch { return null; }
+        }
+        return null;
+      })(),
+    },
     luma: {
       ...(integrationMap["luma"] || { status: "disconnected", error_message: null }),
       user_name: (() => {
@@ -435,13 +444,25 @@ router.post("/integrations/notion/disconnect", async (req: Request, res: Respons
   res.redirect(303, "/integrations?flash=Notion+disconnected");
 });
 
-router.post("/integrations/buffer/connect", (req: Request, res: Response) => {
+router.post("/integrations/buffer/connect", async (req: Request, res: Response) => {
   try {
-    const url = buildBufferOAuthUrl();
-    res.redirect(url);
+    const apiKey = (req.body.api_key || "").trim();
+    if (!apiKey) {
+      res.redirect(303, "/integrations?flash=API+key+is+required");
+      return;
+    }
+
+    const { organization_id, organization_name } = await testBufferConnection(apiKey);
+    const configData = { api_key: apiKey, organization_id, organization_name };
+    const config = encrypt(JSON.stringify(configData));
+    upsertIntegration("buffer", config, "connected");
+    startBuffer(configData);
+
+    res.redirect(303, "/integrations?flash=Buffer+connected+successfully");
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    res.redirect(303, "/integrations?flash=Buffer+error:+" + encodeURIComponent(message));
+    const message = err instanceof Error ? err.message : "Connection failed";
+    upsertIntegration("buffer", "{}", "disconnected", message);
+    res.redirect(303, "/integrations?flash=" + encodeURIComponent(message));
   }
 });
 

@@ -431,7 +431,10 @@
 
           <% if (buffer.status === 'connected') { %>
             <div style="margin-bottom: 12px;">
-              <p style="font-size: 14px;">Your Buffer account is connected. Your agent can list profiles, create posts, and view scheduled content.</p>
+              <label style="font-size: 13px; color: var(--text-secondary);">Connected Organization</label>
+              <div style="margin-top: 4px;">
+                <code style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px;"><%= buffer.organization_name || 'Connected' %></code>
+              </div>
             </div>
             <form method="POST" action="/integrations/buffer/disconnect">
               <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
@@ -439,7 +442,12 @@
           <% } else { %>
             <form method="POST" action="/integrations/buffer/connect">
               <p style="font-size: 14px; margin-bottom: 12px;">Connect your Buffer account so your agent can schedule and publish social media posts across Twitter, Instagram, LinkedIn, and more.</p>
-              <button type="submit" class="btn">Connect to Buffer</button>
+              <div class="form-group">
+                <label for="buffer_api_key">API Key</label>
+                <input type="password" id="buffer_api_key" name="api_key" placeholder="Bearer token..." required>
+                <div class="hint">Generate your API key at <a href="https://publish.buffer.com/settings/api" target="_blank" style="color: var(--accent);">publish.buffer.com/settings/api</a></div>
+              </div>
+              <button type="submit" class="btn">Connect</button>
             </form>
           <% } %>
         </div>

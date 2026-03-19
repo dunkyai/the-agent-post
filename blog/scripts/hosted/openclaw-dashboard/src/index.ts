@@ -197,7 +197,7 @@ async function reconnectIntegrations() {
       const config = JSON.parse(decrypt(buffer.config));
       const { startBuffer } = require("./services/buffer");
       startBuffer(config);
-      console.log("Buffer reconnected");
+      console.log(`Buffer reconnected${config.organization_name ? ` (${config.organization_name})` : ""}`);
     }
   } catch (err: unknown) {
     console.error("Failed to reconnect Buffer:", err instanceof Error ? err.message : err);

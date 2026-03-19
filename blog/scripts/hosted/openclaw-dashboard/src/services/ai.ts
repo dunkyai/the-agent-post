@@ -30,8 +30,8 @@ import {
   notionQueryDatabase, notionGetDatabase,
 } from "./notion";
 import {
-  isBufferRunning,
-  bufferListProfiles, bufferCreatePost, bufferGetPendingPosts, bufferGetSentPosts,
+  isBufferRunning, getBufferOrgName,
+  bufferListChannels, bufferCreatePost, bufferListPosts, bufferDeletePost,
 } from "./buffer";
 import {
   isLumaRunning, getLumaUserName,
@@ -952,46 +952,47 @@ async function executeNotionTool(toolName: string, input: any): Promise<string> 
 
 const BUFFER_TOOLS = [
   {
-    name: "buffer_list_profiles",
-    description: "List all connected social media profiles in Buffer. Returns the service (twitter, instagram, linkedin, facebook, etc.), username, and post counts for each profile.",
+    name: "buffer_list_channels",
+    description: "List all connected social media channels in Buffer. Returns the service (twitter, instagram, linkedin, facebook, tiktok, mastodon, threads, bluesky, etc.), display name, and channel type for each.",
     input_schema: { type: "object" as const, properties: {} },
   },
   {
     name: "buffer_create_post",
-    description: "Create or schedule a social media post via Buffer. You must specify which profile(s) to post to using their profile IDs (use buffer_list_profiles first). Set now=true to post immediately, or provide scheduled_at for a specific time. By default the post is added to the Buffer queue.",
+    description: "Create or schedule a social media post via Buffer. Use buffer_list_channels first to get channel IDs. Modes: 'add_to_queue' (default — adds to Buffer's queue), 'custom_scheduled' (requires due_at with an ISO 8601 datetime), 'share_now' (post immediately).",
     input_schema: {
       type: "object" as const,
       properties: {
-        profile_ids: { type: "array", items: { type: "string" }, description: "Array of Buffer profile IDs to post to" },
+        channel_id: { type: "string", description: "Buffer channel ID to post to" },
         text: { type: "string", description: "The post text content" },
-        now: { type: "boolean", description: "Post immediately instead of adding to queue (default: false)" },
-        scheduled_at: { type: "string", description: "ISO 8601 datetime to schedule the post (e.g. 2026-03-20T14:00:00Z)" },
-        media_link: { type: "string", description: "URL to attach as a link preview" },
-        media_photo: { type: "string", description: "URL of an image to attach to the post" },
+        mode: { type: "string", enum: ["add_to_queue", "custom_scheduled", "share_now"], description: "Posting mode (default: add_to_queue)" },
+        due_at: { type: "string", description: "ISO 8601 datetime to schedule the post (required when mode is custom_scheduled)" },
+        image_url: { type: "string", description: "URL of an image to attach to the post" },
+        link_url: { type: "string", description: "URL to attach as a link preview" },
       },
-      required: ["profile_ids", "text"],
+      required: ["channel_id", "text"],
     },
   },
   {
-    name: "buffer_get_pending",
-    description: "Get queued/pending posts for a Buffer profile. Shows posts that are scheduled but not yet sent.",
+    name: "buffer_list_posts",
+    description: "List posts from Buffer with optional status filter. Use to view scheduled, sent, or draft posts.",
     input_schema: {
       type: "object" as const,
       properties: {
-        profile_id: { type: "string", description: "The Buffer profile ID" },
+        status: { type: "array", items: { type: "string", enum: ["draft", "scheduled", "sent", "error"] }, description: "Filter by post status (default: all)" },
+        channel_ids: { type: "array", items: { type: "string" }, description: "Filter by channel IDs" },
+        limit: { type: "number", description: "Max posts to return (default: 20, max: 50)" },
       },
-      required: ["profile_id"],
     },
   },
   {
-    name: "buffer_get_sent",
-    description: "Get recently sent posts for a Buffer profile. Shows posts that have already been published, including engagement statistics.",
+    name: "buffer_delete_post",
+    description: "Delete a post from Buffer by its post ID.",
     input_schema: {
       type: "object" as const,
       properties: {
-        profile_id: { type: "string", description: "The Buffer profile ID" },
+        post_id: { type: "string", description: "The Buffer post ID to delete" },
       },
-      required: ["profile_id"],
+      required: ["post_id"],
     },
   },
 ];
@@ -999,22 +1000,25 @@ const BUFFER_TOOLS = [
 async function executeBufferTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
-      case "buffer_list_profiles":
-        return await bufferListProfiles();
-      case "buffer_create_post": {
-        const media = (input.media_link || input.media_photo)
-          ? { link: input.media_link, photo: input.media_photo }
-          : undefined;
-        return await bufferCreatePost(input.profile_ids, input.text, {
-          now: input.now,
-          scheduled_at: input.scheduled_at,
-          media,
+      case "buffer_list_channels":
+        return await bufferListChannels();
+      case "buffer_create_post":
+        return await bufferCreatePost({
+          channel_id: input.channel_id,
+          text: input.text,
+          mode: input.mode || "add_to_queue",
+          due_at: input.due_at,
+          image_url: input.image_url,
+          link_url: input.link_url,
         });
-      }
-      case "buffer_get_pending":
-        return await bufferGetPendingPosts(input.profile_id);
-      case "buffer_get_sent":
-        return await bufferGetSentPosts(input.profile_id);
+      case "buffer_list_posts":
+        return await bufferListPosts({
+          status: input.status,
+          channel_ids: input.channel_ids,
+          limit: input.limit,
+        });
+      case "buffer_delete_post":
+        return await bufferDeletePost(input.post_id);
       default:
         return JSON.stringify({ error: `Unknown Buffer tool: ${toolName}` });
     }
@@ -1787,10 +1791,10 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   notion_update_page: "Updating a Notion page...",
   notion_query_database: "Querying Notion database...",
   notion_get_database: "Reading Notion database...",
-  buffer_list_profiles: "Listing social profiles...",
+  buffer_list_channels: "Listing social channels...",
   buffer_create_post: "Creating a social post...",
-  buffer_get_pending: "Checking pending posts...",
-  buffer_get_sent: "Checking sent posts...",
+  buffer_list_posts: "Checking Buffer posts...",
+  buffer_delete_post: "Deleting a Buffer post...",
   luma_list_events: "Checking Luma events...",
   luma_get_event: "Reading event details...",
   luma_create_event: "Creating a Luma event...",
@@ -1935,7 +1939,7 @@ async function callAnthropic(
       const supabaseToolNames = ["supabase_list_tables", "supabase_describe_table", "supabase_query", "supabase_insert", "supabase_update"];
       const airtableToolNames = ["airtable_list_bases", "airtable_list_tables", "airtable_list_records"];
       const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
-      const bufferToolNames = ["buffer_list_profiles", "buffer_create_post", "buffer_get_pending", "buffer_get_sent"];
+      const bufferToolNames = ["buffer_list_channels", "buffer_create_post", "buffer_list_posts", "buffer_delete_post"];
       const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
@@ -2403,8 +2407,9 @@ CRITICAL Supabase query rules:
   }
 
   // Inject Buffer context
+  const bufferOrg = getBufferOrgName();
   if (isBufferRunning()) {
-    const bufferContext = "You are connected to Buffer for social media scheduling. You can list connected social profiles, create and schedule posts, and view pending and sent posts using the buffer_* tools. Use buffer_list_profiles first to see which social accounts are connected, then buffer_create_post to publish or schedule posts. Set now=true to post immediately, or provide a scheduled_at time.";
+    const bufferContext = `You are connected to Buffer for social media scheduling${bufferOrg ? ` (${bufferOrg})` : ""}. You can list connected social channels, create and schedule posts, view post history, and delete posts using the buffer_* tools. Use buffer_list_channels first to see which social accounts are connected, then buffer_create_post to schedule posts. Modes: add_to_queue (default), custom_scheduled (set due_at), or share_now. Use buffer_list_posts to check scheduled or sent posts.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${bufferContext}` : bufferContext;
   }
 
