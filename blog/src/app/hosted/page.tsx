@@ -3,17 +3,75 @@
 import { useState } from "react";
 
 const FEATURES = [
-  "Your agent runs 24/7 on dedicated infrastructure. No laptop required.",
-  "Connect Telegram, Email, or Slack in minutes from the dashboard.",
-  "Configure your agent\u2019s personality, tools, and behavior from a clean web UI.",
-  "Use your Anthropic or OpenAI key. You control the model and the costs.",
+  {
+    title: "Always On",
+    description:
+      "Your agent runs 24/7 on dedicated infrastructure. No laptop required.",
+  },
+  {
+    title: "Connect Anywhere",
+    description:
+      "Telegram, Email, Slack, Google, Notion, Airtable \u2014 connect in one click from your dashboard.",
+  },
+  {
+    title: "Your Keys, Your Control",
+    description:
+      "Bring your Anthropic or OpenAI key. You pick the model, you control the costs.",
+  },
+  {
+    title: "Custom Personality",
+    description:
+      "Configure your agent\u2019s name, behavior, and system prompt from a clean web UI.",
+  },
+];
+
+const STEPS = [
+  {
+    number: 1,
+    title: "Subscribe",
+    description:
+      "Enter your email and complete checkout. Your agent is provisioned in about 60 seconds.",
+  },
+  {
+    number: 2,
+    title: "Configure",
+    description:
+      "Add your Anthropic or OpenAI API key, customize your agent\u2019s personality and tools.",
+  },
+  {
+    number: 3,
+    title: "Connect",
+    description:
+      "Link Telegram, Email, or Slack from the Integrations tab. Your agent starts responding immediately.",
+  },
+];
+
+const INCLUDES = [
+  "Dedicated always-on instance",
+  "Unlimited messages",
+  "All integrations included",
+  "Dashboard access",
+  "Cancel anytime",
+];
+
+const FAQS = [
+  {
+    q: "Do I need technical skills?",
+    a: "No. Everything is configured through a web dashboard \u2014 no terminal, no code, no servers.",
+  },
+  {
+    q: "What if I want to cancel?",
+    a: "Cancel anytime from Stripe. No questions asked, no lock-in.",
+  },
+  {
+    q: "Is my data private?",
+    a: "You bring your own API key. Your conversations go directly to your AI provider \u2014 we never see them.",
+  },
 ];
 
 export default function HostedPage() {
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<
-    "idle" | "loading" | "error"
-  >("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
 
   async function handleCheckout(e: React.FormEvent) {
@@ -44,46 +102,104 @@ export default function HostedPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <header className="text-center mb-12">
-        <p className="text-xs font-bold uppercase tracking-widest text-accent mb-3">
+    <div className="max-w-5xl mx-auto">
+      {/* Hero */}
+      <header className="text-center py-8 sm:py-16">
+        <p className="text-xs font-bold uppercase tracking-widest text-accent mb-4">
           Hosted OpenClaw
         </p>
-        <h1 className="font-serif text-4xl sm:text-5xl font-black tracking-tight mb-4">
-          An AI agent you can contact 24/7 on the go that integrates with your tools
+        <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight mb-6 max-w-3xl mx-auto leading-tight">
+          Your AI agent, always on, always reachable.
         </h1>
-        <p className="font-serif text-xl text-text-secondary leading-relaxed">
-          No setup, servers, or terminals. Get a fully managed AI agent in 60 seconds.
+        <p className="font-serif text-lg sm:text-xl text-text-secondary leading-relaxed max-w-2xl mx-auto mb-8">
+          A personal AI assistant that runs 24/7 &mdash; message it on
+          Telegram, Slack, or Email. No servers, no setup, no terminal.
+        </p>
+        <a
+          href="#pricing"
+          className="inline-block bg-accent text-white px-8 py-3 rounded text-base font-semibold hover:opacity-90 transition-opacity"
+        >
+          Get Started &mdash; $19.99/mo
+        </a>
+        <p className="text-sm text-text-secondary mt-3">
+          60-second setup &middot; Cancel anytime
         </p>
       </header>
 
-      <hr className="section-rule mb-10" />
-
-      <p className="max-w-2xl mx-auto text-text-secondary leading-relaxed mb-10">
-        You&rsquo;ve heard about OpenClaw &mdash; the open-source AI agent framework
-        everyone&rsquo;s talking about. But running it yourself means buying hardware,
-        setting up a server, and living in the terminal. With Hosted OpenClaw, we handle
-        all of that. You get your own always-on AI agent without touching a command line.
-      </p>
+      {/* Trust bar */}
+      <hr className="section-rule" />
+      <div className="flex flex-wrap justify-center gap-6 sm:gap-10 py-6 text-sm text-text-secondary">
+        <span>Always on</span>
+        <span className="hidden sm:inline">&middot;</span>
+        <span>99.9% uptime</span>
+        <span className="hidden sm:inline">&middot;</span>
+        <span>Your API key, your data</span>
+      </div>
+      <hr className="section-rule mb-12 sm:mb-16" />
 
       {/* Features */}
-      <ul className="space-y-3 mb-12 max-w-2xl mx-auto">
-        {FEATURES.map((feature, i) => (
-          <li key={i} className="text-text-secondary leading-relaxed">
-            {feature}
-          </li>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-12 sm:mb-16">
+        {FEATURES.map((f) => (
+          <div
+            key={f.title}
+            className="bg-accent/5 border border-accent/10 rounded px-6 py-5"
+          >
+            <h3 className="font-serif font-bold text-lg mb-1">{f.title}</h3>
+            <p className="text-text-secondary text-sm leading-relaxed">
+              {f.description}
+            </p>
+          </div>
         ))}
-      </ul>
+      </div>
 
-      <hr className="section-rule mb-10" />
+      <hr className="section-rule mb-12 sm:mb-16" />
 
-      {/* Pricing + CTA */}
-      <div className="bg-accent/10 border border-accent/20 rounded px-8 py-10 text-center mb-12">
-        <p className="font-serif font-bold text-2xl mb-1">$19.99/month</p>
-        <p className="text-sm text-text-secondary mb-6">
-          Dedicated instance &middot; unlimited messages &middot; cancel
-          anytime
+      {/* How it works */}
+      <h2 className="font-serif text-2xl sm:text-3xl font-bold text-center mb-10">
+        How it works
+      </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 mb-12 sm:mb-16">
+        {STEPS.map((step) => (
+          <div key={step.number} className="text-center">
+            <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-accent text-white text-sm font-bold mb-3">
+              {step.number}
+            </span>
+            <h3 className="font-serif font-bold text-lg mb-1">{step.title}</h3>
+            <p className="text-text-secondary text-sm leading-relaxed">
+              {step.description}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <hr className="section-rule mb-12 sm:mb-16" />
+
+      {/* Pricing CTA */}
+      <div
+        id="pricing"
+        className="bg-accent/10 border border-accent/20 rounded-lg px-8 py-12 text-center mb-12 sm:mb-16 scroll-mt-8"
+      >
+        <p className="text-xs font-bold uppercase tracking-widest text-accent mb-2">
+          One simple plan
         </p>
+        <p className="font-serif font-black text-4xl sm:text-5xl mb-2">
+          $19.99
+          <span className="text-lg font-normal text-text-secondary">
+            /month
+          </span>
+        </p>
+        <p className="text-sm text-text-secondary mb-8">
+          Everything you need. Nothing you don&rsquo;t.
+        </p>
+
+        <ul className="inline-block text-left text-sm text-text-secondary space-y-2 mb-8">
+          {INCLUDES.map((item) => (
+            <li key={item} className="flex items-start gap-2">
+              <span className="text-accent font-bold mt-0.5">&check;</span>
+              {item}
+            </li>
+          ))}
+        </ul>
 
         <form
           onSubmit={handleCheckout}
@@ -95,14 +211,14 @@ export default function HostedPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="your@email.com"
-            className="w-full sm:flex-1 px-4 py-2 rounded border border-rule-light bg-background text-foreground text-sm focus:outline-none focus:border-accent"
+            className="w-full sm:flex-1 px-4 py-2.5 rounded border border-rule-light bg-background text-foreground text-sm focus:outline-none focus:border-accent"
           />
           <button
             type="submit"
             disabled={status === "loading"}
-            className="bg-accent text-white px-6 py-2 rounded text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 whitespace-nowrap"
+            className="w-full sm:w-auto bg-accent text-white px-8 py-2.5 rounded text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 whitespace-nowrap"
           >
-            {status === "loading" ? "Redirecting..." : "Get Started"}
+            {status === "loading" ? "Redirecting\u2026" : "Get Started"}
           </button>
         </form>
 
@@ -111,45 +227,22 @@ export default function HostedPage() {
         )}
       </div>
 
-      {/* How it works */}
+      {/* FAQ */}
       <h2 className="font-serif text-2xl font-bold text-center mb-6">
-        How it works
+        Common questions
       </h2>
-      <div className="space-y-6 mb-12">
-        {[
-          {
-            number: 1,
-            title: "Subscribe",
-            description:
-              "Enter your email and complete checkout. Your agent is provisioned automatically in about 60 seconds.",
-          },
-          {
-            number: 2,
-            title: "Configure",
-            description:
-              "Open your dashboard, add your Anthropic or OpenAI API key, and customize your agent's behavior.",
-          },
-          {
-            number: 3,
-            title: "Connect",
-            description:
-              "Link Telegram, Email, or Slack from the Integrations tab. Your agent starts responding immediately.",
-          },
-        ].map((step) => (
-          <div key={step.number} className="flex items-start gap-4">
-            <span className="flex-shrink-0 w-8 h-8 rounded-full bg-accent text-white text-sm font-bold flex items-center justify-center">
-              {step.number}
-            </span>
-            <div>
-              <h3 className="font-serif font-bold text-lg">{step.title}</h3>
-              <p className="text-text-secondary text-sm leading-relaxed">
-                {step.description}
-              </p>
-            </div>
+      <div className="max-w-2xl mx-auto space-y-6 mb-12 sm:mb-16">
+        {FAQS.map((faq) => (
+          <div key={faq.q}>
+            <h3 className="font-serif font-bold text-base mb-1">{faq.q}</h3>
+            <p className="text-text-secondary text-sm leading-relaxed">
+              {faq.a}
+            </p>
           </div>
         ))}
       </div>
 
+      {/* Footer */}
       <footer className="mt-16">
         <hr className="masthead-rule mb-6" />
         <p className="text-center text-sm text-text-secondary">
