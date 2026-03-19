@@ -1412,6 +1412,76 @@ function executeSchedulingTool(toolName: string, input: any): string {
   }
 }
 
+// --- Status callback for streaming thinking updates ---
+
+type StatusCallback = (status: string) => void;
+
+function extractDomain(url?: string): string {
+  if (!url) return "a webpage";
+  try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return "a webpage"; }
+}
+
+const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
+  browse_webpage: (input) => `Browsing ${extractDomain(input?.url)}...`,
+  browser_click: "Clicking on the page...",
+  browser_type: "Typing on the page...",
+  browser_screenshot: "Taking a screenshot...",
+  browser_get_content: "Reading page content...",
+  pdf_get_fields: "Reading PDF fields...",
+  pdf_fill_form: "Filling PDF form...",
+  pdf_read_text: "Reading your PDF...",
+  save_memory: "Saving to memory...",
+  list_memories: "Checking memory...",
+  delete_memory: "Updating memory...",
+  run_command: "Running a command...",
+  read_file: "Reading your files...",
+  write_file: "Writing a file...",
+  send_slack: "Sending Slack message...",
+  slack_channel_members: "Checking Slack members...",
+  send_lobstermail: "Sending an email...",
+  check_lobstermail: "Checking your inbox...",
+  gmail_search: "Searching Gmail...",
+  gmail_read_message: "Reading an email...",
+  gmail_send: "Sending an email...",
+  gmail_create_draft: "Drafting an email...",
+  gmail_label: "Labeling email...",
+  gmail_list_aliases: "Checking email aliases...",
+  calendar_list_events: "Checking your calendar...",
+  calendar_create_event: "Creating a calendar event...",
+  calendar_update_event: "Updating a calendar event...",
+  drive_search: "Searching Google Drive...",
+  drive_read_file: "Reading a Drive file...",
+  drive_open_url: "Opening a document...",
+  contacts_search: "Searching contacts...",
+  docs_create: "Creating a document...",
+  docs_read: "Reading a document...",
+  docs_append: "Editing a document...",
+  docs_insert: "Editing a document...",
+  sheets_create: "Creating a spreadsheet...",
+  sheets_read: "Reading a spreadsheet...",
+  sheets_write: "Writing to a spreadsheet...",
+  sheets_append: "Adding to a spreadsheet...",
+  sheets_list_sheets: "Checking spreadsheet tabs...",
+  supabase_list_tables: "Listing database tables...",
+  supabase_describe_table: "Examining table schema...",
+  supabase_query: "Querying your database...",
+  supabase_insert: "Inserting a record...",
+  supabase_update: "Updating a record...",
+  airtable_list_bases: "Listing Airtable bases...",
+  airtable_list_tables: "Listing Airtable tables...",
+  airtable_list_records: "Reading Airtable records...",
+  notion_search: "Searching Notion...",
+  notion_get_page: "Reading a Notion page...",
+  notion_get_page_content: "Reading Notion content...",
+  notion_create_page: "Creating a Notion page...",
+  notion_update_page: "Updating a Notion page...",
+  notion_query_database: "Querying Notion database...",
+  notion_get_database: "Reading Notion database...",
+  create_scheduled_job: "Creating a scheduled job...",
+  list_scheduled_jobs: "Listing scheduled jobs...",
+  delete_scheduled_job: "Deleting a scheduled job...",
+};
+
 // --- Anthropic API with tool use loop ---
 
 async function callAnthropic(
@@ -1420,7 +1490,8 @@ async function callAnthropic(
   systemPrompt: string,
   messages: { role: string; content: string }[],
   temperature: number,
-  maxTokens: number
+  maxTokens: number,
+  onStatus?: StatusCallback
 ): Promise<AIResponse> {
   const tools: any[] = [
     { type: "web_search_20250305", name: "web_search" },
@@ -1472,6 +1543,8 @@ async function callAnthropic(
   const MAX_REPEAT_CALLS = 2; // allow same tool+input at most twice
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    onStatus?.("Thinking...");
+
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -1509,6 +1582,12 @@ async function callAnthropic(
       (b: any) => b.type === "tool_use" && b.name !== "web_search"
     );
 
+    // Detect built-in web_search (server-side tool)
+    const hasWebSearch = (data.content || []).some(
+      (b: any) => b.type === "web_search_tool_result" || (b.type === "server_tool_use" && b.name === "web_search")
+    );
+    if (hasWebSearch) onStatus?.("Searching the web...");
+
     if (data.stop_reason === "tool_use" && customToolUseBlocks.length > 0) {
       // Append assistant response with tool_use blocks
       apiMessages.push({ role: "assistant", content: data.content });
@@ -1533,6 +1612,12 @@ async function callAnthropic(
       const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
+
+        // Emit tool-specific status
+        const statusEntry = TOOL_STATUS_MAP[toolBlock.name];
+        if (statusEntry && onStatus) {
+          onStatus(typeof statusEntry === "function" ? statusEntry(toolBlock.input) : statusEntry);
+        }
 
         // Loop detection: skip if same tool+input called too many times
         const fingerprint = `${toolBlock.name}:${JSON.stringify(toolBlock.input)}`;
@@ -1585,6 +1670,7 @@ async function callAnthropic(
     }
 
     // No more custom tool calls — extract final text (and inline images)
+    onStatus?.("Writing response...");
     const parts: string[] = [];
     for (const block of data.content || []) {
       if (block.type === "text") parts.push(block.text);
@@ -1605,7 +1691,8 @@ async function callOpenAI(
   systemPrompt: string,
   messages: { role: string; content: string }[],
   temperature: number,
-  maxTokens: number
+  maxTokens: number,
+  onStatus?: StatusCallback
 ): Promise<AIResponse> {
   const allMessages: { role: string; content: string }[] = [];
 
@@ -1656,7 +1743,8 @@ export async function processMessage(
   source: string,
   externalId: string,
   text: string,
-  context?: string
+  context?: string,
+  onStatus?: StatusCallback
 ): Promise<string> {
   const model = getSetting("model") || "claude-sonnet-4-20250514";
   let systemPrompt = getSetting("system_prompt") || "";
@@ -1861,7 +1949,7 @@ If you encounter sensitive data while searching emails, reading documents, or br
   const history = getMessages(conversationId).filter((m) => m.content && m.content.trim());
 
   const caller = provider === "anthropic" ? callAnthropic : callOpenAI;
-  const response = await caller(model, apiKey, systemPrompt, history, temperature, maxTokens);
+  const response = await caller(model, apiKey, systemPrompt, history, temperature, maxTokens, onStatus);
 
   if (response.content && response.content.trim()) {
     addMessage(conversationId, "assistant", response.content);

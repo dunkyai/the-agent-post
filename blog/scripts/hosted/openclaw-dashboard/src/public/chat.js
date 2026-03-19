@@ -99,10 +99,34 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: "Please review our conversation and save the important details, decisions, and preferences to your memory so you remember them in the future." }),
       })
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          link.innerHTML = '<span style="color: var(--text-secondary);">Saved to memory</span>';
-          addMessage("assistant", data.content);
+        .then(function (res) {
+          if (!res.body) throw new Error("No response");
+          var reader = res.body.getReader();
+          var decoder = new TextDecoder();
+          var buf = "";
+          function read() {
+            return reader.read().then(function (result) {
+              if (result.done) return;
+              buf += decoder.decode(result.value, { stream: true });
+              var parts = buf.split("\n\n");
+              buf = parts.pop() || "";
+              for (var p = 0; p < parts.length; p++) {
+                var lines = parts[p].split("\n");
+                var evType = null, evData = null;
+                for (var l = 0; l < lines.length; l++) {
+                  if (lines[l].indexOf("event: ") === 0) evType = lines[l].slice(7);
+                  else if (lines[l].indexOf("data: ") === 0) evData = lines[l].slice(6);
+                }
+                if (evType === "done" && evData) {
+                  var parsed = JSON.parse(evData);
+                  link.innerHTML = '<span style="color: var(--text-secondary);">Saved to memory</span>';
+                  addMessage("assistant", parsed.content);
+                }
+              }
+              return read();
+            });
+          }
+          return read();
         })
         .catch(function () {
           link.innerHTML = '<span style="color: var(--danger);">Failed to save</span>';
@@ -163,7 +187,7 @@
     // Show thinking indicator
     var thinking = document.createElement("div");
     thinking.className = "chat-message assistant thinking-indicator";
-    thinking.innerHTML = '<div class="avatar" title="' + agentName + '">' + agentName.charAt(0) + '</div><div class="bubble thinking-bubble"><span class="spinner"></span> Thinking...</div>';
+    thinking.innerHTML = '<div class="avatar" title="' + agentName + '">' + agentName.charAt(0) + '</div><div class="bubble thinking-bubble"><span class="spinner"></span> <span class="thinking-text">Thinking...</span></div>';
     messages.appendChild(thinking);
     scrollToBottom();
 
@@ -173,27 +197,57 @@
       body: JSON.stringify({ message: text }),
     })
       .then(function (res) {
-        return res.text().then(function (text) {
-          if (!text) throw new Error("Oops — I can't seem to connect right now. Do you want me to try again?");
-          try {
-            var data = JSON.parse(text);
-          } catch (e) {
-            throw new Error("Invalid response from server");
-          }
-          if (!res.ok) throw new Error(data.error || "Request failed");
-          return data;
-        });
-      })
-      .then(function (data) {
-        var t = messages.querySelector(".thinking-indicator");
-        if (t) t.remove();
-        addMessage("assistant", data.content);
-        maybeShowMemoryLink();
+        if (!res.body) throw new Error("Oops — I can't seem to connect right now. Do you want me to try again?");
+        var reader = res.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer = "";
+
+        function processChunk() {
+          return reader.read().then(function (result) {
+            if (result.done) return;
+            buffer += decoder.decode(result.value, { stream: true });
+
+            var parts = buffer.split("\n\n");
+            buffer = parts.pop() || "";
+
+            for (var p = 0; p < parts.length; p++) {
+              var lines = parts[p].split("\n");
+              var eventType = null;
+              var eventData = null;
+              for (var l = 0; l < lines.length; l++) {
+                if (lines[l].indexOf("event: ") === 0) eventType = lines[l].slice(7);
+                else if (lines[l].indexOf("data: ") === 0) eventData = lines[l].slice(6);
+              }
+              if (!eventType || eventData === null) continue;
+
+              if (eventType === "status") {
+                var thinkingText = messages.querySelector(".thinking-text");
+                if (thinkingText) thinkingText.textContent = eventData;
+                scrollToBottom();
+              } else if (eventType === "done") {
+                var parsed = JSON.parse(eventData);
+                var t = messages.querySelector(".thinking-indicator");
+                if (t) t.remove();
+                addMessage("assistant", parsed.content);
+                maybeShowMemoryLink();
+              } else if (eventType === "error") {
+                var errData = JSON.parse(eventData);
+                var t = messages.querySelector(".thinking-indicator");
+                if (t) t.remove();
+                errorEl.textContent = errData.error;
+              }
+            }
+
+            return processChunk();
+          });
+        }
+
+        return processChunk();
       })
       .catch(function (err) {
         var t = messages.querySelector(".thinking-indicator");
         if (t) t.remove();
-        errorEl.textContent = err.message;
+        errorEl.textContent = err.message || "Connection error";
       })
       .finally(function () {
         input.disabled = false;
