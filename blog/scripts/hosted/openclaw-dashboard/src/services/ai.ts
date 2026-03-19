@@ -126,6 +126,129 @@ const CODE_EXECUTION_TOOLS = [
   },
 ];
 
+// --- PDF Tools ---
+
+const PDF_TOOLS = [
+  {
+    name: "pdf_get_fields",
+    description: "List all fillable form fields in a PDF file. Returns field names, types, and current values. Use this first to inspect a PDF form before filling it.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        file: { type: "string", description: "Path to the PDF file in /workspace (e.g. /workspace/form.pdf)" },
+      },
+      required: ["file"],
+    },
+  },
+  {
+    name: "pdf_fill_form",
+    description: "Fill out a PDF form by providing field names and values as a JSON object. The filled PDF is saved to an output path. Use pdf_get_fields first to discover the field names.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        file: { type: "string", description: "Path to the PDF form template in /workspace" },
+        output: { type: "string", description: "Output path for the filled PDF (e.g. /workspace/filled.pdf)" },
+        fields: {
+          type: "object" as const,
+          description: "JSON object mapping field names to values (e.g. {\"name\": \"John\", \"date\": \"2026-03-18\", \"agree\": true})",
+        },
+        flatten: { type: "boolean", description: "If true, flatten the form after filling (makes fields non-editable). Default: false." },
+      },
+      required: ["file", "output", "fields"],
+    },
+  },
+  {
+    name: "pdf_read_text",
+    description: "Extract all text from a PDF file. Useful for reading and understanding PDF content. Returns the text content of each page.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        file: { type: "string", description: "Path to the PDF file in /workspace" },
+      },
+      required: ["file"],
+    },
+  },
+];
+
+async function executePdfTool(toolName: string, input: any): Promise<string> {
+  const provisioningUrl = process.env.PROVISIONING_URL;
+  const instanceId = process.env.INSTANCE_ID;
+  const gatewayToken = process.env.GATEWAY_TOKEN;
+
+  if (!provisioningUrl || !instanceId || !gatewayToken) {
+    return JSON.stringify({ error: "Code execution not configured on this instance" });
+  }
+
+  const install = "pip3 install -q PyPDFForm pypdf 2>/dev/null";
+  let script: string;
+
+  switch (toolName) {
+    case "pdf_get_fields": {
+      script = [
+        "from PyPDFForm import PdfWrapper",
+        `pdf = PdfWrapper("${input.file}")`,
+        "fields = {}",
+        "for name, field in (pdf.schema or {}).items():",
+        "    fields[name] = {'type': field.get('type', 'unknown'), 'value': field.get('value', '')}",
+        "import json; print(json.dumps(fields, indent=2))",
+      ].join("\n");
+      break;
+    }
+    case "pdf_fill_form": {
+      const fieldsJson = JSON.stringify(input.fields).replace(/'/g, "\\'");
+      const flatten = input.flatten ? "True" : "False";
+      script = [
+        "from PyPDFForm import PdfWrapper",
+        "import json",
+        `pdf = PdfWrapper("${input.file}")`,
+        `fields = json.loads('${fieldsJson}')`,
+        "filled = pdf.fill(fields)",
+        ...(input.flatten ? ["filled = filled.flatten()"] : []),
+        `with open("${input.output}", "wb") as f:`,
+        "    f.write(filled.read())",
+        `print(json.dumps({"success": True, "output": "${input.output}", "fields_filled": len(fields), "flattened": ${flatten}}))`,
+      ].join("\n");
+      break;
+    }
+    case "pdf_read_text": {
+      script = [
+        "from pypdf import PdfReader",
+        "import json",
+        `reader = PdfReader("${input.file}")`,
+        "pages = []",
+        "for i, page in enumerate(reader.pages):",
+        "    pages.append({'page': i + 1, 'text': page.extract_text() or ''})",
+        "print(json.dumps(pages, indent=2))",
+      ].join("\n");
+      break;
+    }
+    default:
+      return JSON.stringify({ error: `Unknown PDF tool: ${toolName}` });
+  }
+
+  const command = `${install} && python3 -c "${script.replace(/"/g, '\\"')}"`;
+
+  try {
+    const res = await fetch(`${provisioningUrl}/instances/${instanceId}/sandbox/exec`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${gatewayToken}`,
+      },
+      body: JSON.stringify({ command }),
+    });
+
+    if (!res.ok) {
+      const data: any = await res.json().catch(() => ({}));
+      return JSON.stringify({ error: data.error || `Sandbox error (${res.status})` });
+    }
+
+    return JSON.stringify(await res.json());
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "PDF tool execution failed" });
+  }
+}
+
 async function executeCodeTool(toolName: string, input: any): Promise<string> {
   const provisioningUrl = process.env.PROVISIONING_URL;
   const instanceId = process.env.INSTANCE_ID;
@@ -1269,6 +1392,7 @@ async function callAnthropic(
     ...SCHEDULING_TOOLS,
     ...MEMORY_TOOLS,
     ...CODE_EXECUTION_TOOLS,
+    ...PDF_TOOLS,
     ...BROWSER_TOOLS,
   ];
 
@@ -1359,6 +1483,7 @@ async function callAnthropic(
       const toolResults: any[] = [];
       const memoryTools = ["save_memory", "list_memories", "delete_memory"];
       const codeTools = ["run_command", "read_file", "write_file"];
+      const pdfTools = ["pdf_get_fields", "pdf_fill_form", "pdf_read_text"];
       const googleToolNames = [
         "gmail_search", "gmail_read_message", "gmail_send", "gmail_create_draft", "gmail_label", "gmail_list_aliases",
         "calendar_list_events", "calendar_create_event", "calendar_update_event",
@@ -1394,6 +1519,8 @@ async function callAnthropic(
           result = executeMemoryTool(toolBlock.name, toolBlock.input);
         } else if (codeTools.includes(toolBlock.name)) {
           result = await executeCodeTool(toolBlock.name, toolBlock.input);
+        } else if (pdfTools.includes(toolBlock.name)) {
+          result = await executePdfTool(toolBlock.name, toolBlock.input);
         } else if (toolBlock.name === "open_google_doc") {
           result = await executePublicGDocTool(toolBlock.input);
         } else if (browserToolNames.includes(toolBlock.name)) {

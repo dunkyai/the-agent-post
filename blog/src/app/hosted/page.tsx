@@ -13,7 +13,7 @@ const BENEFITS = [
   },
   {
     title: "Your Keys, Your Data",
-    desc: "Bring your own Anthropic or OpenAI key. We never see your conversations.",
+    desc: "Bring your own Anthropic or OpenAI key. You control the model and the costs.",
   },
   {
     title: "Safely Built-In Integrations",
@@ -65,8 +65,7 @@ export default function HostedPage() {
             Your AI agent, always&nbsp;on.
           </h1>
           <p className="text-text-secondary text-base leading-relaxed mb-8">
-            Your AI Agent that runs 24/7 &mdash; message it on
-            Slack, Email, or other channels. No servers, no code, no&nbsp;terminal.
+            We run 24/7, can chat with you in Slack, email, and&nbsp;more.
           </p>
 
           <div className="bg-accent/5 border border-accent/10 rounded-lg p-6 sm:p-8">
