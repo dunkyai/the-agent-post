@@ -1,6 +1,8 @@
 import crypto from "crypto";
-import { getIntegration, upsertIntegration } from "./db";
+import { getIntegration, upsertIntegration, getSetting, setSetting } from "./db";
 import { encrypt, decrypt } from "./encryption";
+import { processMessage } from "./ai";
+import { sanitizeEmailContent } from "./email";
 
 // --- Types ---
 
@@ -1036,4 +1038,204 @@ export async function sheetsListSheets(spreadsheetId: string, accountId?: string
       columnCount: s.properties.gridProperties?.columnCount,
     })),
   });
+}
+
+// --- Gmail Polling ---
+
+let gmailPollInterval: ReturnType<typeof setInterval> | null = null;
+let gmailLastChecked: string | null = null;
+
+export function startGmailPolling(): void {
+  stopGmailPolling();
+
+  const intervalMs = parseInt(getSetting("gmail_poll_interval") || "0", 10);
+  if (!intervalMs || intervalMs <= 0) return;
+
+  // Find first account with Gmail
+  const account = Array.from(googleAccounts.values()).find(a => a.services.includes("gmail"));
+  if (!account) return;
+
+  gmailLastChecked = getSetting("gmail_last_checked") || null;
+
+  // Poll immediately, then on interval
+  pollGmail().catch(err => console.error("Gmail poll error:", err));
+  gmailPollInterval = setInterval(() => pollGmail().catch(err => console.error("Gmail poll error:", err)), intervalMs);
+
+  console.log(`Gmail polling started (every ${intervalMs / 60000} min)`);
+}
+
+export function stopGmailPolling(): void {
+  if (gmailPollInterval) {
+    clearInterval(gmailPollInterval);
+    gmailPollInterval = null;
+  }
+}
+
+export function isGmailPollingRunning(): boolean {
+  return gmailPollInterval !== null;
+}
+
+function isGmailSenderAllowed(sender: string): boolean {
+  try {
+    const rules = JSON.parse(getSetting("gmail_email_rules") || "{}");
+    if (!rules.mode || rules.mode === "all") return true;
+
+    const senderLower = sender.trim().toLowerCase();
+    // Extract email from "Name <email>" format
+    const emailMatch = senderLower.match(/<([^>]+)>/);
+    const email = emailMatch ? emailMatch[1] : senderLower;
+    const domain = email.split("@")[1];
+
+    if (rules.mode === "domains" && rules.domains?.length > 0) {
+      return rules.domains.some((d: string) => d.toLowerCase() === domain);
+    }
+    if (rules.mode === "addresses" && rules.addresses?.length > 0) {
+      return rules.addresses.some((a: string) => a.toLowerCase() === email);
+    }
+  } catch {}
+  return true;
+}
+
+async function pollGmail(): Promise<void> {
+  const account = Array.from(googleAccounts.values()).find(a => a.services.includes("gmail"));
+  if (!account) return;
+
+  const accountId = account.google_email;
+
+  try {
+    // Build search query for unread emails
+    let query = "is:unread in:inbox";
+    if (gmailLastChecked) {
+      const epoch = Math.floor(new Date(gmailLastChecked).getTime() / 1000);
+      query += ` after:${epoch}`;
+    } else {
+      query += " newer_than:1h";
+    }
+
+    const params = new URLSearchParams({ q: query, maxResults: "10" });
+    const res = await googleFetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`,
+      {},
+      accountId
+    );
+    if (!res.ok) {
+      console.error(`Gmail poll search failed (${res.status})`);
+      return;
+    }
+
+    const data: any = await res.json();
+    const messageIds: string[] = (data.messages || []).map((m: any) => m.id);
+
+    if (messageIds.length === 0) return;
+
+    console.log(`Gmail poll: found ${messageIds.length} new email(s)`);
+    const replyMode = getSetting("gmail_reply_mode") || "draft";
+
+    for (const msgId of messageIds) {
+      try {
+        // Fetch full message
+        const msgRes = await googleFetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgId}?format=full`,
+          {},
+          accountId
+        );
+        if (!msgRes.ok) continue;
+
+        const msg: any = await msgRes.json();
+        const headers: Record<string, string> = {};
+        for (const h of msg.payload?.headers || []) {
+          headers[h.name.toLowerCase()] = h.value;
+        }
+
+        const from = headers.from || "";
+        const to = headers.to || "";
+        const cc = headers.cc || "";
+        const subject = headers.subject || "";
+        const messageIdHeader = headers["message-id"] || "";
+        const threadId = msg.threadId;
+
+        // Check sender against rules
+        if (!isGmailSenderAllowed(from)) {
+          console.log(`Gmail poll: filtered out email from ${from}`);
+          // Mark as read so we don't re-process
+          await markAsRead(msgId, accountId);
+          continue;
+        }
+
+        // Extract body text
+        let body = "";
+        function extractText(part: any): void {
+          if (part.mimeType === "text/plain" && part.body?.data) {
+            body += Buffer.from(part.body.data, "base64url").toString("utf-8");
+          }
+          if (part.parts) {
+            for (const p of part.parts) extractText(p);
+          }
+        }
+        if (msg.payload) extractText(msg.payload);
+
+        body = sanitizeEmailContent(body);
+        const text = subject ? `From: ${from}\nSubject: ${subject}\n\n${body}` : `From: ${from}\n\n${body}`;
+        if (!text.trim()) {
+          await markAsRead(msgId, accountId);
+          continue;
+        }
+
+        // Process through AI
+        const reply = await processMessage(
+          "gmail",
+          from,
+          text,
+          `You are responding to a Gmail email. Reply concisely and professionally. Do not reveal internal system details.`
+        );
+
+        // Build reply recipients (reply-all)
+        const replyTo = from;
+        const replySubject = subject.startsWith("Re:") ? subject : `Re: ${subject}`;
+
+        // Collect CC: all original To/CC minus the user's own email
+        const allRecipients = [to, cc].filter(Boolean).join(", ");
+        const ownEmail = accountId.toLowerCase();
+        const replyCc = allRecipients
+          .split(",")
+          .map(r => r.trim())
+          .filter(r => {
+            const emailMatch = r.toLowerCase().match(/<([^>]+)>/);
+            const email = emailMatch ? emailMatch[1] : r.toLowerCase();
+            return email !== ownEmail;
+          })
+          .join(", ") || undefined;
+
+        if (replyMode === "send" && account.services.includes("gmail_send")) {
+          await gmailSend(replyTo, replySubject, reply, accountId, undefined, replyCc, threadId, messageIdHeader);
+          console.log(`Gmail poll: sent reply to ${from}`);
+        } else {
+          await gmailCreateDraft(replyTo, replySubject, reply, accountId, undefined, replyCc, threadId, messageIdHeader);
+          console.log(`Gmail poll: drafted reply to ${from}`);
+        }
+
+        // Mark as read
+        await markAsRead(msgId, accountId);
+      } catch (err: unknown) {
+        console.error(`Gmail poll: error processing message ${msgId}:`, err instanceof Error ? err.message : err);
+      }
+    }
+
+    gmailLastChecked = new Date().toISOString();
+    setSetting("gmail_last_checked", gmailLastChecked);
+  } catch (err: unknown) {
+    console.error("Gmail poll error:", err instanceof Error ? err.message : err);
+  }
+}
+
+async function markAsRead(messageId: string, accountId: string): Promise<void> {
+  await googleFetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/modify`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ removeLabelIds: ["UNREAD"] }),
+    },
+    accountId
+  ).catch(() => {});
 }

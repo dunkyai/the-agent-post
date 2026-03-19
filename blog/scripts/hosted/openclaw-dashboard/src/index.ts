@@ -216,6 +216,9 @@ async function reconnectIntegrations() {
         console.error(`Failed to reconnect Google (${row.type}):`, err instanceof Error ? err.message : err);
       }
     }
+    // Start Gmail polling if enabled
+    const { startGmailPolling } = require("./services/google");
+    startGmailPolling();
   } catch (err: unknown) {
     console.error("Failed to reconnect Google accounts:", err instanceof Error ? err.message : err);
   }

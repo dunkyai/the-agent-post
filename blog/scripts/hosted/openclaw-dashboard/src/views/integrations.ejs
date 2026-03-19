@@ -203,6 +203,32 @@
               <input type="hidden" id="gmail_filter_addresses_hidden" name="filter_addresses" value="">
             </div>
 
+            <div class="form-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rule-light);">
+              <label for="gmail_poll_interval">Check for new emails</label>
+              <select id="gmail_poll_interval" name="poll_interval">
+                <option value="0" <%= gmailFilter.poll_interval === '0' || !gmailFilter.poll_interval ? 'selected' : '' %>>Off</option>
+                <option value="300000" <%= gmailFilter.poll_interval === '300000' ? 'selected' : '' %>>Every 5 minutes</option>
+                <option value="900000" <%= gmailFilter.poll_interval === '900000' ? 'selected' : '' %>>Every 15 minutes</option>
+                <option value="1800000" <%= gmailFilter.poll_interval === '1800000' ? 'selected' : '' %>>Every 30 minutes</option>
+                <option value="3600000" <%= gmailFilter.poll_interval === '3600000' ? 'selected' : '' %>>Every hour</option>
+              </select>
+              <div class="hint">Automatically check Gmail for new unread emails and respond.</div>
+            </div>
+
+            <div class="form-group">
+              <label>When a new email arrives</label>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                  <input type="radio" name="reply_mode" value="draft" <%= gmailFilter.reply_mode !== 'send' ? 'checked' : '' %>>
+                  <span><strong>Create draft</strong> &mdash; Review before sending</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                  <input type="radio" name="reply_mode" value="send" <%= gmailFilter.reply_mode === 'send' ? 'checked' : '' %>>
+                  <span><strong>Send immediately</strong> &mdash; Fully automated</span>
+                </label>
+              </div>
+            </div>
+
             <button type="submit" class="btn">Save Rules</button>
           </form>
         <% } %>
