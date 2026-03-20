@@ -88,7 +88,26 @@ function initSchema(): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS gmail_processed_threads (
+      thread_id TEXT PRIMARY KEY,
+      last_message_id TEXT NOT NULL,
+      account_id TEXT NOT NULL,
+      processed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
+}
+
+export function getGmailProcessedThread(threadId: string): { last_message_id: string } | undefined {
+  return getDb().prepare("SELECT last_message_id FROM gmail_processed_threads WHERE thread_id = ?").get(threadId) as
+    | { last_message_id: string }
+    | undefined;
+}
+
+export function markGmailThreadProcessed(threadId: string, lastMessageId: string, accountId: string): void {
+  getDb()
+    .prepare("INSERT INTO gmail_processed_threads (thread_id, last_message_id, account_id) VALUES (?, ?, ?) ON CONFLICT(thread_id) DO UPDATE SET last_message_id = ?, processed_at = datetime('now')")
+    .run(threadId, lastMessageId, accountId, lastMessageId);
 }
 
 export function getSetting(key: string): string | undefined {
