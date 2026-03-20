@@ -30,7 +30,7 @@ import {
   notionQueryDatabase, notionGetDatabase,
 } from "./notion";
 import {
-  isBufferRunning, getBufferOrgName,
+  isBufferRunning, getBufferOrgName, getSelectedChannels,
   bufferListChannels, bufferCreatePost, bufferListPosts, bufferDeletePost,
 } from "./buffer";
 import {
@@ -999,10 +999,24 @@ const BUFFER_TOOLS = [
 
 async function executeBufferTool(toolName: string, input: any): Promise<string> {
   try {
+    const selected = getSelectedChannels();
     switch (toolName) {
-      case "buffer_list_channels":
-        return await bufferListChannels();
+      case "buffer_list_channels": {
+        const raw = await bufferListChannels();
+        if (selected.length > 0) {
+          const parsed = JSON.parse(raw);
+          if (parsed.channels) {
+            parsed.channels = parsed.channels.filter((ch: any) => selected.includes(ch.id));
+            parsed.count = parsed.channels.length;
+            return JSON.stringify(parsed);
+          }
+        }
+        return raw;
+      }
       case "buffer_create_post":
+        if (selected.length > 0 && !selected.includes(input.channel_id)) {
+          return JSON.stringify({ error: "This channel is not enabled. Use buffer_list_channels to see available channels." });
+        }
         return await bufferCreatePost({
           channel_id: input.channel_id,
           text: input.text,
@@ -2478,7 +2492,9 @@ CRITICAL Supabase query rules:
   // Inject Buffer context
   const bufferOrg = getBufferOrgName();
   if (isBufferRunning()) {
-    const bufferContext = `You are connected to Buffer for social media scheduling${bufferOrg ? ` (${bufferOrg})` : ""}. You can list connected social channels, create and schedule posts, view post history, and delete posts using the buffer_* tools. Use buffer_list_channels first to see which social accounts are connected, then buffer_create_post to schedule posts. Modes: add_to_queue (default), custom_scheduled (set due_at), or share_now. Use buffer_list_posts to check scheduled or sent posts.`;
+    const selectedCh = getSelectedChannels();
+    const channelNote = selectedCh.length > 0 ? ` Only ${selectedCh.length} channel(s) are enabled by the user — buffer_list_channels will show only those.` : "";
+    const bufferContext = `You are connected to Buffer for social media scheduling${bufferOrg ? ` (${bufferOrg})` : ""}.${channelNote} You can list connected social channels, create and schedule posts, view post history, and delete posts using the buffer_* tools. Use buffer_list_channels first to see which social accounts are connected, then buffer_create_post to schedule posts. Modes: add_to_queue (default), custom_scheduled (set due_at), or share_now. Use buffer_list_posts to check scheduled or sent posts.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${bufferContext}` : bufferContext;
   }
 

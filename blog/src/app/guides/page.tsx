@@ -248,6 +248,14 @@ const guides = [
     time: "10-15 min",
     tags: ["AI Slack Bot", "Multi-Agent", "OpenClaw"],
   },
+  {
+    slug: "openclaw-google-sheets-mcp",
+    title: "Connecting OpenClaw Agents to Google Sheets via MCP",
+    description:
+      "Give your OpenClaw AI agents the ability to read, write, and analyze Google Sheets data using the Model Context Protocol.",
+    time: "10-15 min",
+    tags: ["MCP", "Google Sheets", "Integrations"],
+  },
 ];
 
 export default function GuidesPage() {

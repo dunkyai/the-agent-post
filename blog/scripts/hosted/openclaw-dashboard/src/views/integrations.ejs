@@ -436,6 +436,28 @@
                 <code style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px;"><%= buffer.organization_name || 'Connected' %></code>
               </div>
             </div>
+
+            <% if (buffer.channels_error) { %>
+              <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">Could not load channels. Try disconnecting and reconnecting.</p>
+            <% } else if (buffer.channels.length > 0) { %>
+              <form method="POST" action="/integrations/buffer/channels">
+                <label style="font-size: 13px; color: var(--text-secondary); display: block; margin-bottom: 8px;">Channels your agent can post to:</label>
+                <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;">
+                  <% buffer.channels.forEach(function(ch) { %>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer;">
+                      <input type="checkbox" name="channels" value="<%= ch.id %>"
+                        <%= (buffer.selected_channels.length === 0 || buffer.selected_channels.includes(ch.id)) ? 'checked' : '' %>>
+                      <span><%= ch.name %></span>
+                      <span style="font-size: 12px; color: var(--text-secondary);">— <%= ch.service %></span>
+                    </label>
+                  <% }); %>
+                </div>
+                <button type="submit" class="btn btn-sm" style="margin-bottom: 12px;">Save Channels</button>
+              </form>
+            <% } else { %>
+              <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">No channels found. Connect social accounts in Buffer first.</p>
+            <% } %>
+
             <form method="POST" action="/integrations/buffer/disconnect">
               <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
             </form>

@@ -7,12 +7,12 @@ import { buildOAuthUrl, stopGoogle, isGoogleRunning, startGmailPolling, stopGmai
 import { startSupabase, stopSupabase, testSupabaseConnection, probeSupabaseHealth } from "../services/supabase";
 import { buildAirtableOAuthUrl, stopAirtable } from "../services/airtable";
 import { buildNotionOAuthUrl, stopNotion, getNotionWorkspaceName } from "../services/notion";
-import { startBuffer, stopBuffer, testBufferConnection } from "../services/buffer";
+import { startBuffer, stopBuffer, testBufferConnection, bufferListChannels, isBufferRunning } from "../services/buffer";
 import { startLuma, stopLuma, testLumaConnection } from "../services/luma";
 
 const router = Router();
 
-router.get("/integrations", (req: Request, res: Response) => {
+router.get("/integrations", async (req: Request, res: Response) => {
   const integrations = getAllIntegrations();
   const integrationMap: Record<string, { status: string; error_message: string | null; config: string }> = {};
   for (const i of integrations) {
@@ -111,16 +111,24 @@ router.get("/integrations", (req: Request, res: Response) => {
       ...(integrationMap["notion"] || { status: "disconnected", error_message: null }),
       workspace_name: notionWorkspaceName,
     },
-    buffer: {
-      ...(integrationMap["buffer"] || { status: "disconnected", error_message: null }),
-      organization_name: (() => {
-        const bi = integrationMap["buffer"];
-        if (bi && bi.status === "connected") {
-          try { return JSON.parse(decrypt(bi.config)).organization_name || null; } catch { return null; }
-        }
-        return null;
-      })(),
-    },
+    buffer: await (async () => {
+      const bi = integrationMap["buffer"];
+      const base = { ...(bi || { status: "disconnected", error_message: null }), organization_name: null as string | null, channels: [] as any[], selected_channels: [] as string[], channels_error: false };
+      if (bi && bi.status === "connected") {
+        try {
+          const config = JSON.parse(decrypt(bi.config));
+          base.organization_name = config.organization_name || null;
+          base.selected_channels = config.selected_channels || [];
+        } catch {}
+        try {
+          const raw = await bufferListChannels();
+          const parsed = JSON.parse(raw);
+          if (parsed.channels) base.channels = parsed.channels;
+          else base.channels_error = true;
+        } catch { base.channels_error = true; }
+      }
+      return base;
+    })(),
     luma: {
       ...(integrationMap["luma"] || { status: "disconnected", error_message: null }),
       user_name: (() => {
@@ -470,6 +478,29 @@ router.post("/integrations/buffer/disconnect", async (req: Request, res: Respons
   stopBuffer();
   upsertIntegration("buffer", "{}", "disconnected");
   res.redirect(303, "/integrations?flash=Buffer+disconnected");
+});
+
+router.post("/integrations/buffer/channels", (req: Request, res: Response) => {
+  try {
+    const integration = getIntegration("buffer");
+    if (!integration || integration.status !== "connected") {
+      res.redirect(303, "/integrations?flash=Buffer+not+connected");
+      return;
+    }
+
+    const config = JSON.parse(decrypt(integration.config));
+    const rawChannels = req.body.channels;
+    config.selected_channels = Array.isArray(rawChannels) ? rawChannels : rawChannels ? [rawChannels] : [];
+
+    const encrypted = encrypt(JSON.stringify(config));
+    upsertIntegration("buffer", encrypted, "connected");
+    startBuffer(config);
+
+    res.redirect(303, "/integrations?flash=Buffer+channels+saved");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.redirect(303, "/integrations?flash=Channel+error:+" + encodeURIComponent(message));
+  }
 });
 
 router.post("/integrations/luma/connect", async (req: Request, res: Response) => {
