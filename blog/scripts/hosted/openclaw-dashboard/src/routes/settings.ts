@@ -27,6 +27,10 @@ router.get("/settings", (req: Request, res: Response) => {
   const agentName = getSetting("agent_name") || "";
   const userName = getSetting("user_name") || "";
   const systemPrompt = getSetting("system_prompt") || "";
+  const contextCompany = getSetting("context_company") || "";
+  const contextUser = getSetting("context_user") || "";
+  const contextRules = getSetting("context_rules") || "";
+  const contextKnowledge = getSetting("context_knowledge") || "";
   const temperature = getSetting("temperature") || "0.7";
   const maxTokens = getSetting("max_tokens") || "4096";
   const sessionExpiryDays = getSetting("session_expiry_days") || "30";
@@ -39,6 +43,10 @@ router.get("/settings", (req: Request, res: Response) => {
     agentName,
     userName,
     systemPrompt,
+    contextCompany,
+    contextUser,
+    contextRules,
+    contextKnowledge,
     temperature,
     maxTokens,
     sessionExpiryDays,
@@ -47,7 +55,7 @@ router.get("/settings", (req: Request, res: Response) => {
 });
 
 router.post("/settings", (req: Request, res: Response) => {
-  const { provider, api_key, model, agent_name, user_name, system_prompt, temperature, max_tokens, session_expiry_days } = req.body;
+  const { provider, api_key, model, agent_name, user_name, system_prompt, context_company, context_user, context_rules, context_knowledge, temperature, max_tokens, session_expiry_days } = req.body;
 
   // Reject empty submissions — require at least the provider field from the form
   if (!provider) {
@@ -68,6 +76,10 @@ router.post("/settings", (req: Request, res: Response) => {
   setSetting("agent_name", (agent_name || "").trim());
   setSetting("user_name", (user_name || "").trim());
   setSetting("system_prompt", system_prompt || "");
+  setSetting("context_company", (context_company || "").trim());
+  setSetting("context_user", (context_user || "").trim());
+  setSetting("context_rules", (context_rules || "").trim());
+  setSetting("context_knowledge", (context_knowledge || "").trim());
 
   const temp = parseFloat(temperature);
   if (isNaN(temp) || temp < 0 || temp > 2) {

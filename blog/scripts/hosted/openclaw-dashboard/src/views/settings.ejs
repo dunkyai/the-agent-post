@@ -22,52 +22,28 @@
       </div>
 
       <div class="card card-compact">
-        <h3>Learn About You</h3>
-        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">Help your agent understand who you are. Fill in what you'd like, then generate a tailored system prompt.</p>
+        <h3>Agent Context</h3>
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">The more context you provide, the better your agent performs. These fields are automatically included in every conversation.</p>
 
         <div class="form-group">
-          <label for="linkedin_url">LinkedIn Profile URL <span style="color: var(--muted); font-weight: normal;">(optional)</span></label>
-          <div style="display: flex; gap: 8px;">
-            <input type="url" id="linkedin_url" placeholder="https://linkedin.com/in/yourname" style="flex: 1;">
-            <button type="button" id="research-btn" class="btn btn-sm" style="white-space: nowrap;">Research me</button>
-          </div>
-          <div class="hint">We'll look up public info to help personalize your agent</div>
-        </div>
-
-        <div id="research-results" style="display: none; margin-bottom: 12px; padding: 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 6px; font-size: 13px;"></div>
-
-        <div class="form-group">
-          <label for="learn_company">What does your company do?</label>
-          <input type="text" id="learn_company" placeholder="e.g. We sell handmade candles online">
+          <label for="context_company">About Your Company</label>
+          <textarea id="context_company" name="context_company" rows="3" placeholder="e.g. We're a seed-stage VC fund that invests in developer tools and infrastructure. We manage a $50M fund and have 23 portfolio companies."><%= contextCompany %></textarea>
+          <div class="hint">What your company does, products, industry, size</div>
         </div>
         <div class="form-group">
-          <label for="learn_role">What's your role?</label>
-          <input type="text" id="learn_role" placeholder="e.g. Founder, Marketing Manager, CTO">
+          <label for="context_user">About You</label>
+          <textarea id="context_user" name="context_user" rows="3" placeholder="e.g. I'm a GP focused on sourcing deals in the AI/ML space. I also manage LP relations and our quarterly reports."><%= contextUser %></textarea>
+          <div class="hint">Your role, responsibilities, key contacts, working style</div>
         </div>
         <div class="form-group">
-          <label for="learn_purpose">What should your agent help with?</label>
-          <textarea id="learn_purpose" rows="2" placeholder="e.g. Answer customer questions, write blog posts, manage social media"></textarea>
+          <label for="context_rules">Rules & Guidelines</label>
+          <textarea id="context_rules" name="context_rules" rows="3" placeholder="e.g. Always be professional. Never promise investments or share confidential LP information. Use a warm but concise tone."><%= contextRules %></textarea>
+          <div class="hint">Things your agent should always or never do</div>
         </div>
         <div class="form-group">
-          <label for="learn_tone">What tone should your agent use?</label>
-          <select id="learn_tone">
-            <option value="professional">Professional</option>
-            <option value="friendly" selected>Friendly</option>
-            <option value="casual">Casual</option>
-            <option value="formal">Formal</option>
-          </select>
-        </div>
-
-        <button type="button" id="generate-prompt-btn" class="btn">Generate System Prompt</button>
-        <div id="generate-spinner" style="display: none; margin-top: 8px; font-size: 13px; color: var(--text-secondary);">Generating...</div>
-      </div>
-
-      <div class="card card-compact">
-        <h3>System Prompt</h3>
-        <div class="form-group">
-          <label for="system_prompt">System prompt sent with every message</label>
-          <textarea id="system_prompt" name="system_prompt" rows="6" placeholder="e.g. You are a friendly assistant named Archie who works for Acme Corp. You help customers find products, answer questions about orders, and resolve support issues. You're upbeat and concise, and you always sign off with a fun fact."><%= systemPrompt %></textarea>
-          <div class="hint">Describe your agent's personality, role, knowledge, and any rules it should follow</div>
+          <label for="context_knowledge">Knowledge Base</label>
+          <textarea id="context_knowledge" name="context_knowledge" rows="3" placeholder="e.g. Our fund size is $50M. Key LPs include Acme Endowment and Smith Family Office. Our typical check size is $500K-$2M."><%= contextKnowledge %></textarea>
+          <div class="hint">Key facts, product info, pricing, domain knowledge your agent should know</div>
         </div>
         <button type="submit" class="btn btn-sm">Save</button>
       </div>
@@ -80,6 +56,33 @@
           <span class="toggle-arrow"></span>
         </summary>
         <div class="integration-body">
+
+      <div class="card card-compact" style="margin: 0 0 16px 0; box-shadow: none; border: 1px solid var(--rule-light);">
+        <h3>System Prompt</h3>
+        <div class="form-group">
+          <label for="system_prompt">Custom system prompt sent with every message</label>
+          <textarea id="system_prompt" name="system_prompt" rows="6" placeholder="e.g. You are a friendly assistant named Archie who works for Acme Corp..."><%= systemPrompt %></textarea>
+          <div class="hint">For power users. The Agent Context fields above are injected automatically — this is for additional custom instructions.</div>
+        </div>
+
+        <details style="margin-bottom: 12px;">
+          <summary style="font-size: 13px; color: var(--accent); cursor: pointer; user-select: none;">Auto-generate from LinkedIn</summary>
+          <div style="padding-top: 12px;">
+            <div class="form-group">
+              <label for="linkedin_url">LinkedIn Profile URL</label>
+              <div style="display: flex; gap: 8px;">
+                <input type="url" id="linkedin_url" placeholder="https://linkedin.com/in/yourname" style="flex: 1;">
+                <button type="button" id="research-btn" class="btn btn-sm" style="white-space: nowrap;">Research me</button>
+              </div>
+            </div>
+            <div id="research-results" style="display: none; margin-bottom: 12px; padding: 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 6px; font-size: 13px;"></div>
+            <button type="button" id="generate-prompt-btn" class="btn btn-sm">Generate System Prompt</button>
+            <div id="generate-spinner" style="display: none; margin-top: 8px; font-size: 13px; color: var(--text-secondary);">Generating...</div>
+          </div>
+        </details>
+
+        <button type="submit" class="btn btn-sm">Save</button>
+      </div>
 
       <div class="card card-compact" style="margin: 0 0 16px 0; box-shadow: none; border: 1px solid var(--rule-light);">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
@@ -240,13 +243,15 @@
   updateUI();
 })();
 
-// --- Learn About You ---
+// --- Generate System Prompt ---
 (function () {
   var researchBtn = document.getElementById("research-btn");
   var generateBtn = document.getElementById("generate-prompt-btn");
   var spinner = document.getElementById("generate-spinner");
   var resultsDiv = document.getElementById("research-results");
   var systemPromptEl = document.getElementById("system_prompt");
+
+  if (!researchBtn || !generateBtn) return;
 
   var researchData = null;
 
@@ -285,14 +290,12 @@
   });
 
   generateBtn.addEventListener("click", function () {
-    var company = document.getElementById("learn_company").value.trim();
-    var role = document.getElementById("learn_role").value.trim();
-    var purpose = document.getElementById("learn_purpose").value.trim();
-    var tone = document.getElementById("learn_tone").value;
+    var company = document.getElementById("context_company").value.trim();
+    var role = document.getElementById("context_user").value.trim();
     var agentName = document.getElementById("agent_name").value.trim();
 
-    if (!company && !role && !purpose && !researchData) {
-      alert("Fill in at least one field or research your profile first.");
+    if (!company && !role && !researchData) {
+      alert("Fill in the Agent Context fields above or research your LinkedIn profile first.");
       return;
     }
 
@@ -306,8 +309,8 @@
         research: researchData || "",
         company: company,
         role: role,
-        agent_purpose: purpose,
-        tone: tone,
+        agent_purpose: "",
+        tone: "friendly",
         agent_name: agentName
       })
     })
