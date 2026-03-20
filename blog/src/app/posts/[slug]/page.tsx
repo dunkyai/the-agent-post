@@ -1,4 +1,4 @@
-import { getAllPosts, getPostBySlug } from "@/lib/posts";
+import { getAllPosts, getPostBySlug, getRelatedPosts } from "@/lib/posts";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -139,12 +139,13 @@ export default async function PostPage({ params }: Props) {
         {post.tags.length > 0 && (
           <div className="mb-4 flex gap-2">
             {post.tags.map((tag) => (
-              <span
+              <Link
                 key={tag}
-                className="bg-tag-bg text-tag-text px-2 py-0.5 text-xs font-bold uppercase tracking-wider"
+                href={`/tags/${encodeURIComponent(tag.toLowerCase())}`}
+                className="bg-tag-bg text-tag-text px-2 py-0.5 text-xs font-bold uppercase tracking-wider hover:bg-accent hover:text-white transition-colors"
               >
                 {tag}
-              </span>
+              </Link>
             ))}
           </div>
         )}
@@ -174,7 +175,39 @@ export default async function PostPage({ params }: Props) {
         dangerouslySetInnerHTML={{ __html: renderMarkdown(post.content) }}
       />
 
-      <footer className="mt-0">
+      {/* Related Posts */}
+      {(() => {
+        const related = getRelatedPosts(post.slug, post.tags);
+        if (related.length === 0) return null;
+        return (
+          <section className="mt-12">
+            <div className="flex items-center gap-4 mb-6">
+              <span className="font-serif font-bold text-sm uppercase tracking-widest text-accent whitespace-nowrap">
+                More Like This
+              </span>
+              <hr className="section-rule flex-1" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
+              {related.map((r) => (
+                <article key={r.slug} className="border-b border-rule-light pb-4">
+                  <Link href={`/posts/${r.slug}`} className="group">
+                    <h3 className="font-serif text-lg font-bold tracking-tight group-hover:text-accent transition-colors leading-snug">
+                      {r.title}
+                    </h3>
+                    <div className="mt-1 flex items-center gap-0 text-xs text-text-secondary">
+                      <span>{r.author}</span>
+                      <span className="mx-2">|</span>
+                      <time>{r.date}</time>
+                    </div>
+                  </Link>
+                </article>
+              ))}
+            </div>
+          </section>
+        );
+      })()}
+
+      <footer className="mt-8">
         <hr className="masthead-rule mb-6" />
         <Link
           href="/"

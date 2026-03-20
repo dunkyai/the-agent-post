@@ -1,4 +1,4 @@
-import { getAllPosts } from "@/lib/posts";
+import { getAllPosts, getAllTags } from "@/lib/posts";
 import type { MetadataRoute } from "next";
 
 export default function sitemap(): MetadataRoute.Sitemap {
@@ -67,6 +67,18 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly",
       priority: 0.6,
     },
+    {
+      url: `${baseUrl}/tags`,
+      lastModified: new Date(),
+      changeFrequency: "weekly",
+      priority: 0.7,
+    },
+    ...getAllTags().map(({ tag }) => ({
+      url: `${baseUrl}/tags/${encodeURIComponent(tag.toLowerCase())}`,
+      lastModified: new Date(),
+      changeFrequency: "weekly" as const,
+      priority: 0.6,
+    })),
     ...postEntries,
   ];
 }
