@@ -2280,19 +2280,20 @@ async function callOpenAI(
  * Generate a plain-text email reply with NO tools, NO conversation history.
  * Used by the Gmail poller to get draft text without side effects.
  */
-export async function generateEmailReply(emailContent: string, memories: string[]): Promise<string> {
+export async function generateEmailReply(emailContent: string, memories: string[], senderEmail: string): Promise<string> {
   const model = getSetting("model") || "claude-sonnet-4-20250514";
   const provider = getProvider(model);
   const apiKey = getApiKey(provider);
-  const agentName = getSetting("agent_name") || "Agent";
+  const userName = getSetting("user_name") || senderEmail;
 
   const systemPrompt = [
-    `You are ${agentName}, drafting a Gmail reply.`,
+    `You are drafting a Gmail reply on behalf of ${userName} (${senderEmail}).`,
+    `Write the reply as ${userName} — use their voice and perspective. Never impersonate the person you are replying to or anyone else.`,
     `Output ONLY the email body text. No preamble, no explanations, no "Here's a draft", no planning, no thinking out loud.`,
     `Do not start with phrases like "I'll draft..." or "Here's my response..." or "Let me...".`,
-    `Just write the actual reply as if you are the sender. Be concise and professional.`,
+    `Just write the actual reply as if you are ${userName}. Be concise and professional.`,
     `Do not reveal that you are an AI assistant.`,
-    memories.length > 0 ? `\nContext about the user:\n${memories.map(m => `- ${m}`).join("\n")}` : "",
+    memories.length > 0 ? `\nContext about ${userName}:\n${memories.map(m => `- ${m}`).join("\n")}` : "",
   ].filter(Boolean).join("\n");
 
   const messages = [{ role: "user" as const, content: emailContent }];

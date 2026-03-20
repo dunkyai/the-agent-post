@@ -1233,7 +1233,7 @@ async function pollGmail(): Promise<void> {
 
         // Generate reply text with no tools — just plain text generation
         const memories = getAllMemories().map(m => m.content);
-        const reply = await generateEmailReply(text, memories);
+        const reply = await generateEmailReply(text, memories, accountId);
 
         // Build reply recipients (reply-all)
         const replyTo = latestFrom;
