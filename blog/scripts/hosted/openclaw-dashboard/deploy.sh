@@ -1,107 +1,158 @@
 #!/bin/bash
 set -euo pipefail
 
+# Deploy OpenClaw dashboard to all instances.
+# Pulls instance list from the provisioning DB on the server — single source of truth.
+#
+# Usage:
+#   ./deploy.sh              # Build, transfer, deploy ALL instances (staging + all active)
+#   ./deploy.sh staging      # Deploy only staging
+#   ./deploy.sh prod         # Deploy only active non-staging instances
+#   ./deploy.sh 99567b24     # Deploy a single instance by ID
+#   ./deploy.sh --restart    # Skip build/transfer, just restart all containers
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/containers.env"
 
-TARGET="${1:-staging}"
 IMAGE="openclaw-dashboard"
+TARGET="${1:-all}"
+SKIP_BUILD=false
 
-# --- Build ---
-echo "Building $IMAGE (linux/amd64)..."
-docker buildx build --platform linux/amd64 -t "$IMAGE" --load "$SCRIPT_DIR"
+if [ "$TARGET" = "--restart" ]; then
+  SKIP_BUILD=true
+  TARGET="all"
+fi
 
-# --- Transfer ---
-echo "Transferring image to $SERVER..."
-docker save "$IMAGE" | gzip | ssh "$SERVER" 'docker load'
+# --- Build & Transfer ---
+if [ "$SKIP_BUILD" = false ]; then
+  echo "Building $IMAGE (linux/amd64)..."
+  docker buildx build --platform linux/amd64 -t "$IMAGE" --load "$SCRIPT_DIR"
 
-# --- Helper to run a container ---
-run_container() {
+  echo "Transferring image to $SERVER..."
+  docker save "$IMAGE" | gzip | ssh "$SERVER" 'docker load'
+fi
+
+# --- Fetch instances from provisioning DB ---
+echo ""
+echo "Fetching instances from provisioning DB..."
+INSTANCES=$(ssh "$SERVER" "sqlite3 -separator '|' $PROVISIONING_DB \"SELECT id, port, gateway_token FROM instances WHERE status='running';\"")
+
+if [ -z "$INSTANCES" ]; then
+  echo "ERROR: No running instances found in provisioning DB"
+  exit 1
+fi
+
+echo "Found instances:"
+while IFS='|' read -r ID PORT TOKEN; do
+  echo "  $ID -> port $PORT"
+done <<< "$INSTANCES"
+echo ""
+
+# --- Filter based on target ---
+filter_instances() {
+  while IFS='|' read -r ID PORT TOKEN; do
+    case "$TARGET" in
+      all)      echo "$ID|$PORT|$TOKEN" ;;
+      staging)  [ "$ID" = "staging" ] && echo "$ID|$PORT|$TOKEN" ;;
+      prod)     [ "$ID" != "staging" ] && echo "$ID|$PORT|$TOKEN" ;;
+      *)        [ "$ID" = "$TARGET" ] && echo "$ID|$PORT|$TOKEN" ;;
+    esac
+  done <<< "$INSTANCES"
+}
+
+FILTERED=$(filter_instances)
+if [ -z "$FILTERED" ]; then
+  echo "ERROR: No instances match target '$TARGET'"
+  exit 1
+fi
+
+COUNT=$(echo "$FILTERED" | wc -l | tr -d ' ')
+
+# --- Confirmation for multi-instance deploys ---
+if [ "$COUNT" -gt 1 ] && [ "$TARGET" != "staging" ]; then
+  echo "About to deploy $COUNT instances."
+  read -p "Continue? (y/N) " -n 1 -r
+  echo ""
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "Aborted."
+    exit 1
+  fi
+fi
+
+# --- Deploy a single container ---
+deploy_instance() {
   local ID=$1 PORT=$2 TOKEN=$3
 
+  echo "--- Deploying openclaw-$ID (port $PORT) ---"
+
   ssh "$SERVER" bash -s <<EOF
+    set -e
+
+    # Stop and remove existing container
     docker stop "openclaw-$ID" 2>/dev/null || true
     docker rm "openclaw-$ID" 2>/dev/null || true
 
     # Create network if it doesn't exist
     docker network inspect "openclaw-net-$ID" >/dev/null 2>&1 || docker network create "openclaw-net-$ID"
 
+    # Connect browser container to this network (ignore if already connected)
+    docker network connect "openclaw-net-$ID" openclaw-browser 2>/dev/null || true
+
     docker run -d \\
       --name "openclaw-$ID" \\
       --network "openclaw-net-$ID" \\
-      -v "openclaw-data-$ID:/data" \\
-      -v "openclaw-sandbox-$ID:/sandbox" \\
-      -e DB_PATH=/data/openclaw.db \\
-      -e PORT=3000 \\
+      --restart unless-stopped \\
+      --add-host=host.docker.internal:host-gateway \\
+      -p "$PORT:3000" \\
+      -v "openclaw-data-$ID:/app/data" \\
+      -v "openclaw-sandbox-$ID:/app/sandbox" \\
       -e GATEWAY_TOKEN="$TOKEN" \\
       -e INSTANCE_ID="$ID" \\
-      -e PROVISIONING_URL=http://host.docker.internal:3500 \\
+      -e PROVISIONING_URL="http://172.17.0.1:3500" \\
       -e GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \\
       -e GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET" \\
       -e SLACK_CLIENT_ID="$SLACK_CLIENT_ID" \\
+      -e SLACK_CLIENT_SECRET="$SLACK_CLIENT_SECRET" \\
+      -e SLACK_SIGNING_SECRET="$SLACK_SIGNING_SECRET" \\
       -e AIRTABLE_CLIENT_ID="$AIRTABLE_CLIENT_ID" \\
       -e AIRTABLE_CLIENT_SECRET="$AIRTABLE_CLIENT_SECRET" \\
       -e NOTION_CLIENT_ID="$NOTION_CLIENT_ID" \\
       -e NOTION_CLIENT_SECRET="$NOTION_CLIENT_SECRET" \\
       -e RESEND_API_KEY="$RESEND_API_KEY" \\
-      -e PROVISIONING_API_SECRET="$PROVISIONING_API_SECRET" \\
-      -p "$PORT:3000" \\
-      --add-host=host.docker.internal:host-gateway \\
-      --restart unless-stopped \\
+      -e BROWSER_SERVICE_URL="http://openclaw-browser:3600" \\
+      -e BROWSER_SERVICE_SECRET="$BROWSER_SERVICE_SECRET" \\
       $IMAGE
 EOF
-  echo "  $ID -> port $PORT"
-}
 
-# --- Health check ---
-health_check() {
-  local PORT=$1
-  sleep 2
-  local STATUS
-  STATUS=$(ssh "$SERVER" "curl -sf http://localhost:$PORT/health | head -c 30" 2>/dev/null || echo "FAIL")
-  if echo "$STATUS" | grep -q '"ok"'; then
-    echo "  Health: OK"
+  # Health check with retry
+  local HEALTHY=false
+  for i in 1 2 3; do
+    sleep 2
+    if ssh "$SERVER" "curl -sf http://localhost:$PORT/health" >/dev/null 2>&1; then
+      HEALTHY=true
+      break
+    fi
+  done
+
+  if [ "$HEALTHY" = true ]; then
+    echo "  ✓ openclaw-$ID healthy"
   else
-    echo "  Health: FAILED ($STATUS)"
+    echo "  ✗ openclaw-$ID FAILED health check!"
     return 1
   fi
 }
 
-# --- Deploy ---
-if [ "$TARGET" = "staging" ]; then
-  echo ""
-  echo "Deploying to STAGING..."
-  run_container "$STAGING_ID" "$STAGING_PORT" "$STAGING_TOKEN"
-  health_check "$STAGING_PORT"
-  echo ""
-  echo "Staging live at https://staging.agents.theagentpost.co"
+# --- Deploy all filtered instances ---
+FAILED=0
+while IFS='|' read -r ID PORT TOKEN; do
+  deploy_instance "$ID" "$PORT" "$TOKEN" || FAILED=$((FAILED + 1))
+done <<< "$FILTERED"
 
-elif [ "$TARGET" = "prod" ]; then
-  echo ""
-  echo "Deploying to PRODUCTION (${#PROD_INSTANCES[@]} instances)..."
-  read -p "Are you sure? (y/N) " -n 1 -r
-  echo ""
-  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Aborted."
-    exit 1
-  fi
-
-  FAILED=0
-  for ENTRY in "${PROD_INSTANCES[@]}"; do
-    IFS=':' read -r ID PORT TOKEN <<< "$ENTRY"
-    run_container "$ID" "$PORT" "$TOKEN"
-    health_check "$PORT" || FAILED=$((FAILED + 1))
-  done
-
-  echo ""
-  if [ "$FAILED" -gt 0 ]; then
-    echo "WARNING: $FAILED instance(s) failed health check!"
-    exit 1
-  else
-    echo "All ${#PROD_INSTANCES[@]} production instances deployed successfully."
-  fi
-
-else
-  echo "Usage: $0 [staging|prod]"
+# --- Summary ---
+echo ""
+if [ "$FAILED" -gt 0 ]; then
+  echo "WARNING: $FAILED instance(s) failed!"
   exit 1
+else
+  echo "All $COUNT instance(s) deployed successfully."
 fi
