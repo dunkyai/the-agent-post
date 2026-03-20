@@ -104,8 +104,8 @@ deploy_instance() {
       --restart unless-stopped \\
       --add-host=host.docker.internal:host-gateway \\
       -p "$PORT:3000" \\
-      -v "openclaw-data-$ID:/app/data" \\
-      -v "openclaw-sandbox-$ID:/app/sandbox" \\
+      -v "openclaw-data-$ID:/data" \\
+      -v "openclaw-sandbox-$ID:/sandbox" \\
       -e GATEWAY_TOKEN="$TOKEN" \\
       -e INSTANCE_ID="$ID" \\
       -e PROVISIONING_URL="http://172.17.0.1:3500" \\
