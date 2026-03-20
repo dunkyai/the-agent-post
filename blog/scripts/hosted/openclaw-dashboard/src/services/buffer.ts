@@ -5,6 +5,7 @@ interface BufferConfig {
   api_key: string;
   organization_id: string;
   organization_name?: string;
+  selected_channels?: string[];
 }
 
 let bufferConfig: BufferConfig | null = null;
@@ -88,6 +89,10 @@ export function isBufferRunning(): boolean {
 
 export function getBufferOrgName(): string | null {
   return bufferConfig?.organization_name || null;
+}
+
+export function getSelectedChannels(): string[] {
+  return bufferConfig?.selected_channels || [];
 }
 
 // --- API wrappers ---
