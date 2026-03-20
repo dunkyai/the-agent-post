@@ -67,6 +67,48 @@ export function getAllPosts(): PostMeta[] {
   );
 }
 
+export function getAllTags(): { tag: string; count: number }[] {
+  const posts = getAllPosts();
+  const tagCounts = new Map<string, number>();
+  for (const post of posts) {
+    for (const tag of post.tags) {
+      const key = tag.toLowerCase();
+      tagCounts.set(key, (tagCounts.get(key) || 0) + 1);
+    }
+  }
+  // Use the original casing from the first occurrence
+  const tagMap = new Map<string, string>();
+  for (const post of posts) {
+    for (const tag of post.tags) {
+      const key = tag.toLowerCase();
+      if (!tagMap.has(key)) tagMap.set(key, tag);
+    }
+  }
+  return Array.from(tagCounts.entries())
+    .map(([key, count]) => ({ tag: tagMap.get(key) || key, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+export function getPostsByTag(tag: string): PostMeta[] {
+  const posts = getAllPosts();
+  const lower = tag.toLowerCase();
+  return posts.filter((p) => p.tags.some((t) => t.toLowerCase() === lower));
+}
+
+export function getRelatedPosts(slug: string, tags: string[], limit = 4): PostMeta[] {
+  const posts = getAllPosts().filter((p) => p.slug !== slug);
+  const tagSet = new Set(tags.map((t) => t.toLowerCase()));
+  const scored = posts.map((p) => ({
+    post: p,
+    overlap: p.tags.filter((t) => tagSet.has(t.toLowerCase())).length,
+  }));
+  return scored
+    .filter((s) => s.overlap > 0)
+    .sort((a, b) => b.overlap - a.overlap || new Date(b.post.sortDate).getTime() - new Date(a.post.sortDate).getTime())
+    .slice(0, limit)
+    .map((s) => s.post);
+}
+
 export function getPostBySlug(slug: string): Post | null {
   const fullPath = path.join(postsDirectory, `${slug}.md`);
   if (!fs.existsSync(fullPath)) return null;

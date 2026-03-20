@@ -113,12 +113,13 @@ export default function PostList({ posts }: { posts: PostMeta[] }) {
               {post.tags.length > 0 && (
                 <div className="mt-2 flex gap-2">
                   {post.tags.map((tag) => (
-                    <span
+                    <Link
                       key={tag}
-                      className="bg-tag-bg text-tag-text px-2 py-0.5 text-xs font-bold uppercase tracking-wider"
+                      href={`/tags/${encodeURIComponent(tag.toLowerCase())}`}
+                      className="bg-tag-bg text-tag-text px-2 py-0.5 text-xs font-bold uppercase tracking-wider hover:bg-accent hover:text-white transition-colors"
                     >
                       {tag}
-                    </span>
+                    </Link>
                   ))}
                 </div>
               )}
