@@ -591,6 +591,25 @@ const MEMORY_TOOLS = [
   },
 ];
 
+const CONTEXT_TOOLS = [
+  {
+    name: "update_context",
+    description: "Update one of the user's structured context fields. Use this during onboarding or when the user shares important context about their company, role, rules, or domain knowledge that should persist across all conversations.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        field: {
+          type: "string",
+          enum: ["context_company", "context_user", "context_rules", "context_knowledge"],
+          description: "Which context field to update: context_company (about their company), context_user (about them), context_rules (rules/guidelines), context_knowledge (key facts/domain knowledge)",
+        },
+        content: { type: "string", description: "The content to save to this context field. This replaces the previous value." },
+      },
+      required: ["field", "content"],
+    },
+  },
+];
+
 // --- Messaging Tools (cross-channel) ---
 
 const SLACK_MESSAGING_TOOLS = [
@@ -1673,6 +1692,15 @@ function executeMemoryTool(toolName: string, input: any): string {
       deleteMemory(input.memory_id);
       return JSON.stringify({ success: true, deleted: mem.content });
     }
+    case "update_context": {
+      const validFields = ["context_company", "context_user", "context_rules", "context_knowledge"];
+      if (!validFields.includes(input.field)) {
+        return JSON.stringify({ error: `Invalid field: ${input.field}. Must be one of: ${validFields.join(", ")}` });
+      }
+      setSetting(input.field, (input.content || "").trim());
+      setSetting("onboarding_complete", "true");
+      return JSON.stringify({ success: true, field: input.field, saved: true });
+    }
     default:
       return JSON.stringify({ error: `Unknown tool: ${toolName}` });
   }
@@ -1836,6 +1864,7 @@ async function callAnthropic(
     { type: "web_search_20250305", name: "web_search" },
     ...SCHEDULING_TOOLS,
     ...MEMORY_TOOLS,
+    ...CONTEXT_TOOLS,
     ...CODE_EXECUTION_TOOLS,
     ...PDF_TOOLS,
     ...BROWSER_TOOLS,
@@ -1937,7 +1966,7 @@ async function callAnthropic(
 
       // Execute each tool and build results
       const toolResults: any[] = [];
-      const memoryTools = ["save_memory", "list_memories", "delete_memory"];
+      const memoryTools = ["save_memory", "list_memories", "delete_memory", "update_context"];
       const codeTools = ["run_command", "read_file", "write_file"];
       const pdfTools = ["pdf_get_fields", "pdf_fill_form", "pdf_read_text"];
       const googleToolNames = [
@@ -2079,6 +2108,7 @@ async function callOpenAI(
   const customTools: any[] = [
     ...SCHEDULING_TOOLS,
     ...MEMORY_TOOLS,
+    ...CONTEXT_TOOLS,
     ...CODE_EXECUTION_TOOLS,
     ...PDF_TOOLS,
     ...BROWSER_TOOLS,
@@ -2134,7 +2164,7 @@ async function callOpenAI(
   );
 
   // Tool dispatch categories
-  const memoryTools = ["save_memory", "list_memories", "delete_memory"];
+  const memoryTools = ["save_memory", "list_memories", "delete_memory", "update_context"];
   const codeTools = ["run_command", "read_file", "write_file"];
   const pdfTools = ["pdf_get_fields", "pdf_fill_form", "pdf_read_text"];
   const googleToolNames = [
@@ -2382,6 +2412,21 @@ export async function processMessage(
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${context}` : context;
   }
 
+  // Inject structured context fields
+  const contextSections: string[] = [];
+  const ctxCompany = getSetting("context_company");
+  if (ctxCompany) contextSections.push(`[Company Context]\n${ctxCompany}`);
+  const ctxUser = getSetting("context_user");
+  if (ctxUser) contextSections.push(`[About the User]\n${ctxUser}`);
+  const ctxRules = getSetting("context_rules");
+  if (ctxRules) contextSections.push(`[Rules & Guidelines]\n${ctxRules}`);
+  const ctxKnowledge = getSetting("context_knowledge");
+  if (ctxKnowledge) contextSections.push(`[Knowledge Base]\n${ctxKnowledge}`);
+  if (contextSections.length > 0) {
+    const structuredContext = contextSections.join("\n\n");
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${structuredContext}` : structuredContext;
+  }
+
   // Inject connected email address and recent email conversations
   try {
     const emailIntegration = getIntegration("email");
@@ -2575,6 +2620,21 @@ If you encounter sensitive data while searching emails, reading documents, or br
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${schedContext}` : schedContext;
     }
   } catch {}
+
+  // Onboarding directive for new users without context
+  if (getSetting("onboarding_complete") !== "true") {
+    const hasContext = getSetting("context_company") || getSetting("context_user") || getSetting("system_prompt");
+    if (!hasContext) {
+      const onboardingDirective = `This is your first conversation with this user. Before doing anything else, introduce yourself briefly and ask them a few quick questions to personalize their experience:
+1. What does your company do?
+2. What's your role?
+3. What would you like me to help you with most?
+4. Any rules I should follow? (e.g., tone, things to avoid)
+
+After they answer, use the update_context tool to save their answers to the appropriate fields (context_company, context_user, context_rules). Also use save_memory for any specific facts worth remembering. Let them know they can always update these in Settings.`;
+      systemPrompt = systemPrompt ? `${systemPrompt}\n\n${onboardingDirective}` : onboardingDirective;
+    }
+  }
 
   const provider = getProvider(model);
   const apiKey = getApiKey(provider);

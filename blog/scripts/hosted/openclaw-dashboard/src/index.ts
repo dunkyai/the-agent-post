@@ -7,6 +7,7 @@ import { decrypt } from "./services/encryption";
 
 // Routes
 import loginRouter from "./routes/login";
+import gettingStartedRouter from "./routes/getting-started";
 import settingsRouter from "./routes/settings";
 import integrationsRouter from "./routes/integrations";
 import chatRouter from "./routes/chat";
@@ -59,6 +60,7 @@ app.use((_req, res, next) => {
 
 // Routes
 app.use(loginRouter);
+app.use(gettingStartedRouter);
 app.use(settingsRouter);
 app.use(integrationsRouter);
 app.use(chatRouter);
@@ -69,7 +71,7 @@ app.use(bugReportRouter);
 
 // Root redirect
 app.get("/", (_req, res) => {
-  res.redirect("/settings");
+  res.redirect("/getting-started");
 });
 
 // Initialize database and start server

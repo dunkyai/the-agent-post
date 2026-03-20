@@ -7,67 +7,11 @@
 
     <form method="POST" action="/settings">
       <div class="card card-compact">
-        <h3>Identity</h3>
-        <div class="form-group">
-          <label for="agent_name">Agent Name</label>
-          <input type="text" id="agent_name" name="agent_name" value="<%= agentName %>" placeholder="e.g. Archie, Nova, Pepper...">
-          <div class="hint">Your agent will introduce itself with this name</div>
-        </div>
-        <div class="form-group">
-          <label for="user_name">Your Name</label>
-          <input type="text" id="user_name" name="user_name" value="<%= userName %>" placeholder="e.g. Elizabeth, Alex...">
-          <div class="hint">Shown in the chat window next to your messages</div>
-        </div>
-        <button type="submit" class="btn btn-sm">Save</button>
-      </div>
-
-      <div class="card card-compact">
-        <h3>Learn About You</h3>
-        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">Help your agent understand who you are. Fill in what you'd like, then generate a tailored system prompt.</p>
-
-        <div class="form-group">
-          <label for="linkedin_url">LinkedIn Profile URL <span style="color: var(--muted); font-weight: normal;">(optional)</span></label>
-          <div style="display: flex; gap: 8px;">
-            <input type="url" id="linkedin_url" placeholder="https://linkedin.com/in/yourname" style="flex: 1;">
-            <button type="button" id="research-btn" class="btn btn-sm" style="white-space: nowrap;">Research me</button>
-          </div>
-          <div class="hint">We'll look up public info to help personalize your agent</div>
-        </div>
-
-        <div id="research-results" style="display: none; margin-bottom: 12px; padding: 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 6px; font-size: 13px;"></div>
-
-        <div class="form-group">
-          <label for="learn_company">What does your company do?</label>
-          <input type="text" id="learn_company" placeholder="e.g. We sell handmade candles online">
-        </div>
-        <div class="form-group">
-          <label for="learn_role">What's your role?</label>
-          <input type="text" id="learn_role" placeholder="e.g. Founder, Marketing Manager, CTO">
-        </div>
-        <div class="form-group">
-          <label for="learn_purpose">What should your agent help with?</label>
-          <textarea id="learn_purpose" rows="2" placeholder="e.g. Answer customer questions, write blog posts, manage social media"></textarea>
-        </div>
-        <div class="form-group">
-          <label for="learn_tone">What tone should your agent use?</label>
-          <select id="learn_tone">
-            <option value="professional">Professional</option>
-            <option value="friendly" selected>Friendly</option>
-            <option value="casual">Casual</option>
-            <option value="formal">Formal</option>
-          </select>
-        </div>
-
-        <button type="button" id="generate-prompt-btn" class="btn">Generate System Prompt</button>
-        <div id="generate-spinner" style="display: none; margin-top: 8px; font-size: 13px; color: var(--text-secondary);">Generating...</div>
-      </div>
-
-      <div class="card card-compact">
         <h3>System Prompt</h3>
         <div class="form-group">
-          <label for="system_prompt">System prompt sent with every message</label>
-          <textarea id="system_prompt" name="system_prompt" rows="6" placeholder="e.g. You are a friendly assistant named Archie who works for Acme Corp. You help customers find products, answer questions about orders, and resolve support issues. You're upbeat and concise, and you always sign off with a fun fact."><%= systemPrompt %></textarea>
-          <div class="hint">Describe your agent's personality, role, knowledge, and any rules it should follow</div>
+          <label for="system_prompt">Custom instructions sent with every message</label>
+          <textarea id="system_prompt" name="system_prompt" rows="6" placeholder="e.g. You are a friendly assistant named Archie who works for Acme Corp..."><%= systemPrompt %></textarea>
+          <div class="hint">For power users. Context fields from Getting Started are injected automatically — this is for additional custom instructions.</div>
         </div>
         <button type="submit" class="btn btn-sm">Save</button>
       </div>
@@ -204,7 +148,6 @@
     badgeEl.textContent = hint.saved ? "API key saved" : "No API key";
   }
 
-  // Clear placeholder dots on focus so user doesn't think they need to delete them
   apiKeyEl.addEventListener("focus", function () {
     if (!apiKeyEl.value) apiKeyEl.placeholder = "";
   });
@@ -220,7 +163,6 @@
     updateUI();
   });
 
-  // Validate temperature and max_tokens on submit
   var form = document.querySelector("form[action='/settings']");
   form.addEventListener("submit", function (e) {
     var temp = parseFloat(document.getElementById("temperature").value);
@@ -238,96 +180,6 @@
   });
 
   updateUI();
-})();
-
-// --- Learn About You ---
-(function () {
-  var researchBtn = document.getElementById("research-btn");
-  var generateBtn = document.getElementById("generate-prompt-btn");
-  var spinner = document.getElementById("generate-spinner");
-  var resultsDiv = document.getElementById("research-results");
-  var systemPromptEl = document.getElementById("system_prompt");
-
-  var researchData = null;
-
-  researchBtn.addEventListener("click", function () {
-    var url = document.getElementById("linkedin_url").value.trim();
-    if (!url) { alert("Enter a LinkedIn URL first."); return; }
-
-    researchBtn.disabled = true;
-    researchBtn.textContent = "Researching...";
-    resultsDiv.style.display = "none";
-
-    fetch("/settings/research", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ linkedin_url: url })
-    })
-    .then(function (res) { return res.json(); })
-    .then(function (data) {
-      researchBtn.disabled = false;
-      researchBtn.textContent = "Research me";
-      if (data.error) {
-        resultsDiv.style.display = "block";
-        resultsDiv.textContent = "Research error: " + data.error;
-        return;
-      }
-      researchData = data.summary;
-      resultsDiv.style.display = "block";
-      resultsDiv.innerHTML = "<strong>Found:</strong> " + data.summary.replace(/\n/g, "<br>");
-    })
-    .catch(function () {
-      researchBtn.disabled = false;
-      researchBtn.textContent = "Research me";
-      resultsDiv.style.display = "block";
-      resultsDiv.textContent = "Research failed. Try again or skip this step.";
-    });
-  });
-
-  generateBtn.addEventListener("click", function () {
-    var company = document.getElementById("learn_company").value.trim();
-    var role = document.getElementById("learn_role").value.trim();
-    var purpose = document.getElementById("learn_purpose").value.trim();
-    var tone = document.getElementById("learn_tone").value;
-    var agentName = document.getElementById("agent_name").value.trim();
-
-    if (!company && !role && !purpose && !researchData) {
-      alert("Fill in at least one field or research your profile first.");
-      return;
-    }
-
-    generateBtn.disabled = true;
-    spinner.style.display = "block";
-
-    fetch("/settings/generate-prompt", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        research: researchData || "",
-        company: company,
-        role: role,
-        agent_purpose: purpose,
-        tone: tone,
-        agent_name: agentName
-      })
-    })
-    .then(function (res) { return res.json(); })
-    .then(function (data) {
-      generateBtn.disabled = false;
-      spinner.style.display = "none";
-      if (data.error) {
-        alert("Generation error: " + data.error);
-        return;
-      }
-      systemPromptEl.value = data.prompt;
-      systemPromptEl.scrollIntoView({ behavior: "smooth", block: "center" });
-    })
-    .catch(function () {
-      generateBtn.disabled = false;
-      spinner.style.display = "none";
-      alert("Generation failed. Check your API key in Advanced Settings.");
-    });
-  });
 })();
 </script>
 <%- include('partials/foot') %>
