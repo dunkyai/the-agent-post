@@ -264,6 +264,14 @@ const guides = [
     time: "10-15 min",
     tags: ["Monitoring", "Observability", "DevOps"],
   },
+  {
+    slug: "openclaw-ubuntu-debian-setup",
+    title: "Setting Up OpenClaw on Linux (Ubuntu/Debian)",
+    description:
+      "Install OpenClaw on Ubuntu or Debian Linux from scratch — Node.js, dependencies, daemon setup, and your first running agent.",
+    time: "10-15 min",
+    tags: ["OpenClaw", "Linux", "Setup"],
+  },
 ];
 
 export default function GuidesPage() {
