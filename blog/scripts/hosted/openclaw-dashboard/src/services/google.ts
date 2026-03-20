@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { getIntegration, upsertIntegration, getSetting, setSetting, getGmailProcessedThread, markGmailThreadProcessed, getAllMemories } from "./db";
+import { getIntegration, upsertIntegration, getSetting, setSetting, getAllMemories } from "./db";
 import { encrypt, decrypt } from "./encryption";
 import { generateEmailReply } from "./ai";
 import { sanitizeEmailContent } from "./email";
@@ -1204,15 +1204,6 @@ async function pollGmail(): Promise<void> {
           continue;
         }
 
-        // Step 3c: Was this thread already processed with the same latest message?
-        // If yes, the user deleted the draft — don't re-create it.
-        // If a new message arrived (different lastMsgId), we'll create a new draft.
-        const processed = getGmailProcessedThread(threadId);
-        if (processed && processed.last_message_id === lastMsgId) {
-          console.log(`Gmail poll: skipped (already processed, draft was deleted) — ${subject}`);
-          continue;
-        }
-
         // Check sender against rules
         if (!isGmailSenderAllowed(latestFrom)) {
           console.log(`Gmail poll: filtered out email from ${latestFrom}`);
@@ -1267,7 +1258,6 @@ async function pollGmail(): Promise<void> {
             continue;
           }
           console.log(`Gmail poll: sent reply to ${latestFrom}`);
-          markGmailThreadProcessed(threadId, lastMsgId, accountId);
         } else {
           const draftResult = JSON.parse(await gmailCreateDraft(replyTo, replySubject, reply, accountId, undefined, replyCc, threadId, latestMessageIdHeader));
           if (draftResult.error) {
@@ -1276,7 +1266,6 @@ async function pollGmail(): Promise<void> {
           }
           console.log(`Gmail poll: drafted reply to ${latestFrom} (draftId: ${draftResult.draftId})`);
           draftThreadIds.add(threadId);
-          markGmailThreadProcessed(threadId, lastMsgId, accountId);
         }
 
       } catch (err: unknown) {
