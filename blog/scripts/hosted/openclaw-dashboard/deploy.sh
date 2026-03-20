@@ -53,9 +53,9 @@ filter_instances() {
   while IFS='|' read -r ID PORT TOKEN; do
     case "$TARGET" in
       all)      echo "$ID|$PORT|$TOKEN" ;;
-      staging)  [ "$ID" = "staging" ] && echo "$ID|$PORT|$TOKEN" ;;
-      prod)     [ "$ID" != "staging" ] && echo "$ID|$PORT|$TOKEN" ;;
-      *)        [ "$ID" = "$TARGET" ] && echo "$ID|$PORT|$TOKEN" ;;
+      staging)  [ "$ID" = "staging" ] && echo "$ID|$PORT|$TOKEN" || true ;;
+      prod)     [ "$ID" != "staging" ] && echo "$ID|$PORT|$TOKEN" || true ;;
+      *)        [ "$ID" = "$TARGET" ] && echo "$ID|$PORT|$TOKEN" || true ;;
     esac
   done <<< "$INSTANCES"
 }
@@ -71,11 +71,15 @@ COUNT=$(echo "$FILTERED" | wc -l | tr -d ' ')
 # --- Confirmation for multi-instance deploys ---
 if [ "$COUNT" -gt 1 ] && [ "$TARGET" != "staging" ]; then
   echo "About to deploy $COUNT instances."
-  read -p "Continue? (y/N) " -n 1 -r
-  echo ""
-  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Aborted."
-    exit 1
+  if [ -t 0 ]; then
+    read -p "Continue? (y/N) " -n 1 -r </dev/tty
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      echo "Aborted."
+      exit 1
+    fi
+  else
+    echo "(Non-interactive — proceeding automatically)"
   fi
 fi
 
