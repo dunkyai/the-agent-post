@@ -1,0 +1,172 @@
+<%- include('partials/head', { title: 'Getting Started' }) %>
+<div class="app">
+  <%- include('partials/nav', { active: 'getting-started' }) %>
+  <div class="main">
+    <h2>Getting Started</h2>
+    <%- include('partials/flash', { flash }) %>
+
+    <form method="POST" action="/getting-started">
+      <div class="card card-compact">
+        <h3>Identity</h3>
+        <div class="form-group">
+          <label for="agent_name">Agent Name</label>
+          <input type="text" id="agent_name" name="agent_name" value="<%= agentName %>" placeholder="e.g. Archie, Nova, Pepper...">
+          <div class="hint">Your agent will introduce itself with this name</div>
+        </div>
+        <div class="form-group">
+          <label for="user_name">Your Name</label>
+          <input type="text" id="user_name" name="user_name" value="<%= userName %>" placeholder="e.g. Elizabeth, Alex...">
+          <div class="hint">Shown in the chat window next to your messages</div>
+        </div>
+      </div>
+
+      <div class="card card-compact">
+        <h3>Agent Context</h3>
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">The more context you provide, the better your agent performs. These fields are automatically included in every conversation.</p>
+
+        <div class="form-group">
+          <label for="context_company">About Your Company</label>
+          <textarea id="context_company" name="context_company" rows="3" placeholder="e.g. We're a seed-stage VC fund that invests in developer tools and infrastructure. We manage a $50M fund and have 23 portfolio companies."><%= contextCompany %></textarea>
+          <div class="hint">What your company does, products, industry, size</div>
+        </div>
+        <div class="form-group">
+          <label for="context_user">About You</label>
+          <textarea id="context_user" name="context_user" rows="3" placeholder="e.g. I'm a GP focused on sourcing deals in the AI/ML space. I also manage LP relations and our quarterly reports."><%= contextUser %></textarea>
+          <div class="hint">Your role, responsibilities, key contacts, working style</div>
+        </div>
+        <div class="form-group">
+          <label for="context_rules">Rules & Guidelines</label>
+          <textarea id="context_rules" name="context_rules" rows="3" placeholder="e.g. Always be professional. Never promise investments or share confidential LP information. Use a warm but concise tone."><%= contextRules %></textarea>
+          <div class="hint">Things your agent should always or never do</div>
+        </div>
+        <div class="form-group">
+          <label for="context_knowledge">Knowledge Base</label>
+          <textarea id="context_knowledge" name="context_knowledge" rows="3" placeholder="e.g. Our fund size is $50M. Key LPs include Acme Endowment and Smith Family Office. Our typical check size is $500K-$2M."><%= contextKnowledge %></textarea>
+          <div class="hint">Key facts, product info, pricing, domain knowledge your agent should know</div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn">Save</button>
+    </form>
+
+    <details class="card card-collapsible" style="margin-top: 20px;">
+      <summary class="integration-toggle">
+        <div class="integration-header">
+          <h3>Auto-fill from LinkedIn</h3>
+        </div>
+        <span class="toggle-arrow"></span>
+      </summary>
+      <div class="integration-body">
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">Research your LinkedIn profile and auto-generate context for your agent.</p>
+        <div class="form-group">
+          <label for="linkedin_url">LinkedIn Profile URL</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="url" id="linkedin_url" placeholder="https://linkedin.com/in/yourname" style="flex: 1;">
+            <button type="button" id="research-btn" class="btn btn-sm" style="white-space: nowrap;">Research me</button>
+          </div>
+        </div>
+        <div id="research-results" style="display: none; margin-bottom: 12px; padding: 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 6px; font-size: 13px;"></div>
+        <button type="button" id="generate-btn" class="btn btn-sm">Generate Context</button>
+        <div id="generate-spinner" style="display: none; margin-top: 8px; font-size: 13px; color: var(--text-secondary);">Generating...</div>
+      </div>
+    </details>
+  </div>
+</div>
+<script>
+(function () {
+  var researchBtn = document.getElementById("research-btn");
+  var generateBtn = document.getElementById("generate-btn");
+  var spinner = document.getElementById("generate-spinner");
+  var resultsDiv = document.getElementById("research-results");
+
+  if (!researchBtn || !generateBtn) return;
+
+  var researchData = null;
+
+  researchBtn.addEventListener("click", function () {
+    var url = document.getElementById("linkedin_url").value.trim();
+    if (!url) { alert("Enter a LinkedIn URL first."); return; }
+
+    researchBtn.disabled = true;
+    researchBtn.textContent = "Researching...";
+    resultsDiv.style.display = "none";
+
+    fetch("/getting-started/research", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ linkedin_url: url })
+    })
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      researchBtn.disabled = false;
+      researchBtn.textContent = "Research me";
+      if (data.error) {
+        resultsDiv.style.display = "block";
+        resultsDiv.textContent = "Research error: " + data.error;
+        return;
+      }
+      researchData = data.summary;
+      resultsDiv.style.display = "block";
+      resultsDiv.innerHTML = "<strong>Found:</strong> " + data.summary.replace(/\n/g, "<br>");
+    })
+    .catch(function () {
+      researchBtn.disabled = false;
+      researchBtn.textContent = "Research me";
+      resultsDiv.style.display = "block";
+      resultsDiv.textContent = "Research failed. Try again or skip this step.";
+    });
+  });
+
+  generateBtn.addEventListener("click", function () {
+    var company = document.getElementById("context_company").value.trim();
+    var role = document.getElementById("context_user").value.trim();
+    var agentName = document.getElementById("agent_name").value.trim();
+
+    if (!company && !role && !researchData) {
+      alert("Fill in the Agent Context fields above or research your LinkedIn profile first.");
+      return;
+    }
+
+    generateBtn.disabled = true;
+    spinner.style.display = "block";
+
+    fetch("/getting-started/generate-prompt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        research: researchData || "",
+        company: company,
+        role: role,
+        agent_purpose: "",
+        tone: "friendly",
+        agent_name: agentName
+      })
+    })
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      generateBtn.disabled = false;
+      spinner.style.display = "none";
+      if (data.error) {
+        alert("Generation error: " + data.error);
+        return;
+      }
+      // Parse the generated prompt and fill context fields
+      var prompt = data.prompt || "";
+      document.getElementById("context_company").value = company || extractSection(prompt, "company") || "";
+      document.getElementById("context_user").value = role || extractSection(prompt, "role") || "";
+      document.getElementById("context_rules").value = extractSection(prompt, "rules") || prompt;
+    })
+    .catch(function () {
+      generateBtn.disabled = false;
+      spinner.style.display = "none";
+      alert("Generation failed. Check your API key in Settings.");
+    });
+  });
+
+  function extractSection(text, type) {
+    // Simple heuristic — the generated prompt is freeform, so just return it as rules/guidelines
+    return "";
+  }
+})();
+</script>
+<%- include('partials/foot') %>
