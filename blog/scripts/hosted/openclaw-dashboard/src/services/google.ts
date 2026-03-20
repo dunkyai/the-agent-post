@@ -1043,7 +1043,6 @@ export async function sheetsListSheets(spreadsheetId: string, accountId?: string
 // --- Gmail Polling ---
 
 let gmailPollInterval: ReturnType<typeof setInterval> | null = null;
-let gmailLastChecked: string | null = null;
 
 export function startGmailPolling(): void {
   stopGmailPolling();
@@ -1054,8 +1053,6 @@ export function startGmailPolling(): void {
   // Find first account with Gmail
   const account = Array.from(googleAccounts.values()).find(a => a.services.includes("gmail"));
   if (!account) return;
-
-  gmailLastChecked = getSetting("gmail_last_checked") || null;
 
   // Poll immediately, then on interval
   pollGmail().catch(err => console.error("Gmail poll error:", err));
@@ -1103,18 +1100,11 @@ async function pollGmail(): Promise<void> {
   const accountId = account.google_email;
 
   try {
-    // Build search query — only Primary tab to avoid promotions/social/updates
-    let query = "in:inbox category:primary";
-    if (gmailLastChecked) {
-      const epoch = Math.floor(new Date(gmailLastChecked).getTime() / 1000);
-      query += ` after:${epoch}`;
-    } else {
-      // First run: only process unread to avoid processing entire inbox history
-      query += " is:unread";
-    }
+    // Search all primary inbox emails — draft dedup prevents re-processing threads that already have drafts
+    const query = "in:inbox category:primary";
 
     console.log(`Gmail poll: searching (${accountId}) q="${query}"`);
-    const params = new URLSearchParams({ q: query, maxResults: "10" });
+    const params = new URLSearchParams({ q: query, maxResults: "20" });
     const res = await googleFetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`,
       {},
@@ -1332,8 +1322,6 @@ async function pollGmail(): Promise<void> {
       }
     }
 
-    gmailLastChecked = new Date().toISOString();
-    setSetting("gmail_last_checked", gmailLastChecked);
   } catch (err: unknown) {
     console.error("Gmail poll error:", err instanceof Error ? err.message : err);
   }
