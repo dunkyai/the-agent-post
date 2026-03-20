@@ -256,6 +256,14 @@ const guides = [
     time: "10-15 min",
     tags: ["MCP", "Google Sheets", "Integrations"],
   },
+  {
+    slug: "monitoring-agent-health-and-performance",
+    title: "Monitoring Agent Health and Performance",
+    description:
+      "Set up health checks, dashboards, alerts, and log streaming to keep your OpenClaw agents running reliably in production.",
+    time: "10-15 min",
+    tags: ["Monitoring", "Observability", "DevOps"],
+  },
 ];
 
 export default function GuidesPage() {
