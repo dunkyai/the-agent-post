@@ -14,6 +14,7 @@ interface PendingRequest {
   done: boolean;
 }
 const pending = new Map<string, PendingRequest>();
+const cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 router.get("/chat", (req: Request, res: Response) => {
   const conversationId = getOrCreateConversation("dashboard", CHAT_EXTERNAL_ID);
@@ -38,6 +39,9 @@ router.post("/chat/message", async (req: Request, res: Response) => {
 
     const sessionId = req.cookies?.openclaw_session || "anon";
     console.log(`[chat] POST from session: ${sessionId.slice(0, 8)}...`);
+    // Cancel any pending cleanup timer from a previous request
+    const oldTimer = cleanupTimers.get(sessionId);
+    if (oldTimer) clearTimeout(oldTimer);
     const state: PendingRequest = { status: "Thinking...", result: null, error: null, done: false };
     pending.set(sessionId, state);
 
@@ -70,8 +74,11 @@ router.post("/chat/message", async (req: Request, res: Response) => {
     }
     state.done = true;
     console.log(`[chat] processMessage completed for ${sessionId.slice(0, 8)}... (result: ${state.result ? "yes" : "no"}, error: ${state.error || "none"})`);
-    // Clean up after 30s
-    setTimeout(() => pending.delete(sessionId), 30_000);
+    // Clean up after 30s (track timer so it can be cancelled by a new request)
+    cleanupTimers.set(sessionId, setTimeout(() => {
+      pending.delete(sessionId);
+      cleanupTimers.delete(sessionId);
+    }, 30_000));
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("Chat error:", msg);
