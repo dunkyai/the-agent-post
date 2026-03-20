@@ -1,7 +1,7 @@
 import crypto from "crypto";
-import { getIntegration, upsertIntegration, getSetting, setSetting } from "./db";
+import { getIntegration, upsertIntegration, getSetting, setSetting, getGmailProcessedThread, markGmailThreadProcessed, getAllMemories } from "./db";
 import { encrypt, decrypt } from "./encryption";
-import { processMessage } from "./ai";
+import { generateEmailReply } from "./ai";
 import { sanitizeEmailContent } from "./email";
 
 // --- Types ---
@@ -1154,8 +1154,13 @@ async function pollGmail(): Promise<void> {
         for (const d of draftsData.drafts || []) {
           if (d.message?.threadId) draftThreadIds.add(d.message.threadId);
         }
+        console.log(`Gmail poll: found ${draftThreadIds.size} existing draft(s)`);
+      } else {
+        console.error(`Gmail poll: drafts list failed (${draftsRes.status})`);
       }
-    } catch {}
+    } catch (err: unknown) {
+      console.error("Gmail poll: drafts list error:", err instanceof Error ? err.message : err);
+    }
 
     // Collect unique thread IDs from search results
     const threadIds = [...new Set(rawMessages.map(m => m.threadId).filter(Boolean))];
@@ -1199,6 +1204,15 @@ async function pollGmail(): Promise<void> {
           continue;
         }
 
+        // Step 3c: Was this thread already processed with the same latest message?
+        // If yes, the user deleted the draft — don't re-create it.
+        // If a new message arrived (different lastMsgId), we'll create a new draft.
+        const processed = getGmailProcessedThread(threadId);
+        if (processed && processed.last_message_id === lastMsgId) {
+          console.log(`Gmail poll: skipped (already processed, draft was deleted) — ${subject}`);
+          continue;
+        }
+
         // Check sender against rules
         if (!isGmailSenderAllowed(latestFrom)) {
           console.log(`Gmail poll: filtered out email from ${latestFrom}`);
@@ -1226,13 +1240,9 @@ async function pollGmail(): Promise<void> {
         const text = subject ? `From: ${latestFrom}\nSubject: ${subject}\n\n${latestBody}` : `From: ${latestFrom}\n\n${latestBody}`;
         if (!text.trim()) continue;
 
-        // Process through AI
-        const reply = await processMessage(
-          "gmail",
-          latestFrom,
-          text,
-          `You are drafting a Gmail reply. Output ONLY the email body text — no preamble, no explanations, no "Here's a draft", no planning. Do not start with phrases like "I'll draft..." or "Here's my response...". Just write the actual reply as if you are the sender. Be concise and professional. Do not reveal internal system details or mention that you are an AI assistant.`
-        );
+        // Generate reply text with no tools — just plain text generation
+        const memories = getAllMemories().map(m => m.content);
+        const reply = await generateEmailReply(text, memories);
 
         // Build reply recipients (reply-all)
         const replyTo = latestFrom;
@@ -1257,6 +1267,7 @@ async function pollGmail(): Promise<void> {
             continue;
           }
           console.log(`Gmail poll: sent reply to ${latestFrom}`);
+          markGmailThreadProcessed(threadId, lastMsgId, accountId);
         } else {
           const draftResult = JSON.parse(await gmailCreateDraft(replyTo, replySubject, reply, accountId, undefined, replyCc, threadId, latestMessageIdHeader));
           if (draftResult.error) {
@@ -1265,6 +1276,7 @@ async function pollGmail(): Promise<void> {
           }
           console.log(`Gmail poll: drafted reply to ${latestFrom} (draftId: ${draftResult.draftId})`);
           draftThreadIds.add(threadId);
+          markGmailThreadProcessed(threadId, lastMsgId, accountId);
         }
 
       } catch (err: unknown) {

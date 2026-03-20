@@ -2276,6 +2276,74 @@ async function callOpenAI(
   return { role: "assistant", content: "Hmmm...this was pretty complex and I hit a tool limit. Could you break this into smaller steps or ask again in a simpler way? For example, instead of asking me to do everything at once, try one piece at a time." };
 }
 
+/**
+ * Generate a plain-text email reply with NO tools, NO conversation history.
+ * Used by the Gmail poller to get draft text without side effects.
+ */
+export async function generateEmailReply(emailContent: string, memories: string[]): Promise<string> {
+  const model = getSetting("model") || "claude-sonnet-4-20250514";
+  const provider = getProvider(model);
+  const apiKey = getApiKey(provider);
+  const agentName = getSetting("agent_name") || "Agent";
+
+  const systemPrompt = [
+    `You are ${agentName}, drafting a Gmail reply.`,
+    `Output ONLY the email body text. No preamble, no explanations, no "Here's a draft", no planning, no thinking out loud.`,
+    `Do not start with phrases like "I'll draft..." or "Here's my response..." or "Let me...".`,
+    `Just write the actual reply as if you are the sender. Be concise and professional.`,
+    `Do not reveal that you are an AI assistant.`,
+    memories.length > 0 ? `\nContext about the user:\n${memories.map(m => `- ${m}`).join("\n")}` : "",
+  ].filter(Boolean).join("\n");
+
+  const messages = [{ role: "user" as const, content: emailContent }];
+
+  if (provider === "anthropic") {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 2048,
+        system: systemPrompt,
+        messages,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Anthropic API error (${res.status}): ${body}`);
+    }
+    const data: any = await res.json();
+    return (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
+  } else {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 2048,
+        temperature: 0.7,
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...messages,
+        ],
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`OpenAI API error (${res.status}): ${body}`);
+    }
+    const data: any = await res.json();
+    return data.choices?.[0]?.message?.content || "";
+  }
+}
+
 export async function processMessage(
   source: string,
   externalId: string,
