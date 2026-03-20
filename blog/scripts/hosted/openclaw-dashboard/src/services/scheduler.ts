@@ -1,4 +1,4 @@
-import { getDueJobs, getScheduledJob, markJobRun } from "./db";
+import { getDueJobs, getScheduledJob, markJobRun, deleteConversation, getOrCreateConversation } from "./db";
 import { processMessage } from "./ai";
 import { getNextRun } from "./cron";
 
@@ -47,12 +47,20 @@ async function executeJob(jobId: number): Promise<void> {
 
   console.log(`Executing scheduled job #${job.id}: ${job.name}`);
 
+  // Clear conversation history so the AI starts fresh each run.
+  // Without this, models (especially GPT-4o) copy previous responses
+  // instead of actually calling tools to gather real data.
+  try {
+    const existingConvId = getOrCreateConversation(job.target_source, job.target_external_id);
+    deleteConversation(existingConvId);
+  } catch {}
+
   try {
     const result = await processMessage(
       job.target_source,
       job.target_external_id,
       job.prompt,
-      `This is a scheduled job execution. Job name: "${job.name}". Schedule: ${job.schedule}.`
+      `This is a scheduled job execution. Job name: "${job.name}". Schedule: ${job.schedule}. IMPORTANT: You MUST use your tools (gmail_search, calendar_list_events, etc.) to gather real, current data before responding. Do NOT generate information from memory or previous responses — always call the relevant tools first and base your response entirely on their results. If a tool returns no data, say so honestly rather than inventing content.`
     );
 
     await deliverResult(job, result);
