@@ -1100,8 +1100,8 @@ async function pollGmail(): Promise<void> {
   const accountId = account.google_email;
 
   try {
-    // Search all primary inbox emails — draft dedup prevents re-processing threads that already have drafts
-    const query = "in:inbox category:primary";
+    // Search all inbox emails — draft/processed dedup prevents re-processing
+    const query = "in:inbox";
 
     console.log(`Gmail poll: searching (${accountId}) q="${query}"`);
     const params = new URLSearchParams({ q: query, maxResults: "20" });
@@ -1157,122 +1157,74 @@ async function pollGmail(): Promise<void> {
       }
     } catch {}
 
-    for (const msgId of messageIds) {
+    // Collect unique thread IDs from search results
+    const threadIds = [...new Set(rawMessages.map(m => m.threadId).filter(Boolean))];
+
+    for (const threadId of threadIds) {
       try {
-        // Fetch full message
-        const msgRes = await googleFetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgId}?format=full`,
+        // Step 1: Fetch the full thread
+        const threadRes = await googleFetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=full`,
           {},
           accountId
         );
-        if (!msgRes.ok) continue;
+        if (!threadRes.ok) continue;
 
-        const msg: any = await msgRes.json();
-        const headers: Record<string, string> = {};
-        for (const h of msg.payload?.headers || []) {
-          headers[h.name.toLowerCase()] = h.value;
+        const threadData: any = await threadRes.json();
+        const threadMsgs = threadData.messages || [];
+        if (threadMsgs.length === 0) continue;
+
+        // Step 2: Get the latest message in the thread
+        const lastMsg = threadMsgs[threadMsgs.length - 1];
+        const lastMsgId = lastMsg.id;
+        const lastHeaders: Record<string, string> = {};
+        for (const h of lastMsg.payload?.headers || []) {
+          lastHeaders[h.name.toLowerCase()] = h.value;
         }
 
-        const from = headers.from || "";
-        const subject = headers.subject || "";
-        const threadId = msg.threadId;
+        const subject = lastHeaders.subject || "";
+        const latestFrom = lastHeaders.from || "";
 
-        // Skip if we already have a draft for this thread
-        if (threadId && draftThreadIds.has(threadId)) {
+        // Step 3a: Does a draft already exist for this thread?
+        if (draftThreadIds.has(threadId)) {
           console.log(`Gmail poll: skipped (draft already exists) — ${subject}`);
-          await markAsRead(msgId, accountId);
+          continue;
+        }
+
+        // Step 3b: Is the latest message from our own account? (already replied)
+        const lastFromEmail = latestFrom.toLowerCase().match(/<([^>]+)>/)?.[1]
+          || latestFrom.toLowerCase().trim();
+        if (lastFromEmail === ownEmail) {
+          console.log(`Gmail poll: skipped (already replied) — ${subject}`);
           continue;
         }
 
         // Check sender against rules
-        if (!isGmailSenderAllowed(from)) {
-          console.log(`Gmail poll: filtered out email from ${from}`);
-          await markAsRead(msgId, accountId);
+        if (!isGmailSenderAllowed(latestFrom)) {
+          console.log(`Gmail poll: filtered out email from ${latestFrom}`);
           continue;
         }
 
-        // Fetch the full thread to get the latest message for proper reply threading
-        let latestFrom = from;
-        let latestTo = headers.to || "";
-        let latestCc = headers.cc || "";
-        let latestMessageId = headers["message-id"] || "";
-        let latestBody = "";
-        let allMessageIds: string[] = [msgId]; // track all message IDs in thread to mark as read
-
-        if (threadId) {
-          try {
-            const threadRes = await googleFetch(
-              `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=full`,
-              {},
-              accountId
-            );
-            if (threadRes.ok) {
-              const threadData: any = await threadRes.json();
-              const threadMsgs = threadData.messages || [];
-
-              // Collect all message IDs in thread for marking as read
-              allMessageIds = threadMsgs.map((m: any) => m.id);
-
-              if (threadMsgs.length > 0) {
-                const lastMsg = threadMsgs[threadMsgs.length - 1];
-                const lastHeaders: Record<string, string> = {};
-                for (const h of lastMsg.payload?.headers || []) {
-                  lastHeaders[h.name.toLowerCase()] = h.value;
-                }
-
-                // Skip if the last message is from our account (already replied)
-                const lastFromEmail = (lastHeaders.from || "").toLowerCase().match(/<([^>]+)>/)?.[1]
-                  || (lastHeaders.from || "").toLowerCase().trim();
-                if (lastFromEmail === ownEmail) {
-                  console.log(`Gmail poll: skipped (already replied) — ${subject}`);
-                  for (const id of allMessageIds) await markAsRead(id, accountId);
-                  continue;
-                }
-
-                // Use the latest message's headers for proper reply threading
-                latestFrom = lastHeaders.from || from;
-                latestTo = lastHeaders.to || latestTo;
-                latestCc = lastHeaders.cc || latestCc;
-                latestMessageId = lastHeaders["message-id"] || latestMessageId;
-
-                // Extract body from the latest message
-                function extractTextFromPart(part: any): string {
-                  let text = "";
-                  if (part.mimeType === "text/plain" && part.body?.data) {
-                    text += Buffer.from(part.body.data, "base64url").toString("utf-8");
-                  }
-                  if (part.parts) {
-                    for (const p of part.parts) text += extractTextFromPart(p);
-                  }
-                  return text;
-                }
-                if (lastMsg.payload) latestBody = extractTextFromPart(lastMsg.payload);
-              }
-            }
-          } catch {}
-        }
-
-        // Fall back to the original message body if thread fetch didn't get one
-        if (!latestBody) {
-          function extractText(part: any): string {
-            let text = "";
-            if (part.mimeType === "text/plain" && part.body?.data) {
-              text += Buffer.from(part.body.data, "base64url").toString("utf-8");
-            }
-            if (part.parts) {
-              for (const p of part.parts) text += extractText(p);
-            }
-            return text;
+        // Extract body from the latest message
+        function extractTextFromPart(part: any): string {
+          let text = "";
+          if (part.mimeType === "text/plain" && part.body?.data) {
+            text += Buffer.from(part.body.data, "base64url").toString("utf-8");
           }
-          if (msg.payload) latestBody = extractText(msg.payload);
+          if (part.parts) {
+            for (const p of part.parts) text += extractTextFromPart(p);
+          }
+          return text;
         }
-
+        let latestBody = lastMsg.payload ? extractTextFromPart(lastMsg.payload) : "";
         latestBody = sanitizeEmailContent(latestBody);
+
+        const latestTo = lastHeaders.to || "";
+        const latestCc = lastHeaders.cc || "";
+        const latestMessageIdHeader = lastHeaders["message-id"] || "";
+
         const text = subject ? `From: ${latestFrom}\nSubject: ${subject}\n\n${latestBody}` : `From: ${latestFrom}\n\n${latestBody}`;
-        if (!text.trim()) {
-          for (const id of allMessageIds) await markAsRead(id, accountId);
-          continue;
-        }
+        if (!text.trim()) continue;
 
         // Process through AI
         const reply = await processMessage(
@@ -1299,26 +1251,24 @@ async function pollGmail(): Promise<void> {
           .join(", ") || undefined;
 
         if (replyMode === "send" && account.services.includes("gmail_send")) {
-          const sendResult = JSON.parse(await gmailSend(replyTo, replySubject, reply, accountId, undefined, replyCc, threadId, latestMessageId));
+          const sendResult = JSON.parse(await gmailSend(replyTo, replySubject, reply, accountId, undefined, replyCc, threadId, latestMessageIdHeader));
           if (sendResult.error) {
             console.error(`Gmail poll: failed to send reply to ${latestFrom}: ${sendResult.error}`);
-            continue; // Don't mark as read — retry next poll
+            continue;
           }
           console.log(`Gmail poll: sent reply to ${latestFrom}`);
         } else {
-          const draftResult = JSON.parse(await gmailCreateDraft(replyTo, replySubject, reply, accountId, undefined, replyCc, threadId, latestMessageId));
+          const draftResult = JSON.parse(await gmailCreateDraft(replyTo, replySubject, reply, accountId, undefined, replyCc, threadId, latestMessageIdHeader));
           if (draftResult.error) {
             console.error(`Gmail poll: failed to create draft for ${latestFrom}: ${draftResult.error}`);
-            continue; // Don't mark as read — retry next poll
+            continue;
           }
           console.log(`Gmail poll: drafted reply to ${latestFrom} (draftId: ${draftResult.draftId})`);
-          if (threadId) draftThreadIds.add(threadId);
+          draftThreadIds.add(threadId);
         }
 
-        // Mark all messages in thread as read after successful draft/send
-        for (const id of allMessageIds) await markAsRead(id, accountId);
       } catch (err: unknown) {
-        console.error(`Gmail poll: error processing message ${msgId}:`, err instanceof Error ? err.message : err);
+        console.error(`Gmail poll: error processing thread ${threadId}:`, err instanceof Error ? err.message : err);
       }
     }
 
