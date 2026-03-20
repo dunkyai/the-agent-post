@@ -1,0 +1,7 @@
+{
+  "slug": "slack-multi-agent-bot",
+  "title": "How to Build a Multi-Agent Slack Bot with OpenClaw",
+  "description": "Step-by-step tutorial to build a Slack bot with multiple AI agents using OpenClaw. Includes router setup, specialist agents, and deployment.",
+  "time": "10-15 min",
+  "tags": ["AI Slack Bot", "Multi-Agent", "OpenClaw"]
+}
