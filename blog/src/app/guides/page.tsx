@@ -272,6 +272,14 @@ const guides = [
     time: "10-15 min",
     tags: ["OpenClaw", "Linux", "Setup"],
   },
+  {
+    slug: "customer-support-agent",
+    title: "Building a Customer Support Agent",
+    description:
+      "Build an AI support agent that triages tickets, answers questions from your knowledge base, and escalates to humans.",
+    time: "10-15 min",
+    tags: ["Customer Support", "Knowledge Base", "Escalation"],
+  },
 ];
 
 export default function GuidesPage() {
