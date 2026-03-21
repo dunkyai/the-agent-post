@@ -40,7 +40,7 @@ import {
 } from "./luma";
 import {
   isTwitterRunning, getTwitterUsername,
-  twitterGetMe, twitterPostTweet, twitterPostThread, twitterDeleteTweet,
+  twitterGetMe, twitterPostTweet, twitterPostThread, twitterGetRecentTweets, twitterDeleteTweet,
 } from "./twitter";
 
 interface AIResponse {
@@ -1235,6 +1235,16 @@ const TWITTER_TOOLS = [
     },
   },
   {
+    name: "twitter_get_recent_tweets",
+    description: "Get your recent tweets from X/Twitter. Returns tweet text, URLs, timestamps, and engagement metrics. Use this to check if a tweet or thread was already posted, or to review recent activity.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        max_results: { type: "number", description: "Number of recent tweets to fetch (5-100, default 10)" },
+      },
+    },
+  },
+  {
     name: "twitter_delete_tweet",
     description: "Delete a tweet by its ID. Only works for tweets posted by the authenticated account.",
     input_schema: {
@@ -1256,6 +1266,8 @@ async function executeTwitterTool(toolName: string, input: any): Promise<string>
         return await twitterPostTweet(input.text, input.reply_to_tweet_id);
       case "twitter_post_thread":
         return await twitterPostThread(input.tweets);
+      case "twitter_get_recent_tweets":
+        return await twitterGetRecentTweets(input.max_results);
       case "twitter_delete_tweet":
         return await twitterDeleteTweet(input.tweet_id);
       default:
@@ -1936,6 +1948,7 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   twitter_get_me: "Checking Twitter profile...",
   twitter_post_tweet: "Posting to X...",
   twitter_post_thread: "Posting thread to X...",
+  twitter_get_recent_tweets: "Checking recent tweets...",
   twitter_delete_tweet: "Deleting a tweet...",
   create_scheduled_job: "Creating a scheduled job...",
   list_scheduled_jobs: "Listing scheduled jobs...",
@@ -2007,6 +2020,7 @@ async function callAnthropic(
   const toolCallLog: string[] = []; // track tool+input fingerprints for loop detection
   const MAX_REPEAT_CALLS = 2; // allow same tool+input at most twice
   let lastScreenshot: string | null = null; // track the most recent screenshot base64
+  let lastTwitterResult: string | null = null; // track last twitter tool result for fallback
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     onStatus?.(getThinkingMessage(round));
@@ -2078,7 +2092,7 @@ async function callAnthropic(
       const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
       const bufferToolNames = ["buffer_list_channels", "buffer_create_post", "buffer_list_posts", "buffer_delete_post"];
       const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
-      const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_delete_tweet"];
+      const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
 
@@ -2142,6 +2156,11 @@ async function callAnthropic(
           if (imgBlock) lastScreenshot = imgBlock.source.data;
         }
 
+        // Track Twitter post results for empty-response fallback
+        if ((toolBlock.name === "twitter_post_tweet" || toolBlock.name === "twitter_post_thread") && typeof result === "string") {
+          lastTwitterResult = result;
+        }
+
         toolResults.push({
           type: "tool_result",
           tool_use_id: toolBlock.id,
@@ -2192,6 +2211,21 @@ async function callAnthropic(
     text = text.replace(/!\[[^\]]*\]\(\s*\)/g, '');
     // Collapse excessive blank lines
     text = text.replace(/\n{3,}/g, '\n\n');
+
+    // If the model returned empty text but we have a Twitter result, build a fallback response
+    if (!text.trim() && lastTwitterResult) {
+      try {
+        const twitterData = JSON.parse(lastTwitterResult);
+        if (twitterData.success && twitterData.thread_url) {
+          const tweetLines = (twitterData.tweets || []).map((t: any, i: number) => `${i + 1}. ${t.url}`).join("\n");
+          text = `Your thread was posted successfully! (${twitterData.count} tweets)\n\n${tweetLines}\n\nThread: ${twitterData.thread_url}`;
+        } else if (twitterData.success && twitterData.tweet_id) {
+          text = `Tweet posted successfully!\n\n${twitterData.url}`;
+        } else if (twitterData.error) {
+          text = `Twitter error: ${twitterData.error}`;
+        }
+      } catch { /* not valid JSON, ignore */ }
+    }
 
     return { role: "assistant", content: text.trim() || "Sorry, I wasn't able to generate a response. Could you try again?" };
   }
@@ -2287,11 +2321,12 @@ async function callOpenAI(
   const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
   const bufferToolNames = ["buffer_list_profiles", "buffer_create_post", "buffer_get_pending", "buffer_get_sent"];
   const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
-  const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_delete_tweet"];
+  const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet"];
 
   const MAX_TOOL_ROUNDS = 25;
   const toolCallLog: string[] = [];
   const MAX_REPEAT_CALLS = 2;
+  let lastTwitterResult: string | null = null; // track last twitter tool result for fallback
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     onStatus?.(getThinkingMessage(round));
@@ -2401,6 +2436,11 @@ async function callOpenAI(
 
         console.log(`Tool result: ${toolName}`, typeof result === "string" ? result.slice(0, 300) : "[multipart content]");
 
+        // Track Twitter post results for empty-response fallback
+        if ((toolName === "twitter_post_tweet" || toolName === "twitter_post_thread") && typeof result === "string") {
+          lastTwitterResult = result;
+        }
+
         // OpenAI tool results must be strings
         const resultStr = typeof result === "string" ? result : JSON.stringify(result);
 
@@ -2421,6 +2461,21 @@ async function callOpenAI(
     text = text.replace(/!\[[^\]]*\]\(\s*\n*!\[([^\]]*)\]\(([^)\s]+)\)\s*\n*\)/g, '![$1]($2)');
     text = text.replace(/!\[[^\]]*\]\(\s*\)/g, '');
     text = text.replace(/\n{3,}/g, '\n\n');
+
+    // If the model returned empty text but we have a Twitter result, build a fallback response
+    if (!text && lastTwitterResult) {
+      try {
+        const twitterData = JSON.parse(lastTwitterResult);
+        if (twitterData.success && twitterData.thread_url) {
+          const tweetLines = (twitterData.tweets || []).map((t: any, i: number) => `${i + 1}. ${t.url}`).join("\n");
+          text = `Your thread was posted successfully! (${twitterData.count} tweets)\n\n${tweetLines}\n\nThread: ${twitterData.thread_url}`;
+        } else if (twitterData.success && twitterData.tweet_id) {
+          text = `Tweet posted successfully!\n\n${twitterData.url}`;
+        } else if (twitterData.error) {
+          text = `Twitter error: ${twitterData.error}`;
+        }
+      } catch { /* not valid JSON, ignore */ }
+    }
 
     return { role: "assistant", content: text || "Sorry, I wasn't able to generate a response. Could you try again?" };
   }
