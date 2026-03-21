@@ -49,6 +49,7 @@ export async function createContainer(opts: {
       `GOOGLE_CLIENT_SECRET=${process.env.GOOGLE_CLIENT_SECRET || ""}`,
       `SLACK_CLIENT_ID=${process.env.SLACK_CLIENT_ID || ""}`,
       `TWITTER_CLIENT_ID=${process.env.TWITTER_CLIENT_ID || ""}`,
+      `TWITTER_CLIENT_SECRET=${process.env.TWITTER_CLIENT_SECRET || ""}`,
     ],
     ExposedPorts: { "3000/tcp": {} },
     HostConfig: {
