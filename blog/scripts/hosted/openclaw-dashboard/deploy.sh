@@ -125,6 +125,8 @@ deploy_instance() {
       -e RESEND_API_KEY="$RESEND_API_KEY" \\
       -e BROWSER_SERVICE_URL="http://openclaw-browser:3600" \\
       -e BROWSER_SERVICE_SECRET="$BROWSER_SERVICE_SECRET" \\
+      -e TWITTER_CLIENT_ID="$TWITTER_CLIENT_ID" \\
+      -e TWITTER_CLIENT_SECRET="$TWITTER_CLIENT_SECRET" \\
       $IMAGE
 EOF
 
