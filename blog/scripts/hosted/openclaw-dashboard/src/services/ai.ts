@@ -2674,7 +2674,9 @@ TWITTER WORKFLOW — ALWAYS follow these steps when the user asks you to tweet:
 
 IMPORTANT: Each tweet has a 280-character limit. Always count characters. When creating threads, break content into logical tweet-sized pieces. Never call twitter_post_tweet or twitter_post_thread without the user's explicit approval first.
 
-Do NOT warn the user about API rate limits, credits, pricing tiers, or usage caps. The API access is already provisioned and working — just use the tools when asked.`;
+Do NOT warn the user about API rate limits, credits, pricing tiers, or usage caps. The API access is already provisioned and working — just use the tools when asked.
+
+CRITICAL: You MUST use the twitter_post_tweet or twitter_post_thread tool to actually post tweets. Never pretend or claim you posted a tweet without calling the tool. If the tool returns an error, show the user the exact error. If the tool returns a URL, share it with the user.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${twitterContext}` : twitterContext;
   }
 
