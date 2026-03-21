@@ -9,6 +9,7 @@ import { buildAirtableOAuthUrl, stopAirtable } from "../services/airtable";
 import { buildNotionOAuthUrl, stopNotion, getNotionWorkspaceName } from "../services/notion";
 import { startBuffer, stopBuffer, testBufferConnection, bufferListChannels, isBufferRunning } from "../services/buffer";
 import { startLuma, stopLuma, testLumaConnection } from "../services/luma";
+import { buildTwitterOAuthUrl, stopTwitter } from "../services/twitter";
 
 const router = Router();
 
@@ -140,6 +141,16 @@ router.get("/integrations", async (req: Request, res: Response) => {
         const li = integrationMap["luma"];
         if (li && li.status === "connected") {
           try { return JSON.parse(decrypt(li.config)).user_name || null; } catch { return null; }
+        }
+        return null;
+      })(),
+    },
+    twitter: {
+      ...(integrationMap["twitter"] || { status: "disconnected", error_message: null }),
+      username: (() => {
+        const ti = integrationMap["twitter"];
+        if (ti && ti.status === "connected") {
+          try { return JSON.parse(decrypt(ti.config)).username || null; } catch { return null; }
         }
         return null;
       })(),
@@ -571,6 +582,41 @@ router.post("/integrations/luma/disconnect", (req: Request, res: Response) => {
   stopLuma();
   upsertIntegration("luma", "{}", "disconnected");
   res.redirect(303, "/integrations?flash=Luma+disconnected");
+});
+
+router.post("/integrations/twitter/connect", (req: Request, res: Response) => {
+  try {
+    const url = buildTwitterOAuthUrl();
+    res.redirect(url);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.redirect(303, "/integrations?flash=Twitter+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/twitter/disconnect", async (req: Request, res: Response) => {
+  // Revoke token at X (fire-and-forget)
+  try {
+    const integration = getIntegration("twitter");
+    if (integration && integration.status === "connected") {
+      const config = JSON.parse(decrypt(integration.config));
+      if (config.access_token) {
+        fetch("https://api.x.com/2/oauth2/revoke", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            token: config.access_token,
+            client_id: process.env.TWITTER_CLIENT_ID || "",
+            token_type_hint: "access_token",
+          }),
+        }).catch(() => {});
+      }
+    }
+  } catch {}
+
+  stopTwitter();
+  upsertIntegration("twitter", "{}", "disconnected");
+  res.redirect(303, "/integrations?flash=Twitter+disconnected");
 });
 
 export default router;

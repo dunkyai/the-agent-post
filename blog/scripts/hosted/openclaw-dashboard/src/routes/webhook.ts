@@ -7,6 +7,7 @@ import { startSlack, handleSlackEvent } from "../services/slack";
 import { isEmailAllowed, sanitizeEmailContent } from "../services/email";
 import { startAirtable } from "../services/airtable";
 import { startNotion } from "../services/notion";
+import { startTwitter } from "../services/twitter";
 
 
 const router = Router();
@@ -258,6 +259,37 @@ router.post("/webhook/notion/tokens", async (req: Request, res: Response) => {
   } catch (err: unknown) {
     console.error("Notion token delivery error:", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "Failed to store Notion tokens" });
+  }
+});
+
+// Twitter/X OAuth — provisioning API delivers tokens here after consent
+router.post("/webhook/twitter/tokens", async (req: Request, res: Response) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (token !== process.env.GATEWAY_TOKEN) {
+    res.sendStatus(401);
+    return;
+  }
+
+  try {
+    const { access_token, refresh_token, expires_in, username, user_id } = req.body;
+
+    const configData = {
+      access_token,
+      refresh_token,
+      token_expiry: new Date(Date.now() + expires_in * 1000).toISOString(),
+      username,
+      user_id,
+    };
+
+    const config = encrypt(JSON.stringify(configData));
+    upsertIntegration("twitter", config, "connected");
+    startTwitter(configData);
+
+    console.log(`Twitter connected (@${username})`);
+    res.json({ ok: true });
+  } catch (err: unknown) {
+    console.error("Twitter token delivery error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Failed to store Twitter tokens" });
   }
 });
 

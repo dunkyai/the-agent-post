@@ -524,4 +524,137 @@ router.get("/notion/callback", async (req, res) => {
   }
 });
 
+// GET /oauth/twitter/callback — X redirects here after user consent
+router.get("/twitter/callback", async (req, res) => {
+  const { code, state, error } = req.query;
+
+  if (error) {
+    try {
+      const statePayload = JSON.parse(
+        Buffer.from(state as string, "base64url").toString()
+      );
+      const instance = store.getInstance(statePayload.instance_id);
+      if (instance) {
+        res.redirect(
+          `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Twitter+connection+cancelled`
+        );
+        return;
+      }
+    } catch {}
+    res.status(400).send("Twitter connection was cancelled.");
+    return;
+  }
+
+  if (!code || !state) {
+    res.status(400).send("Missing code or state parameter");
+    return;
+  }
+
+  let statePayload: { instance_id: string; hmac: string; code_verifier: string };
+  try {
+    statePayload = JSON.parse(
+      Buffer.from(state as string, "base64url").toString()
+    );
+  } catch {
+    res.status(400).send("Invalid state parameter");
+    return;
+  }
+
+  const instance = store.getInstance(statePayload.instance_id);
+  if (!instance) {
+    res.status(404).send("Instance not found");
+    return;
+  }
+
+  // Verify HMAC (prevents state forgery)
+  const expectedHmac = crypto
+    .createHmac("sha256", instance.gatewayToken)
+    .update(instance.id)
+    .digest("hex");
+  if (statePayload.hmac !== expectedHmac) {
+    res.status(403).send("Invalid state signature");
+    return;
+  }
+
+  try {
+    const clientId = process.env.TWITTER_CLIENT_ID!;
+
+    // Exchange authorization code for tokens (X uses PKCE with client_id in body)
+    const tokenRes = await fetch("https://api.x.com/2/oauth2/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code: code as string,
+        grant_type: "authorization_code",
+        client_id: clientId,
+        redirect_uri:
+          "https://api.agents.theagentpost.co/oauth/twitter/callback",
+        code_verifier: statePayload.code_verifier,
+      }),
+    });
+
+    if (!tokenRes.ok) {
+      const body = await tokenRes.text();
+      console.error("Twitter token exchange failed:", body);
+      res.redirect(
+        `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Twitter+token+exchange+failed`
+      );
+      return;
+    }
+
+    const tokens: any = await tokenRes.json();
+
+    // Get user info (username, user_id)
+    const userRes = await fetch(
+      "https://api.x.com/2/users/me?user.fields=username",
+      { headers: { Authorization: `Bearer ${tokens.access_token}` } }
+    );
+    const userData: any = await userRes.json();
+    const username = userData.data?.username || "unknown";
+    const userId = userData.data?.id || "";
+
+    // Deliver tokens to the instance
+    const deliverRes = await fetch(
+      `http://localhost:${instance.port}/webhook/twitter/tokens`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${instance.gatewayToken}`,
+        },
+        body: JSON.stringify({
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          expires_in: tokens.expires_in,
+          username,
+          user_id: userId,
+        }),
+      }
+    );
+
+    if (!deliverRes.ok) {
+      console.error(
+        "Twitter token delivery to instance failed:",
+        await deliverRes.text()
+      );
+      res.redirect(
+        `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Failed+to+deliver+Twitter+tokens`
+      );
+      return;
+    }
+
+    console.log(
+      `Twitter connected for instance ${instance.id} (@${username})`
+    );
+    res.redirect(
+      `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Twitter+connected+successfully`
+    );
+  } catch (err) {
+    console.error("Twitter OAuth callback error:", err);
+    res.redirect(
+      `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Twitter+connection+failed`
+    );
+  }
+});
+
 export default router;
