@@ -137,12 +137,15 @@ router.get("/integrations", async (req: Request, res: Response) => {
     })(),
     luma: {
       ...(integrationMap["luma"] || { status: "disconnected", error_message: null }),
-      user_name: (() => {
+      ...(() => {
         const li = integrationMap["luma"];
         if (li && li.status === "connected") {
-          try { return JSON.parse(decrypt(li.config)).user_name || null; } catch { return null; }
+          try {
+            const cfg = JSON.parse(decrypt(li.config));
+            return { user_name: cfg.user_name || null, calendar_name: cfg.calendar_name || null };
+          } catch { return { user_name: null, calendar_name: null }; }
         }
-        return null;
+        return { user_name: null, calendar_name: null };
       })(),
     },
     twitter: {
@@ -563,11 +566,11 @@ router.post("/integrations/luma/connect", async (req: Request, res: Response) =>
     }
 
     console.log("Luma connect: testing API key");
-    const { user_name } = await testLumaConnection(apiKey);
-    console.log(`Luma connect: test passed (${user_name})`);
+    const { user_name, calendar_name } = await testLumaConnection(apiKey);
+    console.log(`Luma connect: test passed (${user_name}${calendar_name ? `, calendar: ${calendar_name}` : ""})`);
 
-    const config = encrypt(JSON.stringify({ api_key: apiKey, user_name }));
-    startLuma({ api_key: apiKey, user_name });
+    const config = encrypt(JSON.stringify({ api_key: apiKey, user_name, calendar_name }));
+    startLuma({ api_key: apiKey, user_name, calendar_name });
     upsertIntegration("luma", config, "connected");
     res.redirect(303, "/integrations?flash=Luma+connected");
   } catch (err: unknown) {

@@ -516,6 +516,14 @@
                 <code style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px;"><%= luma.user_name || 'Connected' %></code>
               </div>
             </div>
+            <% if (luma.calendar_name) { %>
+            <div style="margin-bottom: 12px;">
+              <label style="font-size: 13px; color: var(--text-secondary);">Calendar</label>
+              <div style="margin-top: 4px;">
+                <code style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px;"><%= luma.calendar_name %></code>
+              </div>
+            </div>
+            <% } %>
             <form method="POST" action="/integrations/luma/disconnect">
               <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
             </form>
