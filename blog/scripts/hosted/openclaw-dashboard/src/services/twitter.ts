@@ -264,6 +264,35 @@ export async function twitterPostThread(tweets: string[]): Promise<string> {
   }
 }
 
+export async function twitterGetRecentTweets(maxResults: number = 10): Promise<string> {
+  if (!twitterConfig) return JSON.stringify({ error: "Twitter is not connected" });
+
+  try {
+    const count = Math.min(Math.max(maxResults, 5), 100); // X API requires 5-100
+    const res = await fetch(
+      `${TWITTER_API}/users/${twitterConfig.user_id}/tweets?max_results=${count}&tweet.fields=created_at,public_metrics,conversation_id`,
+      { headers: await authHeaders() }
+    );
+
+    if (!res.ok) {
+      return JSON.stringify({ error: `Twitter API error (${res.status}): ${await res.text()}` });
+    }
+
+    const data: any = await res.json();
+    const tweets = (data.data || []).map((t: any) => ({
+      id: t.id,
+      text: t.text,
+      created_at: t.created_at,
+      url: `https://x.com/${twitterConfig!.username}/status/${t.id}`,
+      conversation_id: t.conversation_id,
+      metrics: t.public_metrics,
+    }));
+    return JSON.stringify({ tweets, count: tweets.length });
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to get recent tweets" });
+  }
+}
+
 export async function twitterDeleteTweet(tweetId: string): Promise<string> {
   if (!twitterConfig) return JSON.stringify({ error: "Twitter is not connected" });
 

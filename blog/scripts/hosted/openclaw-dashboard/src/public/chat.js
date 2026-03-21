@@ -142,10 +142,17 @@
     div.className = "chat-message " + role;
 
     var avatar = document.createElement("div");
-    avatar.className = "avatar";
+    avatar.className = "avatar" + (role === "assistant" ? " agent-avatar" : "");
     var name = role === "user" ? userName : agentName;
-    avatar.textContent = name.charAt(0);
     avatar.title = name;
+    if (role === "assistant") {
+      var img = document.createElement("img");
+      img.src = "/mascot.webp";
+      img.alt = name;
+      avatar.appendChild(img);
+    } else {
+      avatar.textContent = name.charAt(0);
+    }
 
     var bubble = document.createElement("div");
     bubble.className = "bubble";
@@ -183,7 +190,7 @@
     // Show thinking indicator
     var thinking = document.createElement("div");
     thinking.className = "chat-message assistant thinking-indicator";
-    thinking.innerHTML = '<div class="avatar" title="' + agentName + '">' + agentName.charAt(0) + '</div><div class="bubble thinking-bubble"><span class="spinner"></span> <span class="thinking-text">Thinking...</span></div>';
+    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><span class="spinner"></span> <span class="thinking-text">Thinking...</span></div>';
     messages.appendChild(thinking);
     scrollToBottom();
 
