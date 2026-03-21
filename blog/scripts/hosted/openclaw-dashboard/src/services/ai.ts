@@ -2757,7 +2757,15 @@ After they answer, use the update_context tool to save their answers to the appr
   const conversationId = getOrCreateConversation(source, externalId);
   addMessage(conversationId, "user", text);
 
-  const history = getMessages(conversationId).filter((m) => m.content && m.content.trim());
+  const MAX_HISTORY = 20;
+  let history = getMessages(conversationId).filter((m) => m.content && m.content.trim());
+  if (history.length > MAX_HISTORY) {
+    history = history.slice(-MAX_HISTORY);
+    // Ensure history starts with a user message (API requirement)
+    while (history.length > 0 && history[0].role !== "user") {
+      history.shift();
+    }
+  }
 
   const caller = provider === "anthropic" ? callAnthropic : callOpenAI;
   const response = await caller(model, apiKey, systemPrompt, history, temperature, maxTokens, onStatus);
