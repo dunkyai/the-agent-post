@@ -38,6 +38,10 @@ import {
   lumaListEvents, lumaGetEvent, lumaCreateEvent, lumaUpdateEvent,
   lumaGetGuests, lumaAddGuests, lumaSendInvites,
 } from "./luma";
+import {
+  isTwitterRunning, getTwitterUsername,
+  twitterGetMe, twitterPostTweet, twitterPostThread, twitterDeleteTweet,
+} from "./twitter";
 
 interface AIResponse {
   role: string;
@@ -1195,6 +1199,73 @@ async function executeLumaTool(toolName: string, input: any): Promise<string> {
   }
 }
 
+// --- Twitter/X Tools ---
+
+const TWITTER_TOOLS = [
+  {
+    name: "twitter_get_me",
+    description: "Get your authenticated X/Twitter profile info — username, name, bio, follower count.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "twitter_post_tweet",
+    description: "Post a single tweet on X/Twitter. Max 280 characters. Optionally reply to another tweet by providing reply_to_tweet_id.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        text: { type: "string", description: "The tweet text (max 280 characters)" },
+        reply_to_tweet_id: { type: "string", description: "Tweet ID to reply to (for creating conversations or adding to threads)" },
+      },
+      required: ["text"],
+    },
+  },
+  {
+    name: "twitter_post_thread",
+    description: "Post a thread (tweetstorm) on X/Twitter. Provide an array of tweet texts. Each tweet must be max 280 characters. Tweets are posted in order as a connected thread. Returns URLs for all posted tweets.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        tweets: {
+          type: "array",
+          items: { type: "string" },
+          description: "Array of tweet texts, in order. Each max 280 characters.",
+        },
+      },
+      required: ["tweets"],
+    },
+  },
+  {
+    name: "twitter_delete_tweet",
+    description: "Delete a tweet by its ID. Only works for tweets posted by the authenticated account.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        tweet_id: { type: "string", description: "The ID of the tweet to delete" },
+      },
+      required: ["tweet_id"],
+    },
+  },
+];
+
+async function executeTwitterTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "twitter_get_me":
+        return await twitterGetMe();
+      case "twitter_post_tweet":
+        return await twitterPostTweet(input.text, input.reply_to_tweet_id);
+      case "twitter_post_thread":
+        return await twitterPostThread(input.tweets);
+      case "twitter_delete_tweet":
+        return await twitterDeleteTweet(input.tweet_id);
+      default:
+        return JSON.stringify({ error: `Unknown Twitter tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Twitter operation failed" });
+  }
+}
+
 // --- Public Google Doc Tool (no OAuth needed) ---
 
 const PUBLIC_GDOC_TOOLS = [
@@ -1862,6 +1933,10 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   luma_get_guests: "Checking guest list...",
   luma_add_guests: "Adding guests to event...",
   luma_send_invites: "Sending event invitations...",
+  twitter_get_me: "Checking Twitter profile...",
+  twitter_post_tweet: "Posting to X...",
+  twitter_post_thread: "Posting thread to X...",
+  twitter_delete_tweet: "Deleting a tweet...",
   create_scheduled_job: "Creating a scheduled job...",
   list_scheduled_jobs: "Listing scheduled jobs...",
   delete_scheduled_job: "Deleting a scheduled job...",
@@ -1902,6 +1977,7 @@ async function callAnthropic(
   if (isNotionRunning()) tools.push(...NOTION_TOOLS);
   if (isBufferRunning()) tools.push(...BUFFER_TOOLS);
   if (isLumaRunning()) tools.push(...LUMA_TOOLS);
+  if (isTwitterRunning()) tools.push(...TWITTER_TOOLS);
 
   // Conditionally add Google tools based on connected services
   const googleServices = getConnectedServices();
@@ -2002,6 +2078,7 @@ async function callAnthropic(
       const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
       const bufferToolNames = ["buffer_list_channels", "buffer_create_post", "buffer_list_posts", "buffer_delete_post"];
       const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
+      const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_delete_tweet"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
 
@@ -2052,6 +2129,8 @@ async function callAnthropic(
           result = await executeBufferTool(toolBlock.name, toolBlock.input);
         } else if (lumaToolNames.includes(toolBlock.name)) {
           result = await executeLumaTool(toolBlock.name, toolBlock.input);
+        } else if (twitterToolNames.includes(toolBlock.name)) {
+          result = await executeTwitterTool(toolBlock.name, toolBlock.input);
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input);
         }
@@ -2151,6 +2230,7 @@ async function callOpenAI(
   if (isNotionRunning()) customTools.push(...NOTION_TOOLS);
   if (isBufferRunning()) customTools.push(...BUFFER_TOOLS);
   if (isLumaRunning()) customTools.push(...LUMA_TOOLS);
+  if (isTwitterRunning()) customTools.push(...TWITTER_TOOLS);
   const googleServices = getConnectedServices();
   if (googleServices) {
     if (googleServices.includes("gmail")) {
@@ -2207,6 +2287,7 @@ async function callOpenAI(
   const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
   const bufferToolNames = ["buffer_list_profiles", "buffer_create_post", "buffer_get_pending", "buffer_get_sent"];
   const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
+  const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_delete_tweet"];
 
   const MAX_TOOL_ROUNDS = 25;
   const toolCallLog: string[] = [];
@@ -2312,6 +2393,8 @@ async function callOpenAI(
           result = await executeBufferTool(toolName, toolInput);
         } else if (lumaToolNames.includes(toolName)) {
           result = await executeLumaTool(toolName, toolInput);
+        } else if (twitterToolNames.includes(toolName)) {
+          result = await executeTwitterTool(toolName, toolInput);
         } else {
           result = executeSchedulingTool(toolName, toolInput);
         }
@@ -2568,6 +2651,13 @@ CRITICAL Supabase query rules:
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${bufferContext}` : bufferContext;
   }
 
+  // Inject Twitter/X context
+  if (isTwitterRunning()) {
+    const twitterUser = getTwitterUsername();
+    const twitterContext = `You are connected to X/Twitter${twitterUser ? ` as @${twitterUser}` : ""}. You can post tweets, create threads, and delete tweets using the twitter_* tools. Use twitter_post_tweet for a single tweet (max 280 chars). Use twitter_post_thread for a multi-tweet thread — provide an array of tweet texts and they'll be posted as a connected thread. For scheduling tweets, use the create_scheduled_job tool with a prompt that instructs you to post the tweet/thread at the scheduled time. IMPORTANT: Each tweet has a 280-character limit. Always count characters before posting. When creating threads, break long content into logical tweet-sized pieces.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${twitterContext}` : twitterContext;
+  }
+
   // Inject Luma context
   if (isLumaRunning()) {
     const lumaUser = getLumaUserName();
@@ -2667,7 +2757,15 @@ After they answer, use the update_context tool to save their answers to the appr
   const conversationId = getOrCreateConversation(source, externalId);
   addMessage(conversationId, "user", text);
 
-  const history = getMessages(conversationId).filter((m) => m.content && m.content.trim());
+  const MAX_HISTORY = 20;
+  let history = getMessages(conversationId).filter((m) => m.content && m.content.trim());
+  if (history.length > MAX_HISTORY) {
+    history = history.slice(-MAX_HISTORY);
+    // Ensure history starts with a user message (API requirement)
+    while (history.length > 0 && history[0].role !== "user") {
+      history.shift();
+    }
+  }
 
   const caller = provider === "anthropic" ? callAnthropic : callOpenAI;
   const response = await caller(model, apiKey, systemPrompt, history, temperature, maxTokens, onStatus);

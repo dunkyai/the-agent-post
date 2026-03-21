@@ -218,6 +218,19 @@ async function reconnectIntegrations() {
     console.error("Failed to reconnect Luma:", err instanceof Error ? err.message : err);
   }
 
+  // Twitter
+  try {
+    const twitter = getIntegration("twitter");
+    if (twitter && twitter.status === "connected") {
+      const config = JSON.parse(decrypt(twitter.config));
+      const { startTwitter } = require("./services/twitter");
+      startTwitter(config);
+      console.log(`Twitter reconnected${config.username ? ` (@${config.username})` : ""}`);
+    }
+  } catch (err: unknown) {
+    console.error("Failed to reconnect Twitter:", err instanceof Error ? err.message : err);
+  }
+
   try {
     const googleRows = getGoogleIntegrations();
     for (const row of googleRows) {
