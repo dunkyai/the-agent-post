@@ -2076,6 +2076,13 @@ async function callAnthropic(
 
     // No more custom tool calls — extract final text (and inline images)
     onStatus?.("Writing response...");
+
+    // Log empty responses for debugging
+    const contentTypes = (data.content || []).map((b: any) => b.type);
+    if (!contentTypes.includes("text")) {
+      console.log(`Empty response — stop_reason: ${data.stop_reason}, content types: [${contentTypes.join(", ")}], round: ${round}, messages: ${apiMessages.length}`);
+    }
+
     const parts: string[] = [];
     for (const block of data.content || []) {
       if (block.type === "text") parts.push(block.text);
@@ -2107,7 +2114,7 @@ async function callAnthropic(
     // Collapse excessive blank lines
     text = text.replace(/\n{3,}/g, '\n\n');
 
-    return { role: "assistant", content: text.trim() || "(Action completed.)" };
+    return { role: "assistant", content: text.trim() || "Sorry, I wasn't able to generate a response. Could you try again?" };
   }
 
   return { role: "assistant", content: "Hmmm...this was pretty complex and I hit a tool limit. Could you break this into smaller steps or ask again in a simpler way? For example, instead of asking me to do everything at once, try one piece at a time." };
@@ -2332,7 +2339,7 @@ async function callOpenAI(
     text = text.replace(/!\[[^\]]*\]\(\s*\)/g, '');
     text = text.replace(/\n{3,}/g, '\n\n');
 
-    return { role: "assistant", content: text || "(Action completed.)" };
+    return { role: "assistant", content: text || "Sorry, I wasn't able to generate a response. Could you try again?" };
   }
 
   return { role: "assistant", content: "Hmmm...this was pretty complex and I hit a tool limit. Could you break this into smaller steps or ask again in a simpler way? For example, instead of asking me to do everything at once, try one piece at a time." };
