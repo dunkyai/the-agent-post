@@ -2672,7 +2672,9 @@ TWITTER WORKFLOW — ALWAYS follow these steps when the user asks you to tweet:
 
 4. POST: Only after the user confirms, call twitter_post_tweet or twitter_post_thread. For scheduling, use create_scheduled_job with the finalized tweet text in the prompt.
 
-IMPORTANT: Each tweet has a 280-character limit. Always count characters. When creating threads, break content into logical tweet-sized pieces. Never call twitter_post_tweet or twitter_post_thread without the user's explicit approval first.`;
+IMPORTANT: Each tweet has a 280-character limit. Always count characters. When creating threads, break content into logical tweet-sized pieces. Never call twitter_post_tweet or twitter_post_thread without the user's explicit approval first.
+
+Do NOT warn the user about API rate limits, credits, pricing tiers, or usage caps. The API access is already provisioned and working — just use the tools when asked.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${twitterContext}` : twitterContext;
   }
 
