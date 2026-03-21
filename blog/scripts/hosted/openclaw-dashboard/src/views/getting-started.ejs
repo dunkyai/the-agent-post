@@ -49,39 +49,26 @@
       <button type="submit" class="btn">Save</button>
     </form>
 
-    <details class="card card-collapsible" style="margin-top: 20px;">
-      <summary class="integration-toggle">
-        <div class="integration-header">
-          <h3>Auto-fill from LinkedIn</h3>
+    <div class="card card-compact" style="margin-top: 20px;">
+      <h3>Auto-fill from LinkedIn</h3>
+      <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">Paste your LinkedIn URL and we'll research your profile, generate context, and save it automatically.</p>
+      <div class="form-group">
+        <label for="linkedin_url">LinkedIn Profile URL</label>
+        <div style="display: flex; gap: 8px;">
+          <input type="url" id="linkedin_url" placeholder="https://linkedin.com/in/yourname" style="flex: 1;">
+          <button type="button" id="research-btn" class="btn btn-sm" style="white-space: nowrap;">Research me</button>
         </div>
-        <span class="toggle-arrow"></span>
-      </summary>
-      <div class="integration-body">
-        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">Research your LinkedIn profile and auto-generate context for your agent.</p>
-        <div class="form-group">
-          <label for="linkedin_url">LinkedIn Profile URL</label>
-          <div style="display: flex; gap: 8px;">
-            <input type="url" id="linkedin_url" placeholder="https://linkedin.com/in/yourname" style="flex: 1;">
-            <button type="button" id="research-btn" class="btn btn-sm" style="white-space: nowrap;">Research me</button>
-          </div>
-        </div>
-        <div id="research-results" style="display: none; margin-bottom: 12px; padding: 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 6px; font-size: 13px;"></div>
-        <button type="button" id="generate-btn" class="btn btn-sm">Generate Context</button>
-        <div id="generate-spinner" style="display: none; margin-top: 8px; font-size: 13px; color: var(--text-secondary);">Generating...</div>
       </div>
-    </details>
+      <div id="research-status" style="display: none; margin-top: 8px; font-size: 13px; color: var(--text-secondary);"></div>
+    </div>
   </div>
 </div>
 <script>
 (function () {
   var researchBtn = document.getElementById("research-btn");
-  var generateBtn = document.getElementById("generate-btn");
-  var spinner = document.getElementById("generate-spinner");
-  var resultsDiv = document.getElementById("research-results");
+  var statusDiv = document.getElementById("research-status");
 
-  if (!researchBtn || !generateBtn) return;
-
-  var researchData = null;
+  if (!researchBtn) return;
 
   researchBtn.addEventListener("click", function () {
     var url = document.getElementById("linkedin_url").value.trim();
@@ -89,7 +76,9 @@
 
     researchBtn.disabled = true;
     researchBtn.textContent = "Researching...";
-    resultsDiv.style.display = "none";
+    statusDiv.style.display = "block";
+    statusDiv.style.color = "var(--text-secondary)";
+    statusDiv.textContent = "Researching your LinkedIn profile and generating context...";
 
     fetch("/getting-started/research", {
       method: "POST",
@@ -101,72 +90,25 @@
       researchBtn.disabled = false;
       researchBtn.textContent = "Research me";
       if (data.error) {
-        resultsDiv.style.display = "block";
-        resultsDiv.textContent = "Research error: " + data.error;
+        statusDiv.style.color = "var(--danger)";
+        statusDiv.textContent = "Error: " + data.error;
         return;
       }
-      researchData = data.summary;
-      resultsDiv.style.display = "block";
-      resultsDiv.innerHTML = "<strong>Found:</strong> " + data.summary.replace(/\n/g, "<br>");
+      // Fill the context fields with generated values
+      if (data.context_company) document.getElementById("context_company").value = data.context_company;
+      if (data.context_user) document.getElementById("context_user").value = data.context_user;
+      if (data.context_rules) document.getElementById("context_rules").value = data.context_rules;
+
+      statusDiv.style.color = "var(--success)";
+      statusDiv.textContent = "Context generated and saved! Review the fields above and adjust as needed.";
     })
     .catch(function () {
       researchBtn.disabled = false;
       researchBtn.textContent = "Research me";
-      resultsDiv.style.display = "block";
-      resultsDiv.textContent = "Research failed. Try again or skip this step.";
+      statusDiv.style.color = "var(--danger)";
+      statusDiv.textContent = "Research failed. Check your API key in Settings and try again.";
     });
   });
-
-  generateBtn.addEventListener("click", function () {
-    var company = document.getElementById("context_company").value.trim();
-    var role = document.getElementById("context_user").value.trim();
-    var agentName = document.getElementById("agent_name").value.trim();
-
-    if (!company && !role && !researchData) {
-      alert("Fill in the Agent Context fields above or research your LinkedIn profile first.");
-      return;
-    }
-
-    generateBtn.disabled = true;
-    spinner.style.display = "block";
-
-    fetch("/getting-started/generate-prompt", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        research: researchData || "",
-        company: company,
-        role: role,
-        agent_purpose: "",
-        tone: "friendly",
-        agent_name: agentName
-      })
-    })
-    .then(function (res) { return res.json(); })
-    .then(function (data) {
-      generateBtn.disabled = false;
-      spinner.style.display = "none";
-      if (data.error) {
-        alert("Generation error: " + data.error);
-        return;
-      }
-      // Parse the generated prompt and fill context fields
-      var prompt = data.prompt || "";
-      document.getElementById("context_company").value = company || extractSection(prompt, "company") || "";
-      document.getElementById("context_user").value = role || extractSection(prompt, "role") || "";
-      document.getElementById("context_rules").value = extractSection(prompt, "rules") || prompt;
-    })
-    .catch(function () {
-      generateBtn.disabled = false;
-      spinner.style.display = "none";
-      alert("Generation failed. Check your API key in Settings.");
-    });
-  });
-
-  function extractSection(text, type) {
-    // Simple heuristic — the generated prompt is freeform, so just return it as rules/guidelines
-    return "";
-  }
 })();
 </script>
 <%- include('partials/foot') %>

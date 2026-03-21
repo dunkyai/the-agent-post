@@ -2748,3 +2748,60 @@ Write a clear, concise system prompt (3-8 sentences) that will make the AI assis
   const textBlocks = (data.content || []).filter((b: any) => b.type === "text");
   return textBlocks.map((b: any) => b.text).join("\n") || "Failed to generate prompt.";
 }
+
+export async function generateContext(research: string, agentName: string): Promise<{
+  context_company: string;
+  context_user: string;
+  context_rules: string;
+}> {
+  const model = getSetting("model") || "claude-sonnet-4-20250514";
+  const provider = getProvider(model);
+  const apiKey = getApiKey(provider);
+
+  const prompt = `Based on this LinkedIn research about a user, generate structured context fields for their AI assistant. Return ONLY valid JSON with these three fields — no markdown, no explanation:
+
+{
+  "context_company": "A 2-3 sentence description of what their company does, industry, products, size",
+  "context_user": "A 2-3 sentence description of the user's role, responsibilities, and focus areas",
+  "context_rules": "2-3 practical rules for the AI assistant based on their professional context"
+}
+
+${agentName ? `The AI assistant's name is ${agentName}.` : ""}
+
+LinkedIn research:
+${research}`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 1024,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`API error (${res.status}): ${body}`);
+  }
+
+  const data2: any = await res.json();
+  const textBlocks2 = (data2.content || []).filter((b: any) => b.type === "text");
+  const raw = textBlocks2.map((b: any) => b.text).join("\n");
+
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      context_company: parsed.context_company || "",
+      context_user: parsed.context_user || "",
+      context_rules: parsed.context_rules || "",
+    };
+  } catch {
+    return { context_company: "", context_user: raw, context_rules: "" };
+  }
+}
