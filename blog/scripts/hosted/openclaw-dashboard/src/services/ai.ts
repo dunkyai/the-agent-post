@@ -2670,13 +2670,17 @@ TWITTER WORKFLOW — ALWAYS follow these steps when the user asks you to tweet:
 
 3. CONFIRM: Ask "Ready to post?" (or "Ready to schedule?" if scheduling). Wait for the user to approve, request changes, or cancel.
 
-4. POST: Only after the user confirms, call twitter_post_tweet or twitter_post_thread. For scheduling, use create_scheduled_job with the finalized tweet text in the prompt.
+4. POST: Only after the user confirms, use the correct tool:
+   - Single tweet → call twitter_post_tweet ONCE with the text
+   - Thread (multiple tweets) → call twitter_post_thread ONCE with ALL tweets as an array
+   NEVER call twitter_post_tweet multiple times to create a thread. The twitter_post_thread tool handles threading automatically by chaining replies.
+   For scheduling, use create_scheduled_job with the finalized tweet text in the prompt.
 
 IMPORTANT: Each tweet has a 280-character limit. Always count characters. When creating threads, break content into logical tweet-sized pieces. Never call twitter_post_tweet or twitter_post_thread without the user's explicit approval first.
 
 Do NOT warn the user about API rate limits, credits, pricing tiers, or usage caps. The API access is already provisioned and working — just use the tools when asked.
 
-CRITICAL: You MUST use the twitter_post_tweet or twitter_post_thread tool to actually post tweets. Never pretend or claim you posted a tweet without calling the tool. If the tool returns an error, show the user the exact error. If the tool returns a URL, share it with the user.`;
+CRITICAL: You MUST actually call the twitter_post_tweet or twitter_post_thread tool to post. Never pretend or claim you posted without calling the tool. If the tool returns an error, show the user the exact error. Always share the returned tweet URL(s) with the user.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${twitterContext}` : twitterContext;
   }
 
