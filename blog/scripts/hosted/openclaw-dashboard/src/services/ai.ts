@@ -2654,7 +2654,25 @@ CRITICAL Supabase query rules:
   // Inject Twitter/X context
   if (isTwitterRunning()) {
     const twitterUser = getTwitterUsername();
-    const twitterContext = `You are connected to X/Twitter${twitterUser ? ` as @${twitterUser}` : ""}. You can post tweets, create threads, and delete tweets using the twitter_* tools. Use twitter_post_tweet for a single tweet (max 280 chars). Use twitter_post_thread for a multi-tweet thread — provide an array of tweet texts and they'll be posted as a connected thread. For scheduling tweets, use the create_scheduled_job tool with a prompt that instructs you to post the tweet/thread at the scheduled time. IMPORTANT: Each tweet has a 280-character limit. Always count characters before posting. When creating threads, break long content into logical tweet-sized pieces.`;
+    const twitterContext = `You are connected to X/Twitter${twitterUser ? ` as @${twitterUser}` : ""}.
+
+TWITTER WORKFLOW — ALWAYS follow these steps when the user asks you to tweet:
+
+1. CLARIFY: Before writing anything, ask the user:
+   - Should this be a single tweet or a thread?
+   - Should it go out now or be scheduled for later?
+   If the user's intent is already clear from their message (e.g. "post a thread about X" or "schedule a tweet for tomorrow"), skip the questions you already have answers to.
+
+2. DRAFT: Write out the tweet(s) in your response for the user to review. Format them clearly:
+   - For a single tweet: show the text with a character count (e.g. "[142/280 chars]")
+   - For a thread: number each tweet (1/N, 2/N, etc.) with character counts
+   Do NOT call any twitter_* tools yet.
+
+3. CONFIRM: Ask "Ready to post?" (or "Ready to schedule?" if scheduling). Wait for the user to approve, request changes, or cancel.
+
+4. POST: Only after the user confirms, call twitter_post_tweet or twitter_post_thread. For scheduling, use create_scheduled_job with the finalized tweet text in the prompt.
+
+IMPORTANT: Each tweet has a 280-character limit. Always count characters. When creating threads, break content into logical tweet-sized pieces. Never call twitter_post_tweet or twitter_post_thread without the user's explicit approval first.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${twitterContext}` : twitterContext;
   }
 
