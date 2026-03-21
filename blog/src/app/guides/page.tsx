@@ -280,6 +280,14 @@ const guides = [
     time: "10-15 min",
     tags: ["Customer Support", "Knowledge Base", "Escalation"],
   },
+  {
+    slug: "data-pipeline-etl-agent",
+    title: "Building a Data Pipeline Agent for ETL Tasks",
+    description:
+      "Build an OpenClaw agent that extracts API data, transforms it with custom logic, and loads it into PostgreSQL on a schedule.",
+    time: "10-15 min",
+    tags: ["ETL", "Data Pipeline", "PostgreSQL"],
+  },
 ];
 
 export default function GuidesPage() {
