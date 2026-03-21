@@ -578,15 +578,18 @@ router.get("/twitter/callback", async (req, res) => {
 
   try {
     const clientId = process.env.TWITTER_CLIENT_ID!;
+    const clientSecret = process.env.TWITTER_CLIENT_SECRET!;
 
-    // Exchange authorization code for tokens (X uses PKCE with client_id in body)
+    // Exchange authorization code for tokens (confidential client: Basic auth + PKCE)
     const tokenRes = await fetch("https://api.x.com/2/oauth2/token", {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
+      },
       body: new URLSearchParams({
         code: code as string,
         grant_type: "authorization_code",
-        client_id: clientId,
         redirect_uri:
           "https://api.agents.theagentpost.co/oauth/twitter/callback",
         code_verifier: statePayload.code_verifier,

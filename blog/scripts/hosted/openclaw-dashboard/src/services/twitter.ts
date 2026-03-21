@@ -90,16 +90,24 @@ async function refreshAccessToken(): Promise<string> {
   if (!twitterConfig) throw new Error("Twitter is not connected");
 
   const clientId = process.env.TWITTER_CLIENT_ID;
+  const clientSecret = process.env.TWITTER_CLIENT_SECRET;
   if (!clientId) throw new Error("TWITTER_CLIENT_ID not configured");
+
+  const headers: Record<string, string> = { "Content-Type": "application/x-www-form-urlencoded" };
+  if (clientSecret) {
+    headers.Authorization = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`;
+  }
+
+  const body: Record<string, string> = {
+    grant_type: "refresh_token",
+    refresh_token: twitterConfig.refresh_token,
+  };
+  if (!clientSecret) body.client_id = clientId;
 
   const res = await fetch("https://api.x.com/2/oauth2/token", {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: twitterConfig.refresh_token,
-      client_id: clientId,
-    }),
+    headers,
+    body: new URLSearchParams(body),
   });
 
   if (!res.ok) {
