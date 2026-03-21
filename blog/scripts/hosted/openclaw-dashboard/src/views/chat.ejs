@@ -12,7 +12,11 @@
       <div class="chat-messages" id="chatMessages">
         <% messages.forEach(function(msg) { %>
           <div class="chat-message <%= msg.role %>">
-            <div class="avatar" title="<%= msg.role === 'user' ? userName : agentName %>"><%= msg.role === 'user' ? userName.charAt(0) : agentName.charAt(0) %></div>
+            <% if (msg.role === 'user') { %>
+              <div class="avatar" title="<%= userName %>"><%= userName.charAt(0) %></div>
+            <% } else { %>
+              <div class="avatar agent-avatar" title="<%= agentName %>"><img src="/mascot.webp" alt="<%= agentName %>" /></div>
+            <% } %>
             <div class="bubble"><%= msg.content %></div>
           </div>
         <% }); %>
