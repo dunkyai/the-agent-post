@@ -1776,6 +1776,24 @@ function extractDomain(url?: string): string {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return "a webpage"; }
 }
 
+const THINKING_MESSAGES = [
+  "Thinking...",
+  "Working on it...",
+  "Let me figure this out...",
+  "Processing...",
+  "On it...",
+  "Looking into it...",
+  "Give me a moment...",
+  "Pulling it together...",
+];
+
+function getThinkingMessage(round: number): string {
+  if (round === 0) return THINKING_MESSAGES[Math.floor(Math.random() * THINKING_MESSAGES.length)];
+  // Later rounds = still working messages
+  const laterMessages = ["Still working...", "Almost there...", "Digging deeper...", "Gathering more info...", "Pulling it together..."];
+  return laterMessages[Math.floor(Math.random() * laterMessages.length)];
+}
+
 const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   find_image: (input) => `Searching for images of ${input?.query || "that"}...`,
   browse_webpage: (input) => `Browsing ${extractDomain(input?.url)}...`,
@@ -1915,7 +1933,7 @@ async function callAnthropic(
   let lastScreenshot: string | null = null; // track the most recent screenshot base64
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    onStatus?.("Thinking...");
+    onStatus?.(getThinkingMessage(round));
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -2188,7 +2206,7 @@ async function callOpenAI(
   const MAX_REPEAT_CALLS = 2;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    onStatus?.("Thinking...");
+    onStatus?.(getThinkingMessage(round));
 
     const reqBody: any = {
       model,
