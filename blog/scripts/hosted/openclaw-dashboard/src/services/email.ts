@@ -1,5 +1,5 @@
 import { processMessage } from "./ai";
-import { getIntegration, getSetting, setSetting } from "./db";
+import { getIntegration, getSetting, setSetting, getOrCreateConversation, deleteConversation } from "./db";
 import { decrypt } from "./encryption";
 
 const LOBSTERMAIL_API = "https://api.lobstermail.ai";
@@ -80,7 +80,7 @@ async function pollEmails(): Promise<void> {
   isPolling = true;
 
   try {
-    const params = new URLSearchParams({ unread: "true" });
+    const params = new URLSearchParams();
     if (lastChecked) params.set("since", lastChecked);
 
     const res = await fetch(
@@ -108,7 +108,24 @@ async function pollEmails(): Promise<void> {
 
       const sender = email.from || email.sender || "unknown";
       const subject = email.subject || "";
-      const rawBody = email.preview || (typeof email.body === "string" ? email.body : email.body?.text || email.body?.html || "");
+
+      // List endpoint only returns a truncated preview. Fetch individual email for full body.
+      let rawBody = "";
+      if (emailId && emailConfig) {
+        try {
+          const fullRes = await fetch(
+            `${LOBSTERMAIL_API}/v1/inboxes/${emailConfig.inboxId}/emails/${emailId}`,
+            { headers: { Authorization: `Bearer ${emailConfig.apiToken}` } }
+          );
+          if (fullRes.ok) {
+            const fullEmail: any = await fullRes.json();
+            rawBody = (typeof fullEmail.body === "string" ? fullEmail.body : fullEmail.body?.text || fullEmail.body?.html || "") || fullEmail.preview || "";
+          }
+        } catch {}
+      }
+      if (!rawBody) {
+        rawBody = (typeof email.body === "string" ? email.body : email.body?.text || email.body?.html || "") || email.preview || "";
+      }
       const body = sanitizeEmailContent(rawBody);
       const text = subject ? `Subject: ${subject}\n\n${body}` : body;
       if (!text.trim()) continue;
@@ -122,6 +139,13 @@ async function pollEmails(): Promise<void> {
 
       console.log(`Email poll: processing from ${sender} — "${subject || "(no subject)"}"`);
 
+      // Clear conversation history so the AI processes each email fresh,
+      // without being biased by previous responses (e.g. always creating blog posts).
+      try {
+        const convId = getOrCreateConversation("email", sender);
+        deleteConversation(convId);
+      } catch {}
+
       try {
         const reply = await processMessage(
           "email",
@@ -133,10 +157,21 @@ async function pollEmails(): Promise<void> {
       } catch (err: unknown) {
         console.error("Email processing error:", err instanceof Error ? err.message : err);
       }
+
+      // Update lastChecked to this email's timestamp (not now()) to avoid
+      // skipping emails that arrive between API response and processing.
+      const emailTime: string | undefined = email.receivedAt || email.createdAt || email.date;
+      if (emailTime) {
+        lastChecked = emailTime;
+        setSetting("email_last_checked", emailTime);
+      }
     }
 
-    lastChecked = new Date().toISOString();
-    setSetting("email_last_checked", lastChecked);
+    // Only advance lastChecked to now if no emails were found this cycle
+    if (emails.length === 0) {
+      lastChecked = new Date().toISOString();
+      setSetting("email_last_checked", lastChecked);
+    }
 
     // Keep processed IDs set from growing unbounded
     if (processedEmailIds.size > 500) {
