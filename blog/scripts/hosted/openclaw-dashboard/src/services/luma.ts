@@ -7,16 +7,17 @@ const LUMA_API = "https://public-api.luma.com";
 interface LumaConfig {
   api_key: string;
   user_name?: string;
+  calendar_name?: string;
 }
 
 let lumaConfig: LumaConfig | null = null;
 
 // --- Connection test ---
 
-export async function testLumaConnection(apiKey: string): Promise<{ user_name: string }> {
-  const res = await fetch(`${LUMA_API}/v1/user/get-self`, {
-    headers: { "x-luma-api-key": apiKey, "Content-Type": "application/json" },
-  });
+export async function testLumaConnection(apiKey: string): Promise<{ user_name: string; calendar_name: string }> {
+  const authHeaders = { "x-luma-api-key": apiKey, "Content-Type": "application/json" };
+
+  const res = await fetch(`${LUMA_API}/v1/user/get-self`, { headers: authHeaders });
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) {
       throw new Error("Invalid API key. Make sure you have a Luma Plus subscription and the key is correct.");
@@ -25,7 +26,19 @@ export async function testLumaConnection(apiKey: string): Promise<{ user_name: s
     throw new Error(`Luma API error (${res.status}): ${body}`);
   }
   const data: any = await res.json();
-  return { user_name: data.name || data.email || "Connected" };
+  const user_name = data.name || data.email || "Connected";
+
+  // Fetch calendar name tied to this API key
+  let calendar_name = "";
+  try {
+    const calRes = await fetch(`${LUMA_API}/v1/calendar/get`, { headers: authHeaders });
+    if (calRes.ok) {
+      const calData: any = await calRes.json();
+      calendar_name = calData.calendar?.name || "";
+    }
+  } catch {}
+
+  return { user_name, calendar_name };
 }
 
 // --- Lifecycle ---
@@ -46,6 +59,10 @@ export function isLumaRunning(): boolean {
 
 export function getLumaUserName(): string | null {
   return lumaConfig?.user_name || null;
+}
+
+export function getLumaCalendarName(): string | null {
+  return lumaConfig?.calendar_name || null;
 }
 
 // --- Auth helper ---
