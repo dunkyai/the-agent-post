@@ -113,8 +113,13 @@ router.get("/integrations", async (req: Request, res: Response) => {
     },
     buffer: await (async () => {
       const bi = integrationMap["buffer"];
-      const base = { ...(bi || { status: "disconnected", error_message: null }), organization_name: null as string | null, channels: [] as any[], selected_channels: [] as string[], channels_error: false };
-      if (bi && bi.status === "connected") {
+      const base = { ...(bi || { status: "disconnected", error_message: null }), organization_name: null as string | null, channels: [] as any[], selected_channels: [] as string[], channels_error: false, pending_orgs: [] as { id: string; name: string }[] };
+      if (bi && bi.status === "pending") {
+        try {
+          const pending = JSON.parse(decrypt(bi.config));
+          base.pending_orgs = pending.organizations || [];
+        } catch {}
+      } else if (bi && bi.status === "connected") {
         try {
           const config = JSON.parse(decrypt(bi.config));
           base.organization_name = config.organization_name || null;
@@ -460,17 +465,52 @@ router.post("/integrations/buffer/connect", async (req: Request, res: Response) 
       return;
     }
 
-    const { organization_id, organization_name } = await testBufferConnection(apiKey);
-    const configData = { api_key: apiKey, organization_id, organization_name };
-    const config = encrypt(JSON.stringify(configData));
-    upsertIntegration("buffer", config, "connected");
-    startBuffer(configData);
+    const { organizations } = await testBufferConnection(apiKey);
 
-    res.redirect(303, "/integrations?flash=Buffer+connected+successfully");
+    if (organizations.length === 1) {
+      // Single org — connect directly
+      const configData = { api_key: apiKey, organization_id: organizations[0].id, organization_name: organizations[0].name };
+      const config = encrypt(JSON.stringify(configData));
+      upsertIntegration("buffer", config, "connected");
+      startBuffer(configData);
+      res.redirect(303, "/integrations?flash=Buffer+connected+successfully");
+    } else {
+      // Multiple orgs — store key temporarily and show org picker
+      const pending = encrypt(JSON.stringify({ api_key: apiKey, organizations }));
+      upsertIntegration("buffer", pending, "pending");
+      res.redirect(303, "/integrations?flash=Choose+an+organization");
+    }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Connection failed";
     upsertIntegration("buffer", "{}", "disconnected", message);
     res.redirect(303, "/integrations?flash=" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/buffer/select-org", (req: Request, res: Response) => {
+  try {
+    const integration = getIntegration("buffer");
+    if (!integration || integration.status !== "pending") {
+      res.redirect(303, "/integrations?flash=No+pending+Buffer+connection");
+      return;
+    }
+
+    const pending = JSON.parse(decrypt(integration.config));
+    const selectedOrgId = req.body.organization_id;
+    const org = pending.organizations.find((o: any) => o.id === selectedOrgId);
+    if (!org) {
+      res.redirect(303, "/integrations?flash=Invalid+organization");
+      return;
+    }
+
+    const configData = { api_key: pending.api_key, organization_id: org.id, organization_name: org.name };
+    const config = encrypt(JSON.stringify(configData));
+    upsertIntegration("buffer", config, "connected");
+    startBuffer(configData);
+    res.redirect(303, "/integrations?flash=Buffer+connected+to+" + encodeURIComponent(org.name));
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.redirect(303, "/integrations?flash=Buffer+error:+" + encodeURIComponent(message));
   }
 });
 

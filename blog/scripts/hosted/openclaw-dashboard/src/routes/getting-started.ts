@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { getSetting, setSetting } from "../services/db";
-import { researchUser, generateSystemPrompt } from "../services/ai";
+import { researchUser, generateContext } from "../services/ai";
 
 const router = Router();
 
@@ -36,6 +36,7 @@ router.post("/getting-started", (req: Request, res: Response) => {
   res.redirect(303, "/getting-started?flash=Saved");
 });
 
+// Single endpoint: research LinkedIn → generate context → save to DB → return fields
 router.post("/getting-started/research", async (req: Request, res: Response) => {
   try {
     const { linkedin_url } = req.body;
@@ -43,28 +44,27 @@ router.post("/getting-started/research", async (req: Request, res: Response) => 
       res.json({ error: "LinkedIn URL is required" });
       return;
     }
+
+    // Step 1: Research LinkedIn profile
     const summary = await researchUser(linkedin_url.trim());
-    res.json({ summary });
+
+    // Step 2: Generate structured context from research
+    const agentName = getSetting("agent_name") || "";
+    const context = await generateContext(summary, agentName);
+
+    // Step 3: Save to DB
+    if (context.context_company) setSetting("context_company", context.context_company);
+    if (context.context_user) setSetting("context_user", context.context_user);
+    if (context.context_rules) setSetting("context_rules", context.context_rules);
+
+    res.json({
+      summary,
+      context_company: context.context_company,
+      context_user: context.context_user,
+      context_rules: context.context_rules,
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Research failed";
-    res.json({ error: message });
-  }
-});
-
-router.post("/getting-started/generate-prompt", async (req: Request, res: Response) => {
-  try {
-    const { research, company, role, agent_purpose, tone, agent_name } = req.body;
-    const prompt = await generateSystemPrompt({
-      research: research || "",
-      company: company || "",
-      role: role || "",
-      agentPurpose: agent_purpose || "",
-      tone: tone || "friendly",
-      agentName: agent_name || "",
-    });
-    res.json({ prompt });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Generation failed";
     res.json({ error: message });
   }
 });

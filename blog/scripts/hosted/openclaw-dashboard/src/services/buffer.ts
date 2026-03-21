@@ -38,7 +38,7 @@ async function gql(query: string, variables?: Record<string, any>): Promise<any>
 
 // --- Connection test ---
 
-export async function testBufferConnection(apiKey: string): Promise<{ organization_id: string; organization_name: string }> {
+export async function testBufferConnection(apiKey: string): Promise<{ organizations: { id: string; name: string }[] }> {
   const res = await fetch(BUFFER_API, {
     method: "POST",
     headers: {
@@ -68,7 +68,7 @@ export async function testBufferConnection(apiKey: string): Promise<{ organizati
     throw new Error("No organizations found on this Buffer account");
   }
 
-  return { organization_id: orgs[0].id, organization_name: orgs[0].name || "Connected" };
+  return { organizations: orgs.map((o: any) => ({ id: o.id, name: o.name || "Unnamed" })) };
 }
 
 // --- Lifecycle ---

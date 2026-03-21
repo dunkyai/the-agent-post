@@ -422,14 +422,33 @@
             <h3>Buffer</h3>
             <p>Schedule social media posts</p>
           </div>
-          <span class="status-badge status-<%= buffer.status %>"><%= buffer.status %></span>
+          <span class="status-badge status-<%= buffer.status === 'pending' ? 'disconnected' : buffer.status %>"><%= buffer.status === 'pending' ? 'choose org' : buffer.status %></span>
         </summary>
         <div class="integration-tile-body">
           <% if (buffer.error_message) { %>
             <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= buffer.error_message %></p>
           <% } %>
 
-          <% if (buffer.status === 'connected') { %>
+          <% if (buffer.status === 'pending' && buffer.pending_orgs.length > 0) { %>
+            <p style="font-size: 14px; margin-bottom: 12px;">Your Buffer account has multiple organizations. Choose which one to connect:</p>
+            <form method="POST" action="/integrations/buffer/select-org">
+              <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;">
+                <% buffer.pending_orgs.forEach(function(org, i) { %>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; padding: 8px 12px; border: 1px solid var(--rule-light); border-radius: 6px;">
+                    <input type="radio" name="organization_id" value="<%= org.id %>" <%= i === 0 ? '' : '' %> required>
+                    <span><%= org.name %></span>
+                  </label>
+                <% }); %>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button type="submit" class="btn">Connect</button>
+              </div>
+            </form>
+            <form method="POST" action="/integrations/buffer/disconnect" style="margin-top: 8px;">
+              <button type="submit" class="btn btn-danger btn-sm">Cancel</button>
+            </form>
+
+          <% } else if (buffer.status === 'connected') { %>
             <div style="margin-bottom: 12px;">
               <label style="font-size: 13px; color: var(--text-secondary);">Connected Organization</label>
               <div style="margin-top: 4px;">
