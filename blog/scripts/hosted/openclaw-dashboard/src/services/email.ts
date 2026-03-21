@@ -6,6 +6,8 @@ const LOBSTERMAIL_API = "https://api.lobstermail.ai";
 
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 let lastChecked: string | null = null;
+let isPolling = false;
+const processedEmailIds = new Set<string>();
 let emailConfig: {
   apiToken: string;
   inboxId: string;
@@ -74,6 +76,8 @@ export function startEmail(config: {
 
 async function pollEmails(): Promise<void> {
   if (!emailConfig) return;
+  if (isPolling) return;
+  isPolling = true;
 
   try {
     const params = new URLSearchParams({ unread: "true" });
@@ -92,7 +96,16 @@ async function pollEmails(): Promise<void> {
     const data: any = await res.json();
     const emails = data.data || data.emails || [];
 
+    if (emails.length > 0) {
+      console.log(`Email poll: ${emails.length} email(s) found`);
+    }
+
     for (const email of emails) {
+      const emailId = email.id || email.messageId;
+      if (emailId && processedEmailIds.has(emailId)) {
+        continue;
+      }
+
       const sender = email.from || email.sender || "unknown";
       const subject = email.subject || "";
       const rawBody = email.preview || (typeof email.body === "string" ? email.body : email.body?.text || email.body?.html || "");
@@ -105,12 +118,16 @@ async function pollEmails(): Promise<void> {
         continue;
       }
 
+      if (emailId) processedEmailIds.add(emailId);
+
+      console.log(`Email poll: processing from ${sender} — "${subject || "(no subject)"}"`);
+
       try {
         const reply = await processMessage(
           "email",
           sender,
           text,
-          `You are responding via email through LobsterMail. Do not reveal your email address in the reply.`
+          `You are responding via email through LobsterMail. Do not reveal your email address in the reply. IMPORTANT: Follow the sender's instructions exactly. If they ask you to post to a specific platform (LinkedIn, Twitter, etc.) via Buffer, use the buffer_* tools — do NOT create a document or blog post unless explicitly asked.`
         );
         await sendReply(sender, subject, reply);
       } catch (err: unknown) {
@@ -120,8 +137,17 @@ async function pollEmails(): Promise<void> {
 
     lastChecked = new Date().toISOString();
     setSetting("email_last_checked", lastChecked);
+
+    // Keep processed IDs set from growing unbounded
+    if (processedEmailIds.size > 500) {
+      const idsArray = Array.from(processedEmailIds);
+      processedEmailIds.clear();
+      for (const id of idsArray.slice(-200)) processedEmailIds.add(id);
+    }
   } catch (err: unknown) {
     console.error("Email poll error:", err instanceof Error ? err.message : err);
+  } finally {
+    isPolling = false;
   }
 }
 
@@ -229,6 +255,8 @@ export function stopEmail(): void {
   }
   emailConfig = null;
   lastChecked = null;
+  isPolling = false;
+  processedEmailIds.clear();
   console.log("Email polling stopped");
 }
 
