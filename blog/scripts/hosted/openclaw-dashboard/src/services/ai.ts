@@ -11,7 +11,7 @@ import {
   calendarListEvents, calendarCreateEvent, calendarUpdateEvent,
   driveSearch, driveReadFile, extractDriveFileId,
   contactsSearch,
-  docsCreate, docsRead, docsAppend, docsInsert, docsSuggestEdit,
+  docsCreate, docsRead, docsAppend, docsInsert, docsSuggestEdit, docsReplaceText,
   sheetsCreate, sheetsRead, sheetsWrite, sheetsAppend, sheetsListSheets,
 } from "./google";
 import { sendSlackMessage, isSlackRunning, getChannelMembers } from "./slack";
@@ -1601,6 +1601,22 @@ const GOOGLE_DOCS_TOOLS = [
       required: ["document_id", "old_text", "new_text"],
     },
   },
+  {
+    name: "docs_replace_text",
+    description: "Find and replace all occurrences of a text string in a Google Doc. Use this for bulk text replacements like removing emojis, fixing typos across the document, or renaming terms. Returns the number of occurrences replaced.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        document_id: { type: "string", description: "The Google Docs document ID" },
+        find_text: { type: "string", description: "The text to find (all occurrences will be replaced)" },
+        replace_text: { type: "string", description: "The replacement text (use empty string to delete the found text)" },
+        match_case: { type: "boolean", description: "Whether to match case (default: true)" },
+        tab_id: { type: "string", description: "Tab ID to restrict replacement to (from docs_read). Omit to replace in all tabs." },
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
+      required: ["document_id", "find_text", "replace_text"],
+    },
+  },
 ];
 
 const GOOGLE_SHEETS_TOOLS = [
@@ -1759,6 +1775,8 @@ async function executeGoogleTool(toolName: string, input: any): Promise<string> 
         return await docsInsert(input.document_id, input.text, input.index, input.tab_id, acct);
       case "docs_suggest_edit":
         return await docsSuggestEdit(input.document_id, input.old_text, input.new_text, input.tab_id, acct);
+      case "docs_replace_text":
+        return await docsReplaceText(input.document_id, input.find_text, input.replace_text, input.match_case ?? true, input.tab_id, acct);
       case "sheets_create":
         return await sheetsCreate(input.title, input.sheet_titles, acct);
       case "sheets_read":
@@ -1935,6 +1953,7 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   docs_append: "Editing a document...",
   docs_insert: "Editing a document...",
   docs_suggest_edit: "Suggesting edits...",
+  docs_replace_text: "Replacing text...",
   sheets_create: "Creating a spreadsheet...",
   sheets_read: "Reading a spreadsheet...",
   sheets_write: "Writing to a spreadsheet...",
@@ -2103,7 +2122,7 @@ async function callAnthropic(
         "calendar_list_events", "calendar_create_event", "calendar_update_event",
         "drive_search", "drive_read_file", "drive_open_url",
         "contacts_search",
-        "docs_create", "docs_read", "docs_append", "docs_insert", "docs_suggest_edit",
+        "docs_create", "docs_read", "docs_append", "docs_insert", "docs_suggest_edit", "docs_replace_text",
         "sheets_create", "sheets_read", "sheets_write", "sheets_append", "sheets_list_sheets",
       ];
       const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
@@ -2332,7 +2351,7 @@ async function callOpenAI(
     "calendar_list_events", "calendar_create_event", "calendar_update_event",
     "drive_search", "drive_read_file", "drive_open_url",
     "contacts_search",
-    "docs_create", "docs_read", "docs_append", "docs_insert", "docs_suggest_edit",
+    "docs_create", "docs_read", "docs_append", "docs_insert", "docs_suggest_edit", "docs_replace_text",
     "sheets_create", "sheets_read", "sheets_write", "sheets_append", "sheets_list_sheets",
   ];
   const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
