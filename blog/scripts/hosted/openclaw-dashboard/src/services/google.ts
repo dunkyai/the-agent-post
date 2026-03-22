@@ -612,15 +612,15 @@ export async function driveReadFile(fileId: string, accountId?: string): Promise
   if (!contentRes.ok) return JSON.stringify({ error: `Failed to read file (${contentRes.status})` });
 
   const text = await contentRes.text();
-  const truncated = text.length > 50000;
+  const truncated = text.length > 200000;
   return JSON.stringify({
     id: meta.id,
     name: meta.name,
     mimeType: meta.mimeType,
-    content: text.slice(0, 50000),
+    content: text.slice(0, 200000),
     total_chars: text.length,
     truncated,
-    ...(truncated ? { note: `File is ${text.length} characters. Only the first 50,000 are shown.` } : {}),
+    ...(truncated ? { note: `File is ${text.length} characters. Only the first 200,000 are shown.` } : {}),
   });
 }
 
@@ -839,14 +839,14 @@ export async function docsRead(documentId: string, accountId?: string): Promise<
 
   if (doc.body?.content) extractText(doc.body.content);
 
-  const truncated = text.length > 50000;
+  const truncated = text.length > 200000;
   return JSON.stringify({
     documentId: doc.documentId,
     title: doc.title,
-    content: text.slice(0, 50000),
+    content: text.slice(0, 200000),
     total_chars: text.length,
     truncated,
-    ...(truncated ? { note: `Document is ${text.length} characters. Only the first 50,000 are shown. Content at the end of the document is not visible here.` } : {}),
+    ...(truncated ? { note: `Document is ${text.length} characters. Only the first 200,000 are shown. Content at the end of the document is not visible here.` } : {}),
     revisionId: doc.revisionId,
   });
 }
@@ -883,7 +883,7 @@ export async function docsAppend(documentId: string, text: string, accountId?: s
     return JSON.stringify({ error: err.error?.message || `Append failed (${res.status})` });
   }
 
-  return JSON.stringify({ success: true, documentId, appended_chars: text.length, note: "Text was appended at the end of the document. If the document is longer than 50,000 characters, docs_read may not show the appended content due to truncation — but it IS there." });
+  return JSON.stringify({ success: true, documentId, appended_chars: text.length, note: "Text was appended at the end of the document. If the document is longer than 200,000 characters, docs_read may not show the appended content due to truncation — but it IS there." });
 }
 
 export async function docsInsert(documentId: string, text: string, index: number, accountId?: string): Promise<string> {
