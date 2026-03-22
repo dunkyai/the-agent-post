@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { processMessage } from "./ai";
-import { getSetting } from "./db";
+import { getSetting, getOrCreateConversation, deleteConversation } from "./db";
 import { decrypt } from "./encryption";
 import { isAudioMimeType, transcribeAudio } from "./transcription";
 
@@ -122,8 +122,19 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
   text = text.replace(new RegExp(`<@${slackConfig.bot_user_id}>`, "g"), "").trim();
   if (!text && audioFiles.length === 0) return;
 
+  // Handle conversation reset commands
+  const resetPattern = /^(reset|start over|new (project|conversation|chat|topic)|clear (history|context|conversation))$/i;
+  if (resetPattern.test(text.trim())) {
+    try {
+      const convId = getOrCreateConversation("slack", externalId);
+      deleteConversation(convId);
+      await sendSlackMessage(channelId, "Conversation cleared! Starting fresh.", threadTs);
+    } catch {}
+    return;
+  }
+
   try {
-    const reply = await processMessage("slack", externalId, text, "You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. Keep messages concise and conversational — Slack is not email.");
+    const reply = await processMessage("slack", externalId, text, "You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. Keep messages concise and conversational — Slack is not email. Always follow the user's formatting and style preferences (e.g. if they ask for no emojis, stop using emojis).");
     await sendSlackMessage(channelId, reply, threadTs);
   } catch (err: unknown) {
     const errMessage = err instanceof Error ? err.message : "Unknown error";
