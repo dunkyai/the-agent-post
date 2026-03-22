@@ -135,7 +135,7 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
   }
 
   try {
-    const reply = await processMessage("slack", externalId, text, "You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. Keep messages concise and conversational — Slack is not email. Always follow the user's formatting and style preferences (e.g. if they ask for no emojis, stop using emojis).");
+    const reply = await processMessage("slack", externalId, text, "You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. Be BRIEF. This is Slack, not email — keep replies short (1-3 sentences when possible). No preamble, no filler, no restating the question. Lead with the answer. Only elaborate if the user asks for more detail. Always follow the user's formatting and style preferences (e.g. if they ask for no emojis, stop using emojis).");
     await sendSlackMessage(channelId, reply, threadTs);
   } catch (err: unknown) {
     const errMessage = err instanceof Error ? err.message : "Unknown error";
