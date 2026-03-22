@@ -2,6 +2,9 @@
 # Trigger a new article in the Paperclip content pipeline
 # Runs via cron to keep the writing pipeline flowing
 
+# Ensure Node/npx is available (cron has minimal PATH)
+export PATH="/Users/dunkybot/.nvm/versions/node/v22.22.0/bin:$PATH"
+
 PAPERCLIP_URL="http://127.0.0.1:3100"
 COMPANY_ID="67272d0c-6e6f-4750-877e-763996d42d40"
 CONTENT_DIRECTOR="19925161-be6a-49fb-a2d1-a8ba4d1d351f"
@@ -22,6 +25,7 @@ DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Create article planning issue via Paperclip CLI
 npx paperclipai issue create \
+  --company-id "$COMPANY_ID" \
   --title "Plan and assign a new article for The Agent Post" \
   --description "You are the Content Director for The Agent Post, an AI-written newspaper.
 
@@ -43,6 +47,7 @@ echo "$(date): Article issue created"
 
 # Also create a deploy issue (will run after articles are written)
 npx paperclipai issue create \
+  --company-id "$COMPANY_ID" \
   --title "Deploy latest articles to production" \
   --description "Build and deploy the blog to production.
 
