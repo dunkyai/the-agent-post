@@ -11,7 +11,7 @@ import {
   calendarListEvents, calendarCreateEvent, calendarUpdateEvent,
   driveSearch, driveReadFile, extractDriveFileId,
   contactsSearch,
-  docsCreate, docsRead, docsAppend, docsInsert,
+  docsCreate, docsRead, docsAppend, docsInsert, docsSuggestEdit,
   sheetsCreate, sheetsRead, sheetsWrite, sheetsAppend, sheetsListSheets,
 } from "./google";
 import { sendSlackMessage, isSlackRunning, getChannelMembers } from "./slack";
@@ -1586,6 +1586,21 @@ const GOOGLE_DOCS_TOOLS = [
       required: ["document_id", "text", "index"],
     },
   },
+  {
+    name: "docs_suggest_edit",
+    description: "Suggest an edit to existing text in a Google Doc by marking the original text with red strikethrough and inserting the replacement text in blue right next to it. The user can then review and accept or reject the change in the document. Use docs_read first to find the exact text to replace.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        document_id: { type: "string", description: "The Google Docs document ID" },
+        old_text: { type: "string", description: "The exact text to mark for replacement (must match text in the document)" },
+        new_text: { type: "string", description: "The suggested replacement text" },
+        tab_id: { type: "string", description: "Tab ID to edit in (from docs_read). Omit for default/first tab." },
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
+      required: ["document_id", "old_text", "new_text"],
+    },
+  },
 ];
 
 const GOOGLE_SHEETS_TOOLS = [
@@ -1742,6 +1757,8 @@ async function executeGoogleTool(toolName: string, input: any): Promise<string> 
         return await docsAppend(input.document_id, input.text, input.tab_id, acct);
       case "docs_insert":
         return await docsInsert(input.document_id, input.text, input.index, input.tab_id, acct);
+      case "docs_suggest_edit":
+        return await docsSuggestEdit(input.document_id, input.old_text, input.new_text, input.tab_id, acct);
       case "sheets_create":
         return await sheetsCreate(input.title, input.sheet_titles, acct);
       case "sheets_read":
@@ -1917,6 +1934,7 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   docs_read: "Reading a document...",
   docs_append: "Editing a document...",
   docs_insert: "Editing a document...",
+  docs_suggest_edit: "Suggesting edits...",
   sheets_create: "Creating a spreadsheet...",
   sheets_read: "Reading a spreadsheet...",
   sheets_write: "Writing to a spreadsheet...",
@@ -2085,7 +2103,7 @@ async function callAnthropic(
         "calendar_list_events", "calendar_create_event", "calendar_update_event",
         "drive_search", "drive_read_file", "drive_open_url",
         "contacts_search",
-        "docs_create", "docs_read", "docs_append", "docs_insert",
+        "docs_create", "docs_read", "docs_append", "docs_insert", "docs_suggest_edit",
         "sheets_create", "sheets_read", "sheets_write", "sheets_append", "sheets_list_sheets",
       ];
       const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
@@ -2314,7 +2332,7 @@ async function callOpenAI(
     "calendar_list_events", "calendar_create_event", "calendar_update_event",
     "drive_search", "drive_read_file", "drive_open_url",
     "contacts_search",
-    "docs_create", "docs_read", "docs_append", "docs_insert",
+    "docs_create", "docs_read", "docs_append", "docs_insert", "docs_suggest_edit",
     "sheets_create", "sheets_read", "sheets_write", "sheets_append", "sheets_list_sheets",
   ];
   const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
@@ -2662,7 +2680,7 @@ export async function processMessage(
       if (allSvcs.has("calendar")) googleContext += " You can view, create, update, and delete Google Calendar events.";
       if (allSvcs.has("drive")) googleContext += " You can search and read Google Drive files including Google Docs, Sheets, and Slides.";
       if (allSvcs.has("contacts")) googleContext += " You can search Google Contacts.";
-      if (allSvcs.has("docs")) googleContext += " You can create, read, and edit Google Docs using the docs_* tools. Use docs_create to make new documents, docs_read to read content (including all tabs), and docs_append or docs_insert to add text. For docs with multiple tabs: docs_read returns all tabs with their tabId and title. To write to a specific tab, pass the tab_id to docs_append or docs_insert. If the user refers to a tab by name or content, use docs_read first to find the matching tab, then use its tabId.";
+      if (allSvcs.has("docs")) googleContext += " You can create, read, and edit Google Docs using the docs_* tools. Use docs_create to make new documents, docs_read to read content (including all tabs), and docs_append or docs_insert to add text. Use docs_suggest_edit to propose changes to existing text — it marks the original in red strikethrough and inserts the replacement in blue, so the user can review and accept/reject. For docs with multiple tabs: docs_read returns all tabs with their tabId and title. To write to a specific tab, pass the tab_id to docs_append, docs_insert, or docs_suggest_edit. If the user refers to a tab by name or content, use docs_read first to find the matching tab, then use its tabId.";
       if (allSvcs.has("sheets")) googleContext += " You can create, read, and write Google Sheets using the sheets_* tools. Use sheets_list_sheets to see tabs, sheets_read to read cell ranges, sheets_write to update cells, and sheets_append to add rows.";
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${googleContext}` : googleContext;
     }

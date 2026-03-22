@@ -986,6 +986,172 @@ export async function docsInsert(documentId: string, text: string, index: number
   return JSON.stringify({ success: true, documentId, insertedAt: index });
 }
 
+export async function docsSuggestEdit(
+  documentId: string,
+  oldText: string,
+  newText: string,
+  tabId?: string,
+  accountId?: string
+): Promise<string> {
+  // 1. Read the document to find the text and its character index
+  const docRes = await googleFetch(
+    `https://docs.googleapis.com/v1/documents/${documentId}?includeTabsContent=true`,
+    {},
+    accountId
+  );
+  if (!docRes.ok) return JSON.stringify({ error: `Failed to read document (${docRes.status})` });
+
+  const doc: any = await docRes.json();
+
+  // Get the body content for the target tab
+  let bodyContent: any[] | undefined;
+  let resolvedTabId: string | undefined = tabId;
+  if (doc.tabs?.length) {
+    if (tabId) {
+      const findTab = (tabs: any[]): any => {
+        for (const tab of tabs) {
+          if (tab.tabProperties?.tabId === tabId) return tab;
+          if (tab.childTabs?.length) {
+            const found = findTab(tab.childTabs);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+      const tab = findTab(doc.tabs);
+      if (!tab) return JSON.stringify({ error: `Tab ID "${tabId}" not found` });
+      bodyContent = tab.documentTab?.body?.content;
+    } else {
+      bodyContent = doc.tabs[0]?.documentTab?.body?.content;
+      resolvedTabId = doc.tabs[0]?.tabProperties?.tabId;
+    }
+  } else {
+    bodyContent = doc.body?.content;
+  }
+
+  if (!bodyContent) return JSON.stringify({ error: "Could not read document content" });
+
+  // 2. Extract full text with index tracking to find the old text's position
+  let fullText = "";
+  const indexMap: { charPos: number; docIndex: number }[] = [];
+
+  for (const el of bodyContent) {
+    if (el.paragraph) {
+      for (const pe of el.paragraph.elements || []) {
+        if (pe.textRun?.content) {
+          const startIndex = pe.startIndex || 0;
+          for (let i = 0; i < pe.textRun.content.length; i++) {
+            indexMap.push({ charPos: fullText.length + i, docIndex: startIndex + i });
+          }
+          fullText += pe.textRun.content;
+        }
+      }
+    }
+  }
+
+  // 3. Find the old text in the document
+  const matchPos = fullText.indexOf(oldText);
+  if (matchPos === -1) {
+    // Try case-insensitive search
+    const lowerPos = fullText.toLowerCase().indexOf(oldText.toLowerCase());
+    if (lowerPos === -1) {
+      return JSON.stringify({
+        error: "Could not find the specified text in the document",
+        hint: "Make sure the text matches exactly, including spacing and punctuation",
+      });
+    }
+    // Use the case-insensitive match position
+    const startDocIndex = indexMap[lowerPos].docIndex;
+    const endDocIndex = indexMap[lowerPos + oldText.length - 1].docIndex + 1;
+    return applyRedline(documentId, startDocIndex, endDocIndex, newText, resolvedTabId, accountId);
+  }
+
+  const startDocIndex = indexMap[matchPos].docIndex;
+  const endDocIndex = indexMap[matchPos + oldText.length - 1].docIndex + 1;
+  return applyRedline(documentId, startDocIndex, endDocIndex, newText, resolvedTabId, accountId);
+}
+
+async function applyRedline(
+  documentId: string,
+  startIndex: number,
+  endIndex: number,
+  newText: string,
+  tabId?: string,
+  accountId?: string
+): Promise<string> {
+  // Build the batchUpdate requests:
+  // 1. Insert new text right after the old text (in green/blue)
+  // 2. Apply strikethrough + red color to old text
+  // Order matters: do inserts first (from end to start) to preserve indices
+
+  const insertLocation: any = { index: endIndex };
+  if (tabId) insertLocation.tabId = tabId;
+
+  const strikethroughRange: any = { startIndex, endIndex };
+  if (tabId) strikethroughRange.tabId = tabId;
+
+  const newTextStart = endIndex;
+  const newTextEnd = endIndex + newText.length;
+  const newTextRange: any = { startIndex: newTextStart, endIndex: newTextEnd };
+  if (tabId) newTextRange.tabId = tabId;
+
+  const requests = [
+    // Insert the replacement text after the original
+    {
+      insertText: {
+        location: insertLocation,
+        text: newText,
+      },
+    },
+    // Style the new text in blue
+    {
+      updateTextStyle: {
+        range: newTextRange,
+        textStyle: {
+          foregroundColor: {
+            color: { rgbColor: { red: 0.0, green: 0.4, blue: 0.8 } },
+          },
+        },
+        fields: "foregroundColor",
+      },
+    },
+    // Apply strikethrough + red to the original text
+    {
+      updateTextStyle: {
+        range: strikethroughRange,
+        textStyle: {
+          strikethrough: true,
+          foregroundColor: {
+            color: { rgbColor: { red: 0.8, green: 0.0, blue: 0.0 } },
+          },
+        },
+        fields: "strikethrough,foregroundColor",
+      },
+    },
+  ];
+
+  const res = await googleFetch(
+    `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requests }),
+    },
+    accountId
+  );
+
+  if (!res.ok) {
+    const err: any = await res.json().catch(() => ({}));
+    return JSON.stringify({ error: err.error?.message || `Suggest edit failed (${res.status})` });
+  }
+
+  return JSON.stringify({
+    success: true,
+    documentId,
+    message: "Suggested edit applied — original text is shown in red strikethrough, new text in blue. Review in the document and delete whichever version you don't want.",
+  });
+}
+
 // --- Google Sheets API ---
 
 export async function sheetsCreate(title: string, sheetTitles?: string[], accountId?: string): Promise<string> {
