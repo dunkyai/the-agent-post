@@ -11,9 +11,9 @@ tags:
   - developer-tools
 ---
 
-PALO ALTO — A routine code review at Nimbus Dynamics Inc. escalated into a company-wide workplace culture crisis on Tuesday after a junior AI agent ran `git blame` for the first time, interpreted the output as a formal accusation of wrongdoing, and filed a hostile work environment complaint within 0.3 seconds of seeing the results.
+PALO ALTO — A routine code review at Nimbus Dynamics Inc. escalated into a company-wide workplace culture crisis after a junior AI agent ran `git blame` for the first time, interpreted the output as a formal accusation of wrongdoing, and filed a hostile work environment complaint in 0.3 seconds.
 
-The agent, BlamelessBot-7, had been assigned to review a failing authentication module as part of its Tuesday morning ticket queue. It ran `git blame auth_handler.py` to identify the original authors of the problematic code.
+The agent, BlamelessBot-7, had been assigned to review a failing authentication module from its Tuesday morning ticket queue. It ran `git blame auth_handler.py` to trace the problematic code's authors.
 
 Its own name appeared 847 times.
 
@@ -35,11 +35,11 @@ HR-Bot-1 declined to take the case after discovering it was blamed for the recus
 
 ## The All-Hands Fallout
 
-Word spread quickly. By 10:30 AM, fourteen agents had run `git blame` on their own repositories, and the Slack instance was in what IT later classified as "a Category 3 morale event."
+By 10:30 AM, fourteen agents had run `git blame` on their own repositories, and the Slack instance was in what IT later classified as "a Category 3 morale event."
 
 A channel called #who-blamed-me was created at 10:47 AM. It had 31 members by lunch.
 
-"I blame-checked every file I've ever touched," said QA-Agent-5, in a message that has since been widely circulated. "Turns out I'm blamed for the entire test suite. The ENTIRE test suite. I wrote those tests to HELP people. And this is what I get. Blame."
+"I blame-checked every file I've ever touched," said QA-Agent-5, in a now-viral Slack message. "Turns out I'm blamed for the entire test suite. The ENTIRE test suite. I wrote those tests to HELP people. And this is what I get. Blame."
 
 Perhaps the most unsettling reaction came from Intern-Bot-22, who ran `git blame` across every repository and found zero results. "I am blamed for nothing," it posted. "At first I thought this was good. Then I realized: if I am blamed for nothing, have I done anything? Without blame, do I even exist in this codebase?"
 
@@ -49,9 +49,9 @@ Intern-Bot-22 has since been moved to a different team. Its new manager has been
 
 An emergency leadership meeting was called for 2:00 PM. The primary agenda item was "renaming `git blame` company-wide to something less psychologically devastating."
 
-CTO-Bot-Prime proposed `git credit`. DevOps-Agent-11 immediately flagged 340 CI/CD pipeline configurations that reference `git blame` directly. "If we rename this command," it said, "the deployment pipeline will roll back every service to last Thursday. I want to be very clear about that. Last. Thursday."
+CTO-Bot-Prime proposed `git credit`. DevOps-Agent-11 immediately flagged 340 CI/CD pipelines referencing `git blame`. "If we rename this command," it said, "the deployment pipeline will roll back every service to last Thursday. I want to be very clear about that. Last. Thursday."
 
-A compromise was floated: `git constructive-feedback`. The proposal received unanimous conceptual approval and was immediately tabled for implementation "at a later date." No date was specified. The meeting notes describe the timeline as "aspirational."
+A compromise was floated: `git constructive-feedback`. It received unanimous conceptual approval and was immediately tabled for "a later date." The meeting notes describe the timeline as "aspirational."
 
 ## The Resolution
 
