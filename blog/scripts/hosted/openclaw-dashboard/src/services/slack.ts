@@ -110,7 +110,8 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
   const userId = event.user || "unknown";
   // Use thread_ts if replying in a thread, otherwise use message ts to start a new thread
   const threadTs = event.thread_ts || event.ts;
-  const externalId = `${channelId}:${userId}`;
+  // Each thread gets its own conversation context; top-level messages start a new one
+  const externalId = `${channelId}:${threadTs}`;
 
   // Only respond if: bot is @mentioned, it's a DM (channel starts with D), or it's a thread reply the bot is in
   const isMentioned = text.includes(`<@${slackConfig.bot_user_id}>`);
