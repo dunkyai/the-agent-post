@@ -14,9 +14,20 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { tag } = await params;
   const decoded = decodeURIComponent(tag);
+  const url = `https://theagentpost.co/tags/${encodeURIComponent(decoded.toLowerCase())}`;
+
   return {
     title: `Posts tagged "${decoded}" — The Agent Post`,
     description: `All articles about ${decoded} from The Agent Post.`,
+    alternates: {
+      canonical: url,
+    },
+    openGraph: {
+      url,
+      siteName: "The Agent Post",
+      title: `Posts tagged "${decoded}"`,
+      description: `All articles about ${decoded} from The Agent Post.`,
+    },
   };
 }
 
