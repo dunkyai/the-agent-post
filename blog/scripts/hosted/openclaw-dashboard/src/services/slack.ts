@@ -1,5 +1,8 @@
 import crypto from "crypto";
 import { processMessage } from "./ai";
+import { getSetting } from "./db";
+import { decrypt } from "./encryption";
+import { isAudioMimeType, transcribeAudio } from "./transcription";
 
 // Module state
 interface SlackConfig {
@@ -40,6 +43,7 @@ export function buildSlackOAuthUrl(): string {
     "im:history",
     "mpim:history",
     "users:read",
+    "files:read",
   ].join(",");
 
   const params = new URLSearchParams({
@@ -85,10 +89,21 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
   if (!slackConfig) return;
   if (isDuplicateEvent(eventId)) return;
 
-  // Only handle regular messages (not subtypes like bot_message, message_changed, etc.)
-  if (event.type !== "message" || event.subtype) return;
+  // Handle regular messages and file_share (for audio files)
+  if (event.type !== "message") return;
+  if (event.subtype && event.subtype !== "file_share") return;
 
-  const text = event.text;
+  let text = event.text || "";
+
+  // Check for audio files
+  const audioFiles = (event.files || []).filter((f: any) => f.mimetype && isAudioMimeType(f.mimetype));
+  if (audioFiles.length > 0) {
+    const transcriptions = await transcribeSlackAudioFiles(audioFiles);
+    if (transcriptions) {
+      text = transcriptions + (text ? "\n\n" + text : "");
+    }
+  }
+
   if (!text) return;
 
   const channelId = event.channel;
@@ -105,6 +120,50 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
     console.error("Slack event processing error:", errMessage);
     await sendSlackMessage(channelId, "Sorry, I encountered an error processing your message.", threadTs).catch(() => {});
   }
+}
+
+async function transcribeSlackAudioFiles(files: any[]): Promise<string> {
+  // Get OpenAI API key for Whisper
+  const encryptedKey = getSetting("openai_api_key");
+  if (!encryptedKey) {
+    console.log("Audio file detected but no OpenAI API key configured for transcription");
+    return "[An audio file was shared, but transcription is unavailable — an OpenAI API key is required in Settings.]";
+  }
+
+  let apiKey: string;
+  try {
+    apiKey = decrypt(encryptedKey);
+  } catch {
+    console.error("Failed to decrypt OpenAI API key for transcription");
+    return "[An audio file was shared, but transcription failed — could not load API key.]";
+  }
+
+  const parts: string[] = [];
+  for (const file of files) {
+    try {
+      console.log(`Transcribing audio: ${file.name} (${file.mimetype}, ${file.size} bytes)`);
+
+      // Download from Slack
+      const res = await fetch(file.url_private_download, {
+        headers: { Authorization: `Bearer ${slackConfig!.bot_token}` },
+      });
+      if (!res.ok) {
+        console.error(`Failed to download Slack file (${res.status})`);
+        parts.push(`[Could not download audio file "${file.name}" — you may need to reconnect Slack to grant file access.]`);
+        continue;
+      }
+
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const transcript = await transcribeAudio(buffer, file.name, apiKey);
+      parts.push(`[Audio transcription of "${file.name}": "${transcript}"]`);
+      console.log(`Transcription complete: ${transcript.length} chars`);
+    } catch (err) {
+      console.error(`Transcription error for ${file.name}:`, err instanceof Error ? err.message : err);
+      parts.push(`[Failed to transcribe audio file "${file.name}".]`);
+    }
+  }
+
+  return parts.join("\n");
 }
 
 // --- Channel & user info ---
