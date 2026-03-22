@@ -110,7 +110,8 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
   const userId = event.user || "unknown";
   // Use thread_ts if replying in a thread, otherwise use message ts to start a new thread
   const threadTs = event.thread_ts || event.ts;
-  const externalId = `${channelId}:${userId}`;
+  // Each thread gets its own conversation context; top-level messages start a new one
+  const externalId = `${channelId}:${threadTs}`;
 
   // Only respond if: bot is @mentioned, it's a DM (channel starts with D), or it's a thread reply the bot is in
   const isMentioned = text.includes(`<@${slackConfig.bot_user_id}>`);
@@ -134,7 +135,7 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
   }
 
   try {
-    const reply = await processMessage("slack", externalId, text, "You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. Keep messages concise and conversational — Slack is not email. Always follow the user's formatting and style preferences (e.g. if they ask for no emojis, stop using emojis).");
+    const reply = await processMessage("slack", externalId, text, "You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. Keep messages concise and conversational — Slack is not email. Always follow the user's formatting and style preferences (e.g. if they ask for no emojis, stop using emojis). IMPORTANT: You CAN handle audio files and voice clips in Slack. When a user shares audio, the system automatically transcribes it before you see the message — the transcribed text appears as [Audio transcription: ...] at the start of the message. You do NOT need to access files directly; transcription is handled for you. If asked whether you can process audio, say YES.");
     await sendSlackMessage(channelId, reply, threadTs);
   } catch (err: unknown) {
     const errMessage = err instanceof Error ? err.message : "Unknown error";
