@@ -1080,6 +1080,44 @@ export async function docsSuggestEdit(
   return applyRedline(documentId, startDocIndex, endDocIndex, newText, resolvedTabId, accountId);
 }
 
+export async function docsReplaceText(
+  documentId: string,
+  findText: string,
+  replaceText: string,
+  matchCase: boolean = true,
+  tabId?: string,
+  accountId?: string
+): Promise<string> {
+  const replaceRequest: any = {
+    replaceAllText: {
+      containsText: { text: findText, matchCase },
+      replaceText,
+    },
+  };
+  if (tabId) {
+    replaceRequest.replaceAllText.tabsCriteria = { tabIds: [tabId] };
+  }
+
+  const res = await googleFetch(
+    `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requests: [replaceRequest] }),
+    },
+    accountId
+  );
+
+  if (!res.ok) {
+    const err: any = await res.json().catch(() => ({}));
+    return JSON.stringify({ error: err.error?.message || `Replace failed (${res.status})` });
+  }
+
+  const data: any = await res.json();
+  const occurrences = data.replies?.[0]?.replaceAllText?.occurrencesChanged || 0;
+  return JSON.stringify({ success: true, documentId, occurrences_replaced: occurrences, find: findText, replace: replaceText });
+}
+
 async function applyRedline(
   documentId: string,
   startIndex: number,
