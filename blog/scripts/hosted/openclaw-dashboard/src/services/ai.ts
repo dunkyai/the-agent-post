@@ -2659,7 +2659,7 @@ export async function processMessage(
       if (allSvcs.has("calendar")) googleContext += " You can view, create, update, and delete Google Calendar events.";
       if (allSvcs.has("drive")) googleContext += " You can search and read Google Drive files including Google Docs, Sheets, and Slides.";
       if (allSvcs.has("contacts")) googleContext += " You can search Google Contacts.";
-      if (allSvcs.has("docs")) googleContext += " You can create, read, and edit Google Docs using the docs_* tools. Use docs_create to make new documents, docs_read to read content, and docs_append or docs_insert to add text.";
+      if (allSvcs.has("docs")) googleContext += " You can create, read, and edit Google Docs using the docs_* tools. Use docs_create to make new documents, docs_read to read content, and docs_append or docs_insert to add text. IMPORTANT: When docs_append returns success, the text IS at the end of the document — do NOT re-read to verify and do NOT retry with docs_insert. On long documents, docs_read truncates content so you may not see the appended text, but it is there.";
       if (allSvcs.has("sheets")) googleContext += " You can create, read, and write Google Sheets using the sheets_* tools. Use sheets_list_sheets to see tabs, sheets_read to read cell ranges, sheets_write to update cells, and sheets_append to add rows.";
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${googleContext}` : googleContext;
     }
