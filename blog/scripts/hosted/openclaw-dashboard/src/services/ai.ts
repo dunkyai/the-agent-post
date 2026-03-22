@@ -2641,7 +2641,7 @@ export async function processMessage(
   // Inject cross-channel messaging context
   {
     const channels: string[] = [];
-    if (isSlackRunning()) channels.push("Slack (use send_slack tool to message other channels — never use it to reply to the current Slack conversation)");
+    if (isSlackRunning()) channels.push("Slack (use send_slack tool to message other channels — never use it to reply to the current Slack conversation). You can also receive and transcribe audio messages and voice clips shared in Slack — transcription happens automatically.");
     if (isEmailRunning()) channels.push("Email/LobsterMail (use check_lobstermail to check inbox, send_lobstermail to send)");
     if (channels.length > 0) {
       const msgContext = `You can send messages on the following channels at any time: ${channels.join(", ")}. Use these tools to proactively reach out or relay messages across channels when asked.`;
