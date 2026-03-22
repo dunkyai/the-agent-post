@@ -41,7 +41,9 @@
         </div>
       </details>
 
-      <!-- Email -->
+      <!-- Email (LobsterMail) — hidden from UI, functionality preserved -->
+      <!-- To re-enable: remove the false condition wrapping this block -->
+      <% if (false) { %>
       <details class="integration-tile">
         <summary class="integration-tile-summary">
           <span class="integration-icon" style="background: #EA4335;"><img src="/logos/email.svg" alt="Email" width="24" height="24"></span>
@@ -111,6 +113,7 @@
           <% } %>
         </div>
       </details>
+      <% } %>
 
       <!-- Google -->
       <details class="integration-tile">
