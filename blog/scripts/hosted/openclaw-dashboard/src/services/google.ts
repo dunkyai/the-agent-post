@@ -780,7 +780,7 @@ export async function docsCreate(title: string, content?: string, accountId?: st
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          requests: [{ insertText: { location: { index: 1 }, text: content } }],
+          requests: [{ insertText: { location: { index: 1, tabId: doc.tabs?.[0]?.tabProperties?.tabId }, text: content } }],
         }),
       },
       accountId
@@ -803,60 +803,144 @@ export async function docsCreate(title: string, content?: string, accountId?: st
   });
 }
 
-export async function docsRead(documentId: string, accountId?: string): Promise<string> {
+function extractTextFromElements(elements: any[]): string {
+  let text = "";
+  for (const el of elements) {
+    if (el.paragraph) {
+      for (const pe of el.paragraph.elements || []) {
+        if (pe.textRun?.content) text += pe.textRun.content;
+      }
+    }
+    if (el.table) {
+      for (const row of el.table.tableRows || []) {
+        for (const cell of row.tableCells || []) {
+          text += extractTextFromElements(cell.content || []);
+          text += "\t";
+        }
+        text += "\n";
+      }
+    }
+  }
+  return text;
+}
+
+function extractTabsFromDoc(doc: any): { tabId: string; title: string; content: string }[] {
+  const tabs: { tabId: string; title: string; content: string }[] = [];
+
+  function processTabs(tabList: any[]): void {
+    for (const tab of tabList) {
+      if (tab.documentTab) {
+        const tabId = tab.tabProperties?.tabId || "";
+        const title = tab.tabProperties?.title || "";
+        const content = extractTextFromElements(tab.documentTab.body?.content || []);
+        tabs.push({ tabId, title, content });
+      }
+      // Process child tabs (nested)
+      if (tab.childTabs?.length) {
+        processTabs(tab.childTabs);
+      }
+    }
+  }
+
+  if (doc.tabs?.length) {
+    processTabs(doc.tabs);
+  } else if (doc.body?.content) {
+    // Fallback for docs without tabs
+    tabs.push({ tabId: "", title: "Main", content: extractTextFromElements(doc.body.content) });
+  }
+
+  return tabs;
+}
+
+export async function docsRead(documentId: string, tabName?: string, accountId?: string): Promise<string> {
   const res = await googleFetch(
-    `https://docs.googleapis.com/v1/documents/${documentId}`,
+    `https://docs.googleapis.com/v1/documents/${documentId}?includeTabsContent=true`,
     {},
     accountId
   );
   if (!res.ok) return JSON.stringify({ error: `Failed to read document (${res.status})` });
 
   const doc: any = await res.json();
+  const tabs = extractTabsFromDoc(doc);
 
-  let text = "";
-  function extractText(elements: any[]): void {
-    for (const el of elements) {
-      if (el.paragraph) {
-        for (const pe of el.paragraph.elements || []) {
-          if (pe.textRun?.content) text += pe.textRun.content;
-        }
-      }
-      if (el.table) {
-        for (const row of el.table.tableRows || []) {
-          for (const cell of row.tableCells || []) {
-            extractText(cell.content || []);
-            text += "\t";
-          }
-          text += "\n";
-        }
-      }
+  // If a specific tab is requested, find it by name (case-insensitive)
+  if (tabName) {
+    const match = tabs.find(t => t.title.toLowerCase() === tabName.toLowerCase());
+    if (!match) {
+      return JSON.stringify({
+        error: `Tab "${tabName}" not found`,
+        available_tabs: tabs.map(t => ({ tabId: t.tabId, title: t.title })),
+      });
     }
+    return JSON.stringify({
+      documentId: doc.documentId,
+      title: doc.title,
+      tab: { tabId: match.tabId, title: match.title },
+      content: match.content.slice(0, 50000),
+    });
   }
 
-  if (doc.body?.content) extractText(doc.body.content);
+  // Return all tabs
+  const hasTabs = tabs.length > 1;
+  if (hasTabs) {
+    return JSON.stringify({
+      documentId: doc.documentId,
+      title: doc.title,
+      tabs: tabs.map(t => ({
+        tabId: t.tabId,
+        title: t.title,
+        content: t.content.slice(0, 20000),
+      })),
+    });
+  }
 
   return JSON.stringify({
     documentId: doc.documentId,
     title: doc.title,
-    content: text.slice(0, 50000),
+    content: (tabs[0]?.content || "").slice(0, 50000),
     revisionId: doc.revisionId,
   });
 }
 
-export async function docsAppend(documentId: string, text: string, accountId?: string): Promise<string> {
+export async function docsAppend(documentId: string, text: string, tabId?: string, accountId?: string): Promise<string> {
   const docRes = await googleFetch(
-    `https://docs.googleapis.com/v1/documents/${documentId}`,
+    `https://docs.googleapis.com/v1/documents/${documentId}?includeTabsContent=true`,
     {},
     accountId
   );
   if (!docRes.ok) return JSON.stringify({ error: `Failed to read document (${docRes.status})` });
 
   const doc: any = await docRes.json();
-  const body = doc.body;
-  const endIndex = body?.content?.[body.content.length - 1]?.endIndex;
+
+  // Find the right tab's body content to get end index
+  let bodyContent: any[] | undefined;
+  if (tabId && doc.tabs?.length) {
+    const findTab = (tabs: any[]): any => {
+      for (const tab of tabs) {
+        if (tab.tabProperties?.tabId === tabId) return tab;
+        if (tab.childTabs?.length) {
+          const found = findTab(tab.childTabs);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    const tab = findTab(doc.tabs);
+    if (!tab) return JSON.stringify({ error: `Tab ID "${tabId}" not found` });
+    bodyContent = tab.documentTab?.body?.content;
+  } else if (doc.tabs?.length) {
+    bodyContent = doc.tabs[0]?.documentTab?.body?.content;
+  } else {
+    bodyContent = doc.body?.content;
+  }
+
+  const endIndex = bodyContent?.[bodyContent.length - 1]?.endIndex;
   if (!endIndex || endIndex < 2) {
     return JSON.stringify({ error: "Could not determine document end index" });
   }
+
+  const location: any = { index: endIndex - 1 };
+  if (tabId) location.tabId = tabId;
 
   const res = await googleFetch(
     `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
@@ -864,7 +948,7 @@ export async function docsAppend(documentId: string, text: string, accountId?: s
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        requests: [{ insertText: { location: { index: endIndex - 1 }, text: "\n" + text } }],
+        requests: [{ insertText: { location, text: "\n" + text } }],
       }),
     },
     accountId
@@ -878,14 +962,17 @@ export async function docsAppend(documentId: string, text: string, accountId?: s
   return JSON.stringify({ success: true, documentId });
 }
 
-export async function docsInsert(documentId: string, text: string, index: number, accountId?: string): Promise<string> {
+export async function docsInsert(documentId: string, text: string, index: number, tabId?: string, accountId?: string): Promise<string> {
+  const location: any = { index };
+  if (tabId) location.tabId = tabId;
+
   const res = await googleFetch(
     `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        requests: [{ insertText: { location: { index }, text } }],
+        requests: [{ insertText: { location, text } }],
       }),
     },
     accountId
