@@ -1546,11 +1546,12 @@ const GOOGLE_DOCS_TOOLS = [
   },
   {
     name: "docs_read",
-    description: "Read the text content of a Google Doc by its document ID. Returns the title and full text content. Use drive_search to find document IDs, or extract from a Google Docs URL (the ID is the long string after /d/ in the URL).",
+    description: "Read the text content of a Google Doc by its document ID. Returns the title and full text content. If the doc has multiple tabs, returns all tabs with their names, IDs, and content. Use drive_search to find document IDs, or extract from a Google Docs URL (the ID is the long string after /d/ in the URL).",
     input_schema: {
       type: "object" as const,
       properties: {
         document_id: { type: "string", description: "The Google Docs document ID" },
+        tab_name: { type: "string", description: "Read a specific tab by name (case-insensitive). Omit to get all tabs." },
         account: { type: "string", description: "Google account email to use (optional)" },
       },
       required: ["document_id"],
@@ -1558,12 +1559,13 @@ const GOOGLE_DOCS_TOOLS = [
   },
   {
     name: "docs_append",
-    description: "Append text to the end of a Google Doc. Use this to add new content at the bottom of an existing document.",
+    description: "Append text to the end of a Google Doc (or a specific tab). Use this to add new content at the bottom of an existing document. If the doc has tabs, use docs_read first to find the tab ID.",
     input_schema: {
       type: "object" as const,
       properties: {
         document_id: { type: "string", description: "The Google Docs document ID" },
         text: { type: "string", description: "Text to append to the end of the document" },
+        tab_id: { type: "string", description: "Tab ID to append to (from docs_read). Omit for default/first tab." },
         account: { type: "string", description: "Google account email to use (optional)" },
       },
       required: ["document_id", "text"],
@@ -1571,13 +1573,14 @@ const GOOGLE_DOCS_TOOLS = [
   },
   {
     name: "docs_insert",
-    description: "Insert text at a specific character index position in a Google Doc. Index 1 is the start of the document. Use docs_read first to understand the document structure and find the right insertion point.",
+    description: "Insert text at a specific character index position in a Google Doc (or a specific tab). Index 1 is the start of the document. Use docs_read first to understand the document structure and find the right insertion point.",
     input_schema: {
       type: "object" as const,
       properties: {
         document_id: { type: "string", description: "The Google Docs document ID" },
         text: { type: "string", description: "Text to insert" },
         index: { type: "number", description: "Character index position to insert at (1 = start of document)" },
+        tab_id: { type: "string", description: "Tab ID to insert into (from docs_read). Omit for default/first tab." },
         account: { type: "string", description: "Google account email to use (optional)" },
       },
       required: ["document_id", "text", "index"],
@@ -1734,11 +1737,11 @@ async function executeGoogleTool(toolName: string, input: any): Promise<string> 
       case "docs_create":
         return await docsCreate(input.title, input.content, acct);
       case "docs_read":
-        return await docsRead(input.document_id, acct);
+        return await docsRead(input.document_id, input.tab_name, acct);
       case "docs_append":
-        return await docsAppend(input.document_id, input.text, acct);
+        return await docsAppend(input.document_id, input.text, input.tab_id, acct);
       case "docs_insert":
-        return await docsInsert(input.document_id, input.text, input.index, acct);
+        return await docsInsert(input.document_id, input.text, input.index, input.tab_id, acct);
       case "sheets_create":
         return await sheetsCreate(input.title, input.sheet_titles, acct);
       case "sheets_read":
@@ -2659,7 +2662,7 @@ export async function processMessage(
       if (allSvcs.has("calendar")) googleContext += " You can view, create, update, and delete Google Calendar events.";
       if (allSvcs.has("drive")) googleContext += " You can search and read Google Drive files including Google Docs, Sheets, and Slides.";
       if (allSvcs.has("contacts")) googleContext += " You can search Google Contacts.";
-      if (allSvcs.has("docs")) googleContext += " You can create, read, and edit Google Docs using the docs_* tools. Use docs_create to make new documents, docs_read to read content, and docs_append or docs_insert to add text. IMPORTANT: When docs_append returns success, the text IS at the end of the document — do NOT re-read to verify and do NOT retry with docs_insert. On long documents, docs_read truncates content so you may not see the appended text, but it is there.";
+      if (allSvcs.has("docs")) googleContext += " You can create, read, and edit Google Docs using the docs_* tools. Use docs_create to make new documents, docs_read to read content (including all tabs), and docs_append or docs_insert to add text. For docs with multiple tabs: docs_read returns all tabs with their tabId and title. To write to a specific tab, pass the tab_id to docs_append or docs_insert. If the user refers to a tab by name or content, use docs_read first to find the matching tab, then use its tabId. IMPORTANT: When docs_append returns success, the text IS at the end of the document — do NOT re-read to verify and do NOT retry with docs_insert. On long documents, docs_read truncates content so you may not see the appended text, but it is there.";
       if (allSvcs.has("sheets")) googleContext += " You can create, read, and write Google Sheets using the sheets_* tools. Use sheets_list_sheets to see tabs, sheets_read to read cell ranges, sheets_write to update cells, and sheets_append to add rows.";
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${googleContext}` : googleContext;
     }
