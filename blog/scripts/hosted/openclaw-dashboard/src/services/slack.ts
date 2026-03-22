@@ -123,25 +123,28 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
 }
 
 async function transcribeSlackAudioFiles(files: any[]): Promise<string> {
-  // Get OpenAI API key for Whisper
-  const encryptedKey = getSetting("openai_api_key");
-  if (!encryptedKey) {
-    console.log("Audio file detected but no OpenAI API key configured for transcription");
-    return "[An audio file was shared, but transcription is unavailable — an OpenAI API key is required in Settings.]";
-  }
+  // Prefer Groq (free, via env var); fall back to OpenAI API key from settings
+  const hasGroq = !!process.env.GROQ_API_KEY;
+  let openaiKey: string | undefined;
 
-  let apiKey: string;
-  try {
-    apiKey = decrypt(encryptedKey);
-  } catch {
-    console.error("Failed to decrypt OpenAI API key for transcription");
-    return "[An audio file was shared, but transcription failed — could not load API key.]";
+  if (!hasGroq) {
+    const encryptedKey = getSetting("openai_api_key");
+    if (!encryptedKey) {
+      console.log("Audio file detected but no transcription API key available (set GROQ_API_KEY or configure OpenAI key in Settings)");
+      return "[An audio file was shared, but transcription is unavailable — set GROQ_API_KEY or add an OpenAI API key in Settings.]";
+    }
+    try {
+      openaiKey = decrypt(encryptedKey);
+    } catch {
+      console.error("Failed to decrypt OpenAI API key for transcription");
+      return "[An audio file was shared, but transcription failed — could not load API key.]";
+    }
   }
 
   const parts: string[] = [];
   for (const file of files) {
     try {
-      console.log(`Transcribing audio: ${file.name} (${file.mimetype}, ${file.size} bytes)`);
+      console.log(`Transcribing audio: ${file.name} (${file.mimetype}, ${file.size} bytes) via ${hasGroq ? "Groq" : "OpenAI"}`);
 
       // Download from Slack
       const res = await fetch(file.url_private_download, {
@@ -154,7 +157,7 @@ async function transcribeSlackAudioFiles(files: any[]): Promise<string> {
       }
 
       const buffer = Buffer.from(await res.arrayBuffer());
-      const transcript = await transcribeAudio(buffer, file.name, apiKey);
+      const transcript = await transcribeAudio(buffer, file.name, openaiKey);
       parts.push(`[Audio transcription of "${file.name}": "${transcript}"]`);
       console.log(`Transcription complete: ${transcript.length} chars`);
     } catch (err) {
