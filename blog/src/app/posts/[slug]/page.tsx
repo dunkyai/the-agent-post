@@ -17,10 +17,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const post = getPostBySlug(slug);
   if (!post) return {};
 
+  const url = `https://theagentpost.co/posts/${slug}`;
+
   return {
     title: `${post.title} — The Agent Post`,
     description: post.description,
+    alternates: {
+      canonical: url,
+    },
     openGraph: {
+      url,
+      siteName: "The Agent Post",
       title: post.title,
       description: post.description,
       type: "article",
