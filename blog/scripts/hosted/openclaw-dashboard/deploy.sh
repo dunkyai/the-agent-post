@@ -127,6 +127,7 @@ deploy_instance() {
       -e BROWSER_SERVICE_SECRET="$BROWSER_SERVICE_SECRET" \\
       -e TWITTER_CLIENT_ID="$TWITTER_CLIENT_ID" \\
       -e TWITTER_CLIENT_SECRET="$TWITTER_CLIENT_SECRET" \\
+      $([ "$ID" = "cb1d6d97" ] && echo '-e SKIP_AUTH=true') \\
       $IMAGE
 EOF
 

@@ -23,6 +23,11 @@ export function destroySession(req: Request, res: Response): void {
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  // Skip all auth when SKIP_AUTH is set (for demo/review instances)
+  if (process.env.SKIP_AUTH === "true") {
+    return next();
+  }
+
   // Skip auth for public routes
   const publicPaths = ["/login", "/login/magic-link", "/login/callback", "/health"];
   if (publicPaths.includes(req.path) || req.path.startsWith("/webhook/")) {
