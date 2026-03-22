@@ -898,14 +898,15 @@ export async function docsRead(documentId: string, tabName?: string, accountId?:
     });
   }
 
-  const truncated = text.length > 200000;
+  const content = tabs[0]?.content || "";
+  const truncated = content.length > 200000;
   return JSON.stringify({
     documentId: doc.documentId,
     title: doc.title,
-    content: (tabs[0]?.content || "").slice(0, 200000),
-    total_chars: (tabs[0]?.content || "").length,
-    truncated: (tabs[0]?.content || "").length > 200000,
-    ...((tabs[0]?.content || "").length > 200000 ? { note: `Document is ${(tabs[0]?.content || "").length} characters. Only the first 200,000 are shown. Content at the end of the document is not visible here.` } : {}),
+    content: content.slice(0, 200000),
+    total_chars: content.length,
+    truncated,
+    ...(truncated ? { note: `Document is ${content.length} characters. Only the first 200,000 are shown. Content at the end of the document is not visible here.` } : {}),
     revisionId: doc.revisionId,
   });
 }
