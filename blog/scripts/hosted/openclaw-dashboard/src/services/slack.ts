@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { processMessage } from "./ai";
 import { getSetting, getOrCreateConversation, deleteConversation } from "./db";
 import { decrypt } from "./encryption";
-import { isAudioMimeType, transcribeAudio } from "./transcription";
+import { isSlackAudioFile, transcribeAudio } from "./transcription";
 
 // Module state
 interface SlackConfig {
@@ -95,8 +95,15 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
 
   let text = event.text || "";
 
-  // Check for audio files
-  const audioFiles = (event.files || []).filter((f: any) => f.mimetype && isAudioMimeType(f.mimetype));
+  // Log all files for debugging
+  if (event.files?.length > 0) {
+    for (const f of event.files) {
+      console.log(`Slack file: name=${f.name} mimetype=${f.mimetype} filetype=${f.filetype} subtype=${f.subtype} size=${f.size}`);
+    }
+  }
+
+  // Check for audio/voice files
+  const audioFiles = (event.files || []).filter((f: any) => isSlackAudioFile(f));
   if (audioFiles.length > 0) {
     const transcriptions = await transcribeSlackAudioFiles(audioFiles);
     if (transcriptions) {
