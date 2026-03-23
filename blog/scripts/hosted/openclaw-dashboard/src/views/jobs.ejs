@@ -32,7 +32,7 @@
         <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
           <div><strong>Schedule:</strong> <%= job.schedule_description %></div>
           <div><strong>Prompt:</strong> <%= job.prompt.length > 120 ? job.prompt.slice(0, 120) + '...' : job.prompt %></div>
-          <div><strong>Target:</strong> <%= job.target_source %> / <%= job.target_external_id %></div>
+          <div><strong>Created via:</strong> <%= job.target_source %></div>
           <div><strong>Created by:</strong> <%= job.created_by %></div>
           <% if (job.next_run) { %>
             <div><strong>Next run:</strong> <span class="local-time" data-utc="<%= job.next_run %>"><%= job.next_run %></span></div>
@@ -101,7 +101,7 @@
           + '<div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">'
           + '<div><strong>Schedule:</strong> ' + escapeHtml(job.schedule_description) + '</div>'
           + '<div><strong>Prompt:</strong> ' + escapeHtml(truncate(job.prompt, 120)) + '</div>'
-          + '<div><strong>Target:</strong> ' + escapeHtml(job.target_source) + ' / ' + escapeHtml(job.target_external_id) + '</div>'
+          + '<div><strong>Created via:</strong> ' + escapeHtml(job.target_source) + '</div>'
           + '<div><strong>Created by:</strong> ' + escapeHtml(job.created_by) + '</div>'
           + (job.next_run ? '<div><strong>Next run:</strong> ' + escapeHtml(formatLocal(job.next_run, tz)) + '</div>' : '')
           + (job.last_run ? '<div><strong>Last run:</strong> ' + escapeHtml(formatLocal(job.last_run, tz)) + '</div>' : '')
