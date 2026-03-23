@@ -45,7 +45,8 @@ router.post("/jobs", (req: Request, res: Response) => {
   }
 
   try {
-    const nextRun = getNextRun(schedule.trim());
+    const tz = getSetting("timezone") || "America/Los_Angeles";
+    const nextRun = getNextRun(schedule.trim(), new Date(), tz);
     createScheduledJob({
       name: name.trim(),
       schedule: schedule.trim(),
@@ -78,7 +79,8 @@ router.post("/jobs/:id/toggle", (req: Request, res: Response) => {
   let nextRun = job.next_run;
   if (newEnabled && !nextRun) {
     try {
-      nextRun = getNextRun(job.schedule).toISOString();
+      const tz = getSetting("timezone") || "America/Los_Angeles";
+      nextRun = getNextRun(job.schedule, new Date(), tz).toISOString();
     } catch {}
   }
 
@@ -115,7 +117,8 @@ router.post("/jobs/:id", (req: Request, res: Response) => {
   }
 
   try {
-    const nextRun = getNextRun(schedule.trim());
+    const tz = getSetting("timezone") || "America/Los_Angeles";
+    const nextRun = getNextRun(schedule.trim(), new Date(), tz);
     updateScheduledJob(id, {
       name: name.trim(),
       schedule: schedule.trim(),
