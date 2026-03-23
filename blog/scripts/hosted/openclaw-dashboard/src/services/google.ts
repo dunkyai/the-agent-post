@@ -1163,6 +1163,7 @@ export async function docsFormatText(
     fontSize?: number;
     fontFamily?: string;
     foregroundColor?: { red?: number; green?: number; blue?: number };
+    link?: string;
   },
   tabId?: string,
   accountId?: string
@@ -1191,6 +1192,10 @@ export async function docsFormatText(
   if (formatting.foregroundColor !== undefined) {
     textStyle.foregroundColor = { color: { rgbColor: formatting.foregroundColor } };
     fields.push("foregroundColor");
+  }
+  if (formatting.link !== undefined) {
+    textStyle.link = formatting.link ? { url: formatting.link } : {};
+    fields.push("link");
   }
 
   if (fields.length === 0) return JSON.stringify({ error: "No formatting options specified" });
@@ -1227,9 +1232,215 @@ export async function docsFormatText(
     if (f === "fontSize") return `font size ${formatting.fontSize}pt`;
     if (f === "weightedFontFamily") return `font ${formatting.fontFamily}`;
     if (f === "foregroundColor") return "text color";
+    if (f === "link") return formatting.link ? `linked to ${formatting.link}` : "link removed";
     return f;
   });
   return JSON.stringify({ success: true, changes: appliedChanges.join(", "), text_matched: text.substring(0, 50) });
+}
+
+export async function docsParagraphStyle(
+  documentId: string,
+  text: string,
+  style: {
+    heading?: string;
+    alignment?: string;
+    lineSpacing?: number;
+    spaceAbove?: number;
+    spaceBelow?: number;
+  },
+  tabId?: string,
+  accountId?: string
+): Promise<string> {
+  const result = await findTextIndices(documentId, text, tabId, accountId);
+  if ("error" in result) return JSON.stringify(result);
+
+  const { startIndex, endIndex, tabId: resolvedTabId } = result;
+
+  const paragraphStyle: any = {};
+  const fields: string[] = [];
+
+  if (style.heading !== undefined) {
+    paragraphStyle.namedStyleType = style.heading;
+    fields.push("namedStyleType");
+  }
+  if (style.alignment !== undefined) {
+    paragraphStyle.alignment = style.alignment;
+    fields.push("alignment");
+  }
+  if (style.lineSpacing !== undefined) {
+    paragraphStyle.lineSpacing = style.lineSpacing;
+    fields.push("lineSpacing");
+  }
+  if (style.spaceAbove !== undefined) {
+    paragraphStyle.spaceAbove = { magnitude: style.spaceAbove, unit: "PT" };
+    fields.push("spaceAbove");
+  }
+  if (style.spaceBelow !== undefined) {
+    paragraphStyle.spaceBelow = { magnitude: style.spaceBelow, unit: "PT" };
+    fields.push("spaceBelow");
+  }
+
+  if (fields.length === 0) return JSON.stringify({ error: "No paragraph style options specified" });
+
+  const request: any = {
+    updateParagraphStyle: {
+      range: { startIndex, endIndex },
+      paragraphStyle,
+      fields: fields.join(","),
+    },
+  };
+  if (resolvedTabId) request.updateParagraphStyle.range.tabId = resolvedTabId;
+
+  const res = await googleFetch(
+    `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requests: [request] }),
+    },
+    accountId
+  );
+
+  if (!res.ok) {
+    const body = await res.text();
+    return JSON.stringify({ error: `Failed to update paragraph style (${res.status}): ${body}` });
+  }
+
+  const appliedChanges = fields.map(f => {
+    if (f === "namedStyleType") return `heading: ${style.heading}`;
+    if (f === "alignment") return `alignment: ${style.alignment?.toLowerCase()}`;
+    if (f === "lineSpacing") return `line spacing: ${style.lineSpacing}%`;
+    if (f === "spaceAbove") return `space above: ${style.spaceAbove}pt`;
+    if (f === "spaceBelow") return `space below: ${style.spaceBelow}pt`;
+    return f;
+  });
+  return JSON.stringify({ success: true, changes: appliedChanges.join(", "), text_matched: text.substring(0, 50) });
+}
+
+export async function docsCreateList(
+  documentId: string,
+  text: string,
+  listType: "BULLET" | "NUMBER" | "NONE",
+  tabId?: string,
+  accountId?: string
+): Promise<string> {
+  const result = await findTextIndices(documentId, text, tabId, accountId);
+  if ("error" in result) return JSON.stringify(result);
+
+  const { startIndex, endIndex, tabId: resolvedTabId } = result;
+
+  let request: any;
+  if (listType === "NONE") {
+    request = { deleteParagraphBullets: { range: { startIndex, endIndex } } };
+    if (resolvedTabId) request.deleteParagraphBullets.range.tabId = resolvedTabId;
+  } else {
+    const preset = listType === "NUMBER"
+      ? "NUMBERED_DECIMAL_NESTED"
+      : "BULLET_DISC_CIRCLE_SQUARE";
+    request = {
+      createParagraphBullets: {
+        range: { startIndex, endIndex },
+        bulletPreset: preset,
+      },
+    };
+    if (resolvedTabId) request.createParagraphBullets.range.tabId = resolvedTabId;
+  }
+
+  const res = await googleFetch(
+    `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requests: [request] }),
+    },
+    accountId
+  );
+
+  if (!res.ok) {
+    const body = await res.text();
+    return JSON.stringify({ error: `Failed to update list (${res.status}): ${body}` });
+  }
+
+  const action = listType === "NONE" ? "removed bullets/numbering" : `applied ${listType.toLowerCase()} list`;
+  return JSON.stringify({ success: true, action, text_matched: text.substring(0, 50) });
+}
+
+export async function docsInsertImage(
+  documentId: string,
+  imageUrl: string,
+  index?: number,
+  width?: number,
+  height?: number,
+  tabId?: string,
+  accountId?: string
+): Promise<string> {
+  // If no index provided, find the end of the document
+  let insertIndex = index;
+  if (insertIndex === undefined) {
+    const docRes = await googleFetch(
+      `https://docs.googleapis.com/v1/documents/${documentId}?includeTabsContent=true`,
+      {},
+      accountId
+    );
+    if (!docRes.ok) return JSON.stringify({ error: `Failed to read document (${docRes.status})` });
+
+    const doc: any = await docRes.json();
+    let bodyContent: any[] | undefined;
+    if (doc.tabs?.length) {
+      if (tabId) {
+        const findTab = (tabs: any[]): any => {
+          for (const tab of tabs) {
+            if (tab.tabProperties?.tabId === tabId) return tab;
+            if (tab.childTabs?.length) {
+              const found = findTab(tab.childTabs);
+              if (found) return found;
+            }
+          }
+          return null;
+        };
+        const tab = findTab(doc.tabs);
+        bodyContent = tab?.documentTab?.body?.content;
+      } else {
+        bodyContent = doc.tabs[0]?.documentTab?.body?.content;
+      }
+    } else {
+      bodyContent = doc.body?.content;
+    }
+
+    if (!bodyContent?.length) return JSON.stringify({ error: "Could not determine document end index" });
+    const lastElement = bodyContent[bodyContent.length - 1];
+    insertIndex = (lastElement.endIndex || 1) - 1;
+  }
+
+  const request: any = {
+    insertInlineImage: {
+      location: { index: insertIndex },
+      uri: imageUrl,
+    },
+  };
+  if (tabId) request.insertInlineImage.location.tabId = tabId;
+  if (width || height) {
+    request.insertInlineImage.objectSize = {};
+    if (width) request.insertInlineImage.objectSize.width = { magnitude: width, unit: "PT" };
+    if (height) request.insertInlineImage.objectSize.height = { magnitude: height, unit: "PT" };
+  }
+
+  const res = await googleFetch(
+    `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requests: [request] }),
+    },
+    accountId
+  );
+
+  if (!res.ok) {
+    const body = await res.text();
+    return JSON.stringify({ error: `Failed to insert image (${res.status}): ${body}` });
+  }
+
+  return JSON.stringify({ success: true, imageUrl, index: insertIndex });
 }
 
 export async function docsReplaceText(
