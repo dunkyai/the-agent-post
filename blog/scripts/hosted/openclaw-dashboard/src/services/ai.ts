@@ -2155,13 +2155,14 @@ async function callAnthropic(
     content: m.content,
   }));
 
-  const MAX_TOOL_ROUNDS = 25;
+  const MAX_TOOL_ROUNDS = 50;
   const toolCallLog: string[] = []; // track tool+input fingerprints for loop detection
   const MAX_REPEAT_CALLS = 2; // allow same tool+input at most twice
   let lastScreenshot: string | null = null; // track the most recent screenshot base64
   let lastTwitterResult: string | null = null; // track last twitter tool result for fallback
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    if (round > 0 && round % 10 === 0) console.log(`Tool loop round ${round}/${MAX_TOOL_ROUNDS}`);
     onStatus?.(getThinkingMessage(round));
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -2462,12 +2463,13 @@ async function callOpenAI(
   const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
   const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet"];
 
-  const MAX_TOOL_ROUNDS = 25;
+  const MAX_TOOL_ROUNDS = 50;
   const toolCallLog: string[] = [];
   const MAX_REPEAT_CALLS = 2;
   let lastTwitterResult: string | null = null; // track last twitter tool result for fallback
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    if (round > 0 && round % 10 === 0) console.log(`Tool loop round ${round}/${MAX_TOOL_ROUNDS}`);
     onStatus?.(getThinkingMessage(round));
 
     const reqBody: any = {
