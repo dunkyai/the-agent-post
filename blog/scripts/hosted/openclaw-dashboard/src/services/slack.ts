@@ -216,8 +216,9 @@ async function transcribeSlackAudioFiles(files: any[]): Promise<string> {
       parts.push(`[Audio transcription of "${file.name}": "${transcript}"]`);
       console.log(`Transcription complete: ${transcript.length} chars`);
     } catch (err) {
-      console.error(`Transcription error for ${file.name}:`, err instanceof Error ? err.message : err);
-      parts.push(`[Failed to transcribe audio file "${file.name}".]`);
+      const errDetail = err instanceof Error ? err.message : String(err);
+      console.error(`Transcription error for ${file.name}:`, errDetail);
+      parts.push(`[Failed to transcribe audio file "${file.name}". Error: ${errDetail}]`);
     }
   }
 
