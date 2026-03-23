@@ -11,7 +11,7 @@ import {
   calendarListEvents, calendarCreateEvent, calendarUpdateEvent,
   driveSearch, driveReadFile, extractDriveFileId,
   contactsSearch,
-  docsCreate, docsRead, docsAppend, docsInsert, docsSuggestEdit, docsReplaceText,
+  docsCreate, docsRead, docsAppend, docsInsert, docsSuggestEdit, docsFormatText, docsParagraphStyle, docsCreateList, docsInsertImage, docsReplaceText,
   sheetsCreate, sheetsRead, sheetsWrite, sheetsAppend, sheetsListSheets,
 } from "./google";
 import { sendSlackMessage, isSlackRunning, getChannelMembers } from "./slack";
@@ -1602,8 +1602,89 @@ const GOOGLE_DOCS_TOOLS = [
     },
   },
   {
+    name: "docs_format_text",
+    description: "Change the formatting of existing text in a Google Doc. Find the text and apply formatting changes like bold, italic, underline, strikethrough, font size, font family, or text color. Use docs_read first to find the exact text to format.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        document_id: { type: "string", description: "The Google Docs document ID" },
+        text: { type: "string", description: "The exact text to format (must match text in the document)" },
+        bold: { type: "boolean", description: "Set bold (true) or remove bold (false)" },
+        italic: { type: "boolean", description: "Set italic (true) or remove italic (false)" },
+        underline: { type: "boolean", description: "Set underline (true) or remove underline (false)" },
+        strikethrough: { type: "boolean", description: "Set strikethrough (true) or remove strikethrough (false)" },
+        font_size: { type: "number", description: "Font size in points (e.g. 11, 14, 18, 24)" },
+        font_family: { type: "string", description: "Font family name (e.g. 'Arial', 'Times New Roman', 'Roboto')" },
+        text_color: {
+          type: "object",
+          description: "Text color as RGB values 0-1 (e.g. {red: 1, green: 0, blue: 0} for red)",
+          properties: {
+            red: { type: "number" },
+            green: { type: "number" },
+            blue: { type: "number" },
+          },
+        },
+        link: { type: "string", description: "URL to link the text to. Use empty string to remove an existing link." },
+        tab_id: { type: "string", description: "Tab ID to format in (from docs_read). Omit for default/first tab." },
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
+      required: ["document_id", "text"],
+    },
+  },
+  {
+    name: "docs_paragraph_style",
+    description: "Change paragraph-level formatting in a Google Doc: headings, alignment, and spacing. Find the text and apply paragraph styles. Use docs_read first to find the exact text.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        document_id: { type: "string", description: "The Google Docs document ID" },
+        text: { type: "string", description: "The exact text in the paragraph(s) to style (must match text in the document)" },
+        heading: { type: "string", enum: ["TITLE", "SUBTITLE", "HEADING_1", "HEADING_2", "HEADING_3", "HEADING_4", "HEADING_5", "HEADING_6", "NORMAL_TEXT"], description: "Set the paragraph heading level" },
+        alignment: { type: "string", enum: ["LEFT", "CENTER", "RIGHT", "JUSTIFIED"], description: "Set paragraph alignment" },
+        line_spacing: { type: "number", description: "Line spacing as percentage (100 = single, 150 = 1.5x, 200 = double)" },
+        space_above: { type: "number", description: "Space above paragraph in points" },
+        space_below: { type: "number", description: "Space below paragraph in points" },
+        tab_id: { type: "string", description: "Tab ID (from docs_read). Omit for default/first tab." },
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
+      required: ["document_id", "text"],
+    },
+  },
+  {
+    name: "docs_list",
+    description: "Convert paragraphs in a Google Doc into a bulleted list, numbered list, or remove list formatting. Find the text and apply list style. The text should span the paragraphs you want to convert.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        document_id: { type: "string", description: "The Google Docs document ID" },
+        text: { type: "string", description: "The exact text spanning the paragraphs to convert (must match text in the document)" },
+        list_type: { type: "string", enum: ["BULLET", "NUMBER", "NONE"], description: "BULLET for bullet points, NUMBER for numbered list, NONE to remove list formatting" },
+        tab_id: { type: "string", description: "Tab ID (from docs_read). Omit for default/first tab." },
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
+      required: ["document_id", "text", "list_type"],
+    },
+  },
+  {
+    name: "docs_insert_image",
+    description: "Insert an inline image into a Google Doc from a URL. The image URL must be publicly accessible. If no index is provided, the image is inserted at the end of the document.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        document_id: { type: "string", description: "The Google Docs document ID" },
+        image_url: { type: "string", description: "Public URL of the image to insert" },
+        index: { type: "number", description: "Character index to insert the image at (from docs_read). Omit to insert at the end." },
+        width: { type: "number", description: "Image width in points (72 points = 1 inch)" },
+        height: { type: "number", description: "Image height in points (72 points = 1 inch)" },
+        tab_id: { type: "string", description: "Tab ID (from docs_read). Omit for default/first tab." },
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
+      required: ["document_id", "image_url"],
+    },
+  },
+  {
     name: "docs_replace_text",
-    description: "Find and replace all occurrences of a text string in a Google Doc. Use this for bulk text replacements like removing emojis, fixing typos across the document, or renaming terms. Returns the number of occurrences replaced.",
+    description: "Find and replace all occurrences of a text string in a Google Doc. WARNING: This is a destructive bulk operation — it replaces text instantly with no way to review. Only use for mechanical replacements like removing emojis, fixing a repeated typo, or renaming a term across the document. To edit or revise content, use docs_suggest_edit instead (it shows changes as redlines for user review).",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -1775,6 +1856,20 @@ async function executeGoogleTool(toolName: string, input: any): Promise<string> 
         return await docsInsert(input.document_id, input.text, input.index, input.tab_id, acct);
       case "docs_suggest_edit":
         return await docsSuggestEdit(input.document_id, input.old_text, input.new_text, input.tab_id, acct);
+      case "docs_format_text":
+        return await docsFormatText(input.document_id, input.text, {
+          bold: input.bold, italic: input.italic, underline: input.underline, strikethrough: input.strikethrough,
+          fontSize: input.font_size, fontFamily: input.font_family, foregroundColor: input.text_color, link: input.link,
+        }, input.tab_id, acct);
+      case "docs_paragraph_style":
+        return await docsParagraphStyle(input.document_id, input.text, {
+          heading: input.heading, alignment: input.alignment, lineSpacing: input.line_spacing,
+          spaceAbove: input.space_above, spaceBelow: input.space_below,
+        }, input.tab_id, acct);
+      case "docs_list":
+        return await docsCreateList(input.document_id, input.text, input.list_type, input.tab_id, acct);
+      case "docs_insert_image":
+        return await docsInsertImage(input.document_id, input.image_url, input.index, input.width, input.height, input.tab_id, acct);
       case "docs_replace_text":
         return await docsReplaceText(input.document_id, input.find_text, input.replace_text, input.match_case ?? true, input.tab_id, acct);
       case "sheets_create":
@@ -1953,6 +2048,10 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   docs_append: "Editing a document...",
   docs_insert: "Editing a document...",
   docs_suggest_edit: "Suggesting edits...",
+  docs_format_text: "Formatting text...",
+  docs_paragraph_style: "Styling paragraph...",
+  docs_list: "Updating list...",
+  docs_insert_image: "Inserting image...",
   docs_replace_text: "Replacing text...",
   sheets_create: "Creating a spreadsheet...",
   sheets_read: "Reading a spreadsheet...",
@@ -2122,7 +2221,7 @@ async function callAnthropic(
         "calendar_list_events", "calendar_create_event", "calendar_update_event",
         "drive_search", "drive_read_file", "drive_open_url",
         "contacts_search",
-        "docs_create", "docs_read", "docs_append", "docs_insert", "docs_suggest_edit", "docs_replace_text",
+        "docs_create", "docs_read", "docs_append", "docs_insert", "docs_suggest_edit", "docs_format_text", "docs_paragraph_style", "docs_list", "docs_insert_image", "docs_replace_text",
         "sheets_create", "sheets_read", "sheets_write", "sheets_append", "sheets_list_sheets",
       ];
       const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
@@ -2351,7 +2450,7 @@ async function callOpenAI(
     "calendar_list_events", "calendar_create_event", "calendar_update_event",
     "drive_search", "drive_read_file", "drive_open_url",
     "contacts_search",
-    "docs_create", "docs_read", "docs_append", "docs_insert", "docs_suggest_edit", "docs_replace_text",
+    "docs_create", "docs_read", "docs_append", "docs_insert", "docs_suggest_edit", "docs_format_text", "docs_paragraph_style", "docs_list", "docs_insert_image", "docs_replace_text",
     "sheets_create", "sheets_read", "sheets_write", "sheets_append", "sheets_list_sheets",
   ];
   const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
@@ -2733,7 +2832,7 @@ export async function processMessage(
       if (allSvcs.has("calendar")) googleContext += " You can view, create, update, and delete Google Calendar events.";
       if (allSvcs.has("drive")) googleContext += " You can search and read Google Drive files including Google Docs, Sheets, and Slides.";
       if (allSvcs.has("contacts")) googleContext += " You can search Google Contacts.";
-      if (allSvcs.has("docs")) googleContext += " You can create, read, and edit Google Docs using the docs_* tools. Use docs_create to make new documents, docs_read to read content (including all tabs), and docs_append or docs_insert to add text. Use docs_suggest_edit to propose changes to existing text — it marks the original in red strikethrough and inserts the replacement in blue, so the user can review and accept/reject. For docs with multiple tabs: docs_read returns all tabs with their tabId and title. To write to a specific tab, pass the tab_id to docs_append, docs_insert, or docs_suggest_edit. If the user refers to a tab by name or content, use docs_read first to find the matching tab, then use its tabId. IMPORTANT: When docs_append returns success, the text IS at the end of the document — do NOT re-read to verify and do NOT retry with docs_insert. On long documents, docs_read truncates content so you may not see the appended text, but it is there.";
+      if (allSvcs.has("docs")) googleContext += " You can create, read, and edit Google Docs using the docs_* tools. Use docs_create to make new documents, docs_read to read content (including all tabs), and docs_append or docs_insert to add text. Use docs_format_text to change text formatting (bold, italic, underline, strikethrough, font size, font family, text color, and hyperlinks). Use docs_paragraph_style to change paragraph-level formatting (headings, alignment, line spacing). Use docs_list to convert text into bullet or numbered lists. Use docs_insert_image to add images from URLs. IMPORTANT — EDITING EXISTING TEXT: When the user asks you to edit, revise, rewrite, or update existing text in a Google Doc, ALWAYS use docs_suggest_edit. This marks the original text in red strikethrough and inserts the replacement in blue, so the user can review the change. NEVER use docs_replace_text to edit content — that does a destructive overwrite with no way to review. Only use docs_replace_text for mechanical bulk operations (like removing all emojis or fixing a repeated typo). For docs with multiple tabs: docs_read returns all tabs with their tabId and title. To write to a specific tab, pass the tab_id parameter. If the user refers to a tab by name or content, use docs_read first to find the matching tab, then use its tabId. IMPORTANT: When docs_append returns success, the text IS at the end of the document — do NOT re-read to verify and do NOT retry with docs_insert.";
       if (allSvcs.has("sheets")) googleContext += " You can create, read, and write Google Sheets using the sheets_* tools. Use sheets_list_sheets to see tabs, sheets_read to read cell ranges, sheets_write to update cells, and sheets_append to add rows.";
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${googleContext}` : googleContext;
     }
