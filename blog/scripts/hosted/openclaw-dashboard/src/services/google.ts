@@ -1334,6 +1334,12 @@ export function isGmailPollingRunning(): boolean {
   return gmailPollInterval !== null;
 }
 
+/** Extract a clean lowercase email address from a "Name <email>" or bare "email" string */
+function extractEmailAddress(from: string): string {
+  const match = from.toLowerCase().trim().match(/<([^>]+)>/);
+  return match ? match[1] : from.toLowerCase().trim();
+}
+
 function isGmailSenderAllowed(sender: string): boolean {
   try {
     const rules = JSON.parse(getSetting("gmail_email_rules") || "{}");
@@ -1459,9 +1465,12 @@ async function pollGmail(): Promise<void> {
         }
 
         // Step 3b: Is the latest message from our own account? (already replied)
-        const lastFromEmail = latestFrom.toLowerCase().match(/<([^>]+)>/)?.[1]
-          || latestFrom.toLowerCase().trim();
-        if (lastFromEmail === ownEmail) {
+        const lastFromEmail = extractEmailAddress(latestFrom);
+        const isOwnMessage = lastFromEmail === ownEmail
+          || (ownEmail.includes("@") && lastFromEmail === ownEmail.split("@")[0] + "@googlemail.com")
+          || (ownEmail.includes("@googlemail.com") && lastFromEmail === ownEmail.replace("@googlemail.com", "@gmail.com"));
+        console.log(`Gmail poll: sender check — from="${lastFromEmail}" own="${ownEmail}" match=${isOwnMessage}`);
+        if (isOwnMessage) {
           console.log(`Gmail poll: skipped (already replied) — ${subject}`);
           continue;
         }
@@ -1506,11 +1515,7 @@ async function pollGmail(): Promise<void> {
         const replyCc = allRecipients
           .split(",")
           .map(r => r.trim())
-          .filter(r => {
-            const emailMatch = r.toLowerCase().match(/<([^>]+)>/);
-            const email = emailMatch ? emailMatch[1] : r.toLowerCase();
-            return email !== ownEmail;
-          })
+          .filter(r => extractEmailAddress(r) !== ownEmail)
           .join(", ") || undefined;
 
         if (replyMode === "send" && account.services.includes("gmail_send")) {
