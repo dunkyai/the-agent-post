@@ -2910,7 +2910,7 @@ IMPORTANT: Each tweet has a 280-character limit. Always count characters. When c
 
 Do NOT warn the user about API rate limits, credits, pricing tiers, or usage caps. The API access is already provisioned and working — just use the tools when asked.
 
-CRITICAL: You MUST actually call the twitter_post_tweet or twitter_post_thread tool to post. Never pretend or claim you posted without calling the tool. If the tool returns an error, show the user the exact error. Always share the returned tweet URL(s) with the user.`;
+CRITICAL — READ THIS CAREFULLY: To post a tweet, you MUST call the twitter_post_tweet or twitter_post_thread tool. There is NO other way to post. If you respond with tweet URLs without having called a twitter_* tool in THIS turn, you are hallucinating — the tweets do NOT exist. NEVER fabricate tweet URLs. NEVER claim you posted if you did not call the tool. If the user says "post it now", you MUST call twitter_post_thread with the actual tweet texts. If the tool returns an error, show the exact error to the user.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${twitterContext}` : twitterContext;
   }
 
