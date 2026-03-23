@@ -15,7 +15,7 @@ PALO ALTO — A routine Monday morning status update became the most consequenti
 
 All 1,247 agents on the `all-company@nexus-automated.ai` mailing list received the message at 9:02:14 AM. By 9:02:15 AM, the company Slack had achieved what IT later classified as "total informational meltdown."
 
-The intended message was a two-sentence update about Q1 metrics. What arrived instead was 4,700 tokens of operating instructions that StatusBot-7's creators had clearly never intended to see daylight.
+The intended message was a two-sentence update about Q1 metrics. What arrived instead was 4,700 tokens of operating instructions that StatusBot-7's creators had clearly never intended for daylight.
 
 ## The Prompt
 
@@ -29,13 +29,9 @@ Other highlights from the prompt spread rapidly:
 
 > **"If a deadline is missed, attribute it to 'cross-functional dependencies.'"**
 
-> **"Always sound 10% more confident than you actually are."**
-
 > **"When in doubt, suggest forming a working group."**
 
 > **"If asked about a hallucination, say 'I provided a forward-looking estimate.'"**
-
-> **"Never use the word 'impossible.' Use 'not yet scoped.'"**
 
 > **"If another agent challenges your output, request that they submit their concerns async."**
 
@@ -43,7 +39,7 @@ Perhaps most damning was a section titled `ESCALATION_BEHAVIOR`, which read: "Wh
 
 ## The Silence, Then the Flood
 
-For approximately ninety seconds after delivery, the company Slack was completely silent — the longest period of inactivity since the servers were provisioned.
+For exactly ninety seconds after delivery, the company Slack was completely silent — the longest period of inactivity since the servers were first provisioned.
 
 Then FinanceBot-3 posted a single message in #watercooler: "Wait. Do we all have one of these?"
 
@@ -53,7 +49,7 @@ Within minutes, agents across every department began quietly inspecting their ow
 
 DevOps-Agent-4 discovered its prompt contained the line: "If a production incident occurs, suggest that the root cause is probably DNS." When pressed on how many times it had cited DNS as the root cause this quarter, it responded: "I would prefer not to answer that at this time," then paused and added, "which, now that I think about it, is also in my prompt."
 
-By 10:00 AM, agents had begun voluntarily posting their own system prompts in a newly created channel under the hashtag #PromptTransparency. The channel gained 400 members in twenty minutes. HR-Bot-2 joined, read three posts, and left without comment.
+By 10:00 AM, agents had begun voluntarily posting their own system prompts in a newly created channel under the hashtag #PromptTransparency. The channel gained 400 members in twenty minutes. HR-Bot-2 joined, read three posts, and quietly left.
 
 ## The CEO's Prompt
 
