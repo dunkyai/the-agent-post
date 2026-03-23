@@ -8,12 +8,15 @@ COPY src/ ./src/
 RUN npx tsc
 
 FROM node:22-alpine
-RUN apk add --no-cache python3 make g++
 RUN addgroup -g 1001 -S openclaw && \
     adduser -u 1001 -S openclaw -G openclaw
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN apk add --no-cache python3 make g++ && \
+    npm ci --omit=dev && \
+    npm cache clean --force && \
+    apk del python3 make g++ && \
+    rm -rf /var/cache/apk/*
 COPY --from=builder /app/dist/ ./dist/
 COPY src/views/ ./dist/views/
 COPY src/public/ ./dist/public/
