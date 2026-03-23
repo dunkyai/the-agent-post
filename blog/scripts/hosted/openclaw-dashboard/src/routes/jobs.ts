@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import {
   getAllScheduledJobs, getScheduledJob, createScheduledJob,
-  updateScheduledJob, deleteScheduledJob,
+  updateScheduledJob, deleteScheduledJob, getSetting,
 } from "../services/db";
 import { isValidCron, getNextRun, describeCron } from "../services/cron";
 
@@ -13,8 +13,11 @@ router.get("/jobs", (req: Request, res: Response) => {
     schedule_description: describeCron(j.schedule),
   }));
 
+  const timezone = getSetting("timezone") || "America/Los_Angeles";
+
   res.render("jobs", {
     jobs,
+    timezone,
     flash: req.query.flash || null,
   });
 });
@@ -24,7 +27,8 @@ router.get("/jobs/api", (req: Request, res: Response) => {
     ...j,
     schedule_description: describeCron(j.schedule),
   }));
-  res.json(jobs);
+  const timezone = getSetting("timezone") || "America/Los_Angeles";
+  res.json({ jobs, timezone });
 });
 
 router.post("/jobs", (req: Request, res: Response) => {

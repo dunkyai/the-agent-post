@@ -27,6 +27,7 @@ router.get("/settings", (req: Request, res: Response) => {
   const temperature = getSetting("temperature") || "0.7";
   const maxTokens = getSetting("max_tokens") || "4096";
   const sessionExpiryDays = getSetting("session_expiry_days") || "30";
+  const timezone = getSetting("timezone") || "America/Los_Angeles";
 
   res.render("settings", {
     hasAnthropicKey,
@@ -37,12 +38,13 @@ router.get("/settings", (req: Request, res: Response) => {
     temperature,
     maxTokens,
     sessionExpiryDays,
+    timezone,
     flash: req.query.flash || null,
   });
 });
 
 router.post("/settings", (req: Request, res: Response) => {
-  const { provider, api_key, model, system_prompt, temperature, max_tokens, session_expiry_days } = req.body;
+  const { provider, api_key, model, system_prompt, temperature, max_tokens, session_expiry_days, timezone } = req.body;
 
   if (!provider) {
     res.redirect(303, "/settings?flash=Invalid+submission");
@@ -77,6 +79,10 @@ router.post("/settings", (req: Request, res: Response) => {
   const validExpiry = ["1", "7", "30", "90"];
   if (validExpiry.includes(session_expiry_days)) {
     setSetting("session_expiry_days", session_expiry_days);
+  }
+
+  if (timezone && timezone.trim()) {
+    setSetting("timezone", timezone.trim());
   }
 
   res.redirect(303, "/settings?flash=Settings+saved");

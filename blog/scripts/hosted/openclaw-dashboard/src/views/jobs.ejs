@@ -35,10 +35,10 @@
           <div><strong>Target:</strong> <%= job.target_source %> / <%= job.target_external_id %></div>
           <div><strong>Created by:</strong> <%= job.created_by %></div>
           <% if (job.next_run) { %>
-            <div><strong>Next run:</strong> <%= job.next_run %></div>
+            <div><strong>Next run:</strong> <span class="local-time" data-utc="<%= job.next_run %>"><%= job.next_run %></span></div>
           <% } %>
           <% if (job.last_run) { %>
-            <div><strong>Last run:</strong> <%= job.last_run %></div>
+            <div><strong>Last run:</strong> <span class="local-time" data-utc="<%= job.last_run %>"><%= job.last_run %></span></div>
           <% } %>
           <% if (job.last_error) { %>
             <div style="color: var(--danger);"><strong>Last error:</strong> <%= job.last_error %></div>
@@ -65,11 +65,27 @@
 <script>
 (function() {
   var POLL_INTERVAL = 30000;
+  var userTimezone = "<%= timezone %>";
   function escapeHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
   function truncate(s, n) { return s.length > n ? s.slice(0, n) + '...' : s; }
+  function formatLocal(utcStr, tz) {
+    try {
+      var d = new Date(utcStr);
+      if (isNaN(d.getTime())) return utcStr;
+      return d.toLocaleString('en-US', { timeZone: tz, month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short' });
+    } catch (e) { return utcStr; }
+  }
+
+  // Convert server-rendered times on page load
+  document.querySelectorAll('.local-time').forEach(function(el) {
+    var utc = el.getAttribute('data-utc');
+    if (utc) el.textContent = formatLocal(utc, userTimezone);
+  });
 
   function refreshJobs() {
-    fetch('/jobs/api').then(function(r) { return r.json(); }).then(function(jobs) {
+    fetch('/jobs/api').then(function(r) { return r.json(); }).then(function(data) {
+      var jobs = data.jobs || data;
+      var tz = data.timezone || userTimezone;
       var container = document.getElementById('jobs-list');
       if (!container) return;
       if (jobs.length === 0) {
@@ -87,8 +103,8 @@
           + '<div><strong>Prompt:</strong> ' + escapeHtml(truncate(job.prompt, 120)) + '</div>'
           + '<div><strong>Target:</strong> ' + escapeHtml(job.target_source) + ' / ' + escapeHtml(job.target_external_id) + '</div>'
           + '<div><strong>Created by:</strong> ' + escapeHtml(job.created_by) + '</div>'
-          + (job.next_run ? '<div><strong>Next run:</strong> ' + escapeHtml(job.next_run) + '</div>' : '')
-          + (job.last_run ? '<div><strong>Last run:</strong> ' + escapeHtml(job.last_run) + '</div>' : '')
+          + (job.next_run ? '<div><strong>Next run:</strong> ' + escapeHtml(formatLocal(job.next_run, tz)) + '</div>' : '')
+          + (job.last_run ? '<div><strong>Last run:</strong> ' + escapeHtml(formatLocal(job.last_run, tz)) + '</div>' : '')
           + (job.last_error ? '<div style="color: var(--danger);"><strong>Last error:</strong> ' + escapeHtml(job.last_error) + '</div>' : '')
           + (job.last_result ? '<div><strong>Last result:</strong> ' + escapeHtml(truncate(job.last_result, 100)) + '</div>' : '')
           + '</div>'
