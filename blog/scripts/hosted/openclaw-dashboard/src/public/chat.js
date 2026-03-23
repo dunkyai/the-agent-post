@@ -33,8 +33,8 @@
     // Inline code (` ... `)
     html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
 
-    // Images ![alt](src) — match across whitespace in URL
-    html = html.replace(/!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, '<img alt="$1" src="$2">');
+    // Images ![alt](src) — match http(s) URLs and data: URIs (base64 screenshots)
+    html = html.replace(/!\[([^\]]*)\]\(((?:https?:\/\/|data:)[^)\s]+)\)/g, '<img alt="$1" src="$2">');
 
     // Links [text](url) — only match if not preceded by !
     html = html.replace(/(?<!!)\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
