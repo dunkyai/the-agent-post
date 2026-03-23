@@ -116,7 +116,10 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
   // Only respond if: bot is @mentioned or it's a DM (channel starts with D)
   const isMentioned = text.includes(`<@${slackConfig.bot_user_id}>`);
   const isDM = channelId.startsWith("D");
-  if (!isMentioned && !isDM) return;
+  if (!isMentioned && !isDM) {
+    return;
+  }
+  console.log(`Slack event: channel=${channelId} user=${userId} mentioned=${isMentioned} dm=${isDM} thread=${!!event.thread_ts}`);
 
   // Strip the bot mention from the text so the AI sees clean input
   text = text.replace(new RegExp(`<@${slackConfig.bot_user_id}>`, "g"), "").trim();
