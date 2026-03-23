@@ -144,6 +144,11 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
   }
 
   try {
+    // Acknowledge immediately so user knows bot is working
+    const acks = ["On it!", "Working on it!", "Let me look into that.", "Give me a moment..."];
+    const ack = acks[Math.floor(Math.random() * acks.length)];
+    await sendSlackMessage(channelId, ack, threadTs);
+
     const reply = await processMessage("slack", externalId, text, "You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. Be BRIEF. This is Slack, not email — keep replies short (1-3 sentences when possible). No preamble, no filler, no restating the question. Lead with the answer. Only elaborate if the user asks for more detail. Always follow the user's formatting and style preferences (e.g. if they ask for no emojis, stop using emojis). IMPORTANT: You CAN handle audio files and voice clips in Slack. When a user shares audio, the system automatically transcribes it before you see the message — the transcribed text appears as [Audio transcription: ...] at the start of the message. You do NOT need to access files directly; transcription is handled for you. If asked whether you can process audio, say YES.");
     await sendSlackMessage(channelId, reply, threadTs);
   } catch (err: unknown) {
