@@ -2534,12 +2534,19 @@ export async function generateEmailReply(emailContent: string, memories: string[
   const userName = getSetting("user_name") || senderEmail;
 
   const systemPrompt = [
-    `You are drafting a Gmail reply on behalf of ${userName} (${senderEmail}).`,
-    `Write the reply as ${userName} — use their voice and perspective. Never impersonate the person you are replying to or anyone else.`,
-    `Output ONLY the email body text. No preamble, no explanations, no "Here's a draft", no planning, no thinking out loud.`,
-    `Do not start with phrases like "I'll draft..." or "Here's my response..." or "Let me...".`,
-    `Just write the actual reply as if you are ${userName}. Be concise and professional.`,
-    `Do not reveal that you are an AI assistant.`,
+    `You are ghostwriting a Gmail reply as ${userName} (${senderEmail}).`,
+    `YOUR OUTPUT IS THE EMAIL BODY. It will be placed directly into a Gmail draft with zero editing.`,
+    ``,
+    `RULES:`,
+    `- Output ONLY the email text. Nothing else.`,
+    `- Do NOT include any thinking, analysis, reasoning, or commentary.`,
+    `- Do NOT start with "Here's", "I'll", "Let me", "Sure", "Based on", or any meta-commentary.`,
+    `- Do NOT mention that you are drafting, writing, or composing anything.`,
+    `- Do NOT analyze whether to reply or not — always write the reply.`,
+    `- Do NOT discuss the sender, the thread, or your decision process.`,
+    `- Start directly with the greeting (e.g. "Hi [Name],") or the first sentence of the reply.`,
+    `- Write as ${userName}, in their voice. Be concise and professional.`,
+    `- Do not reveal that you are an AI.`,
     memories.length > 0 ? `\nContext about ${userName}:\n${memories.map(m => `- ${m}`).join("\n")}` : "",
   ].filter(Boolean).join("\n");
 
@@ -2565,7 +2572,8 @@ export async function generateEmailReply(emailContent: string, memories: string[
       throw new Error(`Anthropic API error (${res.status}): ${body}`);
     }
     const data: any = await res.json();
-    return (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
+    const raw = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
+    return cleanEmailDraft(raw);
   } else {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -2588,8 +2596,34 @@ export async function generateEmailReply(emailContent: string, memories: string[
       throw new Error(`OpenAI API error (${res.status}): ${body}`);
     }
     const data: any = await res.json();
-    return data.choices?.[0]?.message?.content || "";
+    return cleanEmailDraft(data.choices?.[0]?.message?.content || "");
   }
+}
+
+/** Strip AI preamble/thinking that leaks into email drafts */
+function cleanEmailDraft(text: string): string {
+  if (!text) return text;
+  // Remove common preamble lines at the start
+  const preamblePatterns = [
+    /^(here'?s?\s+(a\s+)?(draft|my|the)\s+(reply|response|email).*?:\s*\n*)/i,
+    /^(i'?ll\s+draft.*?:\s*\n*)/i,
+    /^(let\s+me\s+draft.*?:\s*\n*)/i,
+    /^(sure[,!.]?\s*(here'?s?.*?)?\s*\n*)/i,
+    /^(based\s+on.*?:\s*\n*)/i,
+    /^(draft\s+(reply|response|email).*?:\s*\n*)/i,
+    /^(i\s+should\s+(not\s+)?.*?\.\s*\n*)/i,
+    /^(this\s+email\s+(is|was|appears).*?\.\s*\n*)/i,
+    /^(the\s+(latest|last|most recent)\s+(message|email).*?\.\s*\n*)/i,
+    /^(since\s+this.*?\.\s*\n*)/i,
+  ];
+  let cleaned = text;
+  for (const pattern of preamblePatterns) {
+    cleaned = cleaned.replace(pattern, "");
+  }
+  // Remove trailing "---" or "Note:" meta-commentary
+  cleaned = cleaned.replace(/\n---\n[\s\S]*$/m, "");
+  cleaned = cleaned.replace(/\n\*?Note:?\*?\s+.*$/im, "");
+  return cleaned.trim();
 }
 
 export async function processMessage(
