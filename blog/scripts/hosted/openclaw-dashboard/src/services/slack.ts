@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { processMessage } from "./ai";
 import { getSetting, getOrCreateConversation, deleteConversation } from "./db";
 import { decrypt } from "./encryption";
-import { isSlackAudioFile, transcribeAudio } from "./transcription";
+import { isSlackAudioFile, isAudioMimeType, transcribeAudio } from "./transcription";
 
 // Module state
 interface SlackConfig {
@@ -102,12 +102,23 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
     }
   }
 
-  // Check for audio/voice files
+  // Check for audio/voice files attached to the event
   const audioFiles = (event.files || []).filter((f: any) => isSlackAudioFile(f));
   if (audioFiles.length > 0) {
     const transcriptions = await transcribeSlackAudioFiles(audioFiles);
     if (transcriptions) {
       text = transcriptions + (text ? "\n\n" + text : "");
+    }
+  }
+
+  // Check for Slack file URLs pasted as text (user sharing audio links instead of uploading)
+  if (audioFiles.length === 0 && slackConfig) {
+    const slackFileUrls = text.match(/https?:\/\/[a-z0-9]+\.slack\.com\/files\/[^\s>|]+/g);
+    if (slackFileUrls?.length) {
+      const urlTranscriptions = await transcribeSlackFileUrls(slackFileUrls);
+      if (urlTranscriptions) {
+        text = urlTranscriptions + "\n\n" + text;
+      }
     }
   }
 
@@ -181,14 +192,21 @@ async function transcribeSlackAudioFiles(files: any[]): Promise<string> {
   const parts: string[] = [];
   for (const file of files) {
     try {
-      console.log(`Transcribing audio: ${file.name} (${file.mimetype}, ${file.size} bytes) via ${hasGroq ? "Groq" : "OpenAI"}`);
+      const downloadUrl = file.url_private_download || file.url_private;
+      console.log(`Transcribing audio: ${file.name} (${file.mimetype}, filetype=${file.filetype}, ${file.size} bytes) via ${hasGroq ? "Groq" : "OpenAI"}, url=${downloadUrl ? "present" : "MISSING"}`);
+
+      if (!downloadUrl) {
+        console.error(`No download URL for Slack file ${file.name}`);
+        parts.push(`[Could not download audio file "${file.name}" — no download URL available.]`);
+        continue;
+      }
 
       // Download from Slack
-      const res = await fetch(file.url_private_download, {
+      const res = await fetch(downloadUrl, {
         headers: { Authorization: `Bearer ${slackConfig!.bot_token}` },
       });
       if (!res.ok) {
-        console.error(`Failed to download Slack file (${res.status})`);
+        console.error(`Failed to download Slack file (${res.status}) from ${downloadUrl}`);
         parts.push(`[Could not download audio file "${file.name}" — you may need to reconnect Slack to grant file access.]`);
         continue;
       }
@@ -200,6 +218,74 @@ async function transcribeSlackAudioFiles(files: any[]): Promise<string> {
     } catch (err) {
       console.error(`Transcription error for ${file.name}:`, err instanceof Error ? err.message : err);
       parts.push(`[Failed to transcribe audio file "${file.name}".]`);
+    }
+  }
+
+  return parts.join("\n");
+}
+
+/** Download and transcribe audio files from Slack file URLs pasted as text */
+async function transcribeSlackFileUrls(urls: string[]): Promise<string> {
+  if (!slackConfig) return "";
+
+  const hasGroq = !!process.env.GROQ_API_KEY;
+  let openaiKey: string | undefined;
+  if (!hasGroq) {
+    const encryptedKey = getSetting("openai_api_key");
+    if (!encryptedKey) return "";
+    try { openaiKey = decrypt(encryptedKey); } catch { return ""; }
+  }
+
+  const parts: string[] = [];
+  for (const fileUrl of urls) {
+    try {
+      // Use Slack API to get file info from the URL
+      // Extract file ID from URL pattern: /files/USER_ID/FILE_ID/filename
+      const fileIdMatch = fileUrl.match(/\/files\/[A-Z0-9]+\/([A-Z0-9]+)/);
+      if (!fileIdMatch) continue;
+
+      const fileId = fileIdMatch[1];
+      console.log(`Fetching Slack file info for ${fileId} from URL`);
+
+      const infoRes = await fetch(`https://slack.com/api/files.info?file=${fileId}`, {
+        headers: { Authorization: `Bearer ${slackConfig.bot_token}` },
+      });
+      if (!infoRes.ok) continue;
+
+      const infoData: any = await infoRes.json();
+      if (!infoData.ok || !infoData.file) {
+        console.error(`Slack files.info failed for ${fileId}: ${infoData.error}`);
+        continue;
+      }
+
+      const file = infoData.file;
+      const audioExts = ["mp3", "mp4", "m4a", "wav", "ogg", "webm", "flac", "aac"];
+      const isAudio = (file.mimetype && isAudioMimeType(file.mimetype))
+        || audioExts.includes((file.filetype || "").toLowerCase());
+
+      if (!isAudio) {
+        console.log(`Slack file ${fileId} is not audio (mimetype=${file.mimetype}, filetype=${file.filetype})`);
+        continue;
+      }
+
+      const downloadUrl = file.url_private_download || file.url_private;
+      if (!downloadUrl) continue;
+
+      console.log(`Downloading audio from URL: ${file.name} (${file.mimetype}, ${file.size} bytes)`);
+      const res = await fetch(downloadUrl, {
+        headers: { Authorization: `Bearer ${slackConfig.bot_token}` },
+      });
+      if (!res.ok) {
+        console.error(`Failed to download Slack file from URL (${res.status})`);
+        continue;
+      }
+
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const transcript = await transcribeAudio(buffer, file.name || "audio.m4a", openaiKey);
+      parts.push(`[Audio transcription of "${file.name}": "${transcript}"]`);
+      console.log(`URL transcription complete: ${transcript.length} chars`);
+    } catch (err) {
+      console.error(`URL transcription error:`, err instanceof Error ? err.message : err);
     }
   }
 
