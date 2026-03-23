@@ -1,4 +1,4 @@
-import { getDueJobs, getScheduledJob, markJobRun, deleteConversation, getOrCreateConversation } from "./db";
+import { getDueJobs, getScheduledJob, markJobRun, deleteConversation, getOrCreateConversation, getSetting } from "./db";
 import { processMessage } from "./ai";
 import { getNextRun } from "./cron";
 
@@ -65,7 +65,8 @@ async function executeJob(jobId: number): Promise<void> {
 
     await deliverResult(job, result);
 
-    const nextRun = getNextRun(job.schedule, new Date());
+    const tz = getSetting("timezone") || "America/Los_Angeles";
+    const nextRun = getNextRun(job.schedule, new Date(), tz);
     markJobRun(job.id, result, null, nextRun.toISOString());
     console.log(`Job #${job.id} completed. Next run: ${nextRun.toISOString()}`);
   } catch (err: unknown) {
@@ -73,7 +74,8 @@ async function executeJob(jobId: number): Promise<void> {
     console.error(`Job #${job.id} failed:`, message);
 
     try {
-      const nextRun = getNextRun(job.schedule, new Date());
+      const tz = getSetting("timezone") || "America/Los_Angeles";
+      const nextRun = getNextRun(job.schedule, new Date(), tz);
       markJobRun(job.id, null, message, nextRun.toISOString());
     } catch {
       markJobRun(job.id, null, message, new Date(Date.now() + 3600000).toISOString());

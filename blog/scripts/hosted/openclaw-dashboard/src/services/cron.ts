@@ -51,8 +51,32 @@ export function parseCron(expression: string): CronFields {
   };
 }
 
-export function getNextRun(expression: string, after: Date = new Date()): Date {
+/**
+ * Get date parts in a specific timezone.
+ * Returns { year, month (1-12), day, dow (0-6), hour, minute } in the given tz.
+ */
+function getPartsInTz(date: Date, tz: string): { month: number; day: number; dow: number; hour: number; minute: number } {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric", month: "numeric", day: "numeric",
+    hour: "numeric", minute: "numeric", hour12: false,
+    weekday: "short",
+  });
+  const parts = fmt.formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value || "";
+  const dowMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return {
+    month: parseInt(get("month"), 10),
+    day: parseInt(get("day"), 10),
+    dow: dowMap[get("weekday")] ?? 0,
+    hour: parseInt(get("hour"), 10) % 24,
+    minute: parseInt(get("minute"), 10),
+  };
+}
+
+export function getNextRun(expression: string, after: Date = new Date(), timezone?: string): Date {
   const cron = parseCron(expression);
+  const tz = timezone || "UTC";
 
   const candidate = new Date(after);
   candidate.setSeconds(0, 0);
@@ -60,12 +84,13 @@ export function getNextRun(expression: string, after: Date = new Date()): Date {
 
   const maxIterations = 366 * 24 * 60;
   for (let i = 0; i < maxIterations; i++) {
+    const p = getPartsInTz(candidate, tz);
     if (
-      cron.months.has(candidate.getMonth() + 1) &&
-      cron.daysOfMonth.has(candidate.getDate()) &&
-      cron.daysOfWeek.has(candidate.getDay()) &&
-      cron.hours.has(candidate.getHours()) &&
-      cron.minutes.has(candidate.getMinutes())
+      cron.months.has(p.month) &&
+      cron.daysOfMonth.has(p.day) &&
+      cron.daysOfWeek.has(p.dow) &&
+      cron.hours.has(p.hour) &&
+      cron.minutes.has(p.minute)
     ) {
       return candidate;
     }

@@ -1938,7 +1938,8 @@ function executeSchedulingTool(toolName: string, input: any): string {
       if (input.target_source === "slack" && !/^[CDGU][A-Z0-9]+$/.test(input.target_external_id)) {
         return JSON.stringify({ error: `Invalid Slack channel/user ID "${input.target_external_id}". Slack IDs start with C (channel), D (DM), G (group), or U (user) followed by uppercase letters and numbers (e.g. C01HCS46FPB or U07FQCAACN8). Ask the user for their Slack channel or user ID.` });
       }
-      const nextRun = getNextRun(input.schedule);
+      const jobTimezone = getSetting("timezone") || "America/Los_Angeles";
+      const nextRun = getNextRun(input.schedule, new Date(), jobTimezone);
       const id = createScheduledJob({
         name: input.name,
         schedule: input.schedule,
@@ -2748,7 +2749,7 @@ export async function processMessage(
 
   // Inject user timezone
   const userTimezone = getSetting("timezone") || "America/Los_Angeles";
-  const tzContext = `The user's timezone is ${userTimezone}. The server runs in UTC. When scheduling jobs with create_scheduled_job, convert the user's local time to UTC for the cron expression. For example, if the user says "8:30 AM" and their timezone is America/Los_Angeles (UTC-7 in PDT / UTC-8 in PST), use the UTC equivalent (e.g. "30 15 * * *" for 8:30 AM PDT). Always confirm the scheduled time back to the user in their local timezone.`;
+  const tzContext = `The user's timezone is ${userTimezone}. Cron expressions in create_scheduled_job are interpreted in the user's local timezone, so use the user's local time directly. For example, if the user says "8:30 AM", use "30 8 * * *" — do NOT convert to UTC. Always confirm the scheduled time back to the user in their local timezone.`;
   systemPrompt = systemPrompt ? `${systemPrompt}\n\n${tzContext}` : tzContext;
 
   if (context) {
