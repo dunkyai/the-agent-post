@@ -2746,6 +2746,11 @@ export async function processMessage(
     systemPrompt = nameContext + (systemPrompt ? `\n\n${systemPrompt}` : "");
   }
 
+  // Inject user timezone
+  const userTimezone = getSetting("timezone") || "America/Los_Angeles";
+  const tzContext = `The user's timezone is ${userTimezone}. The server runs in UTC. When scheduling jobs with create_scheduled_job, convert the user's local time to UTC for the cron expression. For example, if the user says "8:30 AM" and their timezone is America/Los_Angeles (UTC-7 in PDT / UTC-8 in PST), use the UTC equivalent (e.g. "30 15 * * *" for 8:30 AM PDT). Always confirm the scheduled time back to the user in their local timezone.`;
+  systemPrompt = systemPrompt ? `${systemPrompt}\n\n${tzContext}` : tzContext;
+
   if (context) {
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${context}` : context;
   }
