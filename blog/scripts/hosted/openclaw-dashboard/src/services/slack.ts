@@ -120,10 +120,11 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
   // Each thread gets its own conversation context; top-level messages start a new one
   const externalId = `${channelId}:${threadTs}`;
 
-  // Only respond if: bot is @mentioned or it's a DM (channel starts with D)
+  // Only respond if: bot is @mentioned, it's a DM, or audio files were shared in a thread
   const isMentioned = text.includes(`<@${slackConfig.bot_user_id}>`);
   const isDM = channelId.startsWith("D");
-  if (!isMentioned && !isDM) {
+  const hasAudioInThread = audioFiles.length > 0 && !!event.thread_ts;
+  if (!isMentioned && !isDM && !hasAudioInThread) {
     return;
   }
   console.log(`Slack event: channel=${channelId} user=${userId} mentioned=${isMentioned} dm=${isDM} thread=${!!event.thread_ts}`);
