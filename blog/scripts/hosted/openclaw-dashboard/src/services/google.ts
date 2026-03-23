@@ -1080,6 +1080,158 @@ export async function docsSuggestEdit(
   return applyRedline(documentId, startDocIndex, endDocIndex, newText, resolvedTabId, accountId);
 }
 
+/** Find text in a document and return its start/end document indices */
+async function findTextIndices(
+  documentId: string,
+  text: string,
+  tabId?: string,
+  accountId?: string
+): Promise<{ startIndex: number; endIndex: number; tabId?: string } | { error: string }> {
+  const docRes = await googleFetch(
+    `https://docs.googleapis.com/v1/documents/${documentId}?includeTabsContent=true`,
+    {},
+    accountId
+  );
+  if (!docRes.ok) return { error: `Failed to read document (${docRes.status})` };
+
+  const doc: any = await docRes.json();
+
+  let bodyContent: any[] | undefined;
+  let resolvedTabId: string | undefined = tabId;
+  if (doc.tabs?.length) {
+    if (tabId) {
+      const findTab = (tabs: any[]): any => {
+        for (const tab of tabs) {
+          if (tab.tabProperties?.tabId === tabId) return tab;
+          if (tab.childTabs?.length) {
+            const found = findTab(tab.childTabs);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+      const tab = findTab(doc.tabs);
+      if (!tab) return { error: `Tab ID "${tabId}" not found` };
+      bodyContent = tab.documentTab?.body?.content;
+    } else {
+      bodyContent = doc.tabs[0]?.documentTab?.body?.content;
+      resolvedTabId = doc.tabs[0]?.tabProperties?.tabId;
+    }
+  } else {
+    bodyContent = doc.body?.content;
+  }
+
+  if (!bodyContent) return { error: "Could not read document content" };
+
+  let fullText = "";
+  const indexMap: { charPos: number; docIndex: number }[] = [];
+  for (const el of bodyContent) {
+    if (el.paragraph) {
+      for (const pe of el.paragraph.elements || []) {
+        if (pe.textRun?.content) {
+          const startIndex = pe.startIndex || 0;
+          for (let i = 0; i < pe.textRun.content.length; i++) {
+            indexMap.push({ charPos: fullText.length + i, docIndex: startIndex + i });
+          }
+          fullText += pe.textRun.content;
+        }
+      }
+    }
+  }
+
+  let matchPos = fullText.indexOf(text);
+  if (matchPos === -1) {
+    matchPos = fullText.toLowerCase().indexOf(text.toLowerCase());
+    if (matchPos === -1) return { error: "Could not find the specified text in the document" };
+  }
+
+  return {
+    startIndex: indexMap[matchPos].docIndex,
+    endIndex: indexMap[matchPos + text.length - 1].docIndex + 1,
+    tabId: resolvedTabId,
+  };
+}
+
+export async function docsFormatText(
+  documentId: string,
+  text: string,
+  formatting: {
+    bold?: boolean;
+    italic?: boolean;
+    underline?: boolean;
+    strikethrough?: boolean;
+    fontSize?: number;
+    fontFamily?: string;
+    foregroundColor?: { red?: number; green?: number; blue?: number };
+  },
+  tabId?: string,
+  accountId?: string
+): Promise<string> {
+  const result = await findTextIndices(documentId, text, tabId, accountId);
+  if ("error" in result) return JSON.stringify(result);
+
+  const { startIndex, endIndex, tabId: resolvedTabId } = result;
+
+  // Build the textStyle and fields list
+  const textStyle: any = {};
+  const fields: string[] = [];
+
+  if (formatting.bold !== undefined) { textStyle.bold = formatting.bold; fields.push("bold"); }
+  if (formatting.italic !== undefined) { textStyle.italic = formatting.italic; fields.push("italic"); }
+  if (formatting.underline !== undefined) { textStyle.underline = formatting.underline; fields.push("underline"); }
+  if (formatting.strikethrough !== undefined) { textStyle.strikethrough = formatting.strikethrough; fields.push("strikethrough"); }
+  if (formatting.fontSize !== undefined) {
+    textStyle.fontSize = { magnitude: formatting.fontSize, unit: "PT" };
+    fields.push("fontSize");
+  }
+  if (formatting.fontFamily !== undefined) {
+    textStyle.weightedFontFamily = { fontFamily: formatting.fontFamily };
+    fields.push("weightedFontFamily");
+  }
+  if (formatting.foregroundColor !== undefined) {
+    textStyle.foregroundColor = { color: { rgbColor: formatting.foregroundColor } };
+    fields.push("foregroundColor");
+  }
+
+  if (fields.length === 0) return JSON.stringify({ error: "No formatting options specified" });
+
+  const request: any = {
+    updateTextStyle: {
+      range: { startIndex, endIndex },
+      textStyle,
+      fields: fields.join(","),
+    },
+  };
+  if (resolvedTabId) request.updateTextStyle.range.tabId = resolvedTabId;
+
+  const res = await googleFetch(
+    `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requests: [request] }),
+    },
+    accountId
+  );
+
+  if (!res.ok) {
+    const body = await res.text();
+    return JSON.stringify({ error: `Failed to format text (${res.status}): ${body}` });
+  }
+
+  const appliedChanges = fields.map(f => {
+    if (f === "bold") return formatting.bold ? "bold" : "unbold";
+    if (f === "italic") return formatting.italic ? "italic" : "unitalic";
+    if (f === "underline") return formatting.underline ? "underline" : "remove underline";
+    if (f === "strikethrough") return formatting.strikethrough ? "strikethrough" : "remove strikethrough";
+    if (f === "fontSize") return `font size ${formatting.fontSize}pt`;
+    if (f === "weightedFontFamily") return `font ${formatting.fontFamily}`;
+    if (f === "foregroundColor") return "text color";
+    return f;
+  });
+  return JSON.stringify({ success: true, changes: appliedChanges.join(", "), text_matched: text.substring(0, 50) });
+}
+
 export async function docsReplaceText(
   documentId: string,
   findText: string,
