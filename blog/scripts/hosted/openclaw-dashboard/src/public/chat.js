@@ -79,12 +79,17 @@
         continue;
       }
 
-      // Headings (# to ######)
+      // Headings (# to ######) — if more lines follow, split them out
       var headingMatch = block.match(/^(#{1,6}) (.+)/);
       if (headingMatch) {
         var level = headingMatch[1].length;
         var text = headingMatch[2];
         out.push('<h' + level + '>' + text + '</h' + level + '>');
+        // Re-queue remaining lines after the heading for processing
+        var remaining = block.substring(block.indexOf('\n') + 1).trim();
+        if (remaining && block.indexOf('\n') !== -1) {
+          blocks.splice(i + 1, 0, remaining);
+        }
         continue;
       }
 
