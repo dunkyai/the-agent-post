@@ -161,13 +161,104 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
     const ack = acks[Math.floor(Math.random() * acks.length)];
     await sendSlackMessage(channelId, ack, threadTs);
 
+    // Fetch thread context so the agent can see all prior messages in the thread
+    let threadContext = "";
+    if (event.thread_ts) {
+      threadContext = await fetchThreadContext(channelId, event.thread_ts, slackConfig.bot_user_id);
+    }
+
     // Create task — scheduler picks it up within ~2s, router delivers reply
-    const slackContext = "You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. Be BRIEF. This is Slack, not email — keep replies short (1-3 sentences when possible). No preamble, no filler, no restating the question. Lead with the answer. Only elaborate if the user asks for more detail. Always follow the user's formatting and style preferences (e.g. if they ask for no emojis, stop using emojis). IMPORTANT: You CAN handle audio files and voice clips in Slack. When a user shares audio, the system automatically transcribes it before you see the message — the transcribed text appears as [Audio transcription: ...] at the start of the message. You do NOT need to access files directly; transcription is handled for you. If asked whether you can process audio, say YES.";
+    let slackContext = "You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. Be BRIEF. This is Slack, not email — keep replies short (1-3 sentences when possible). No preamble, no filler, no restating the question. Lead with the answer. Only elaborate if the user asks for more detail. Always follow the user's formatting and style preferences (e.g. if they ask for no emojis, stop using emojis). IMPORTANT: You CAN handle audio files and voice clips in Slack. When a user shares audio, the system automatically transcribes it before you see the message — the transcribed text appears as [Audio transcription: ...] at the start of the message. You do NOT need to access files directly; transcription is handled for you. If asked whether you can process audio, say YES.";
+    if (threadContext) {
+      slackContext += `\n\n[Thread context — all messages in this thread prior to your current request]\n${threadContext}\n[End of thread context]`;
+    }
     submitSlackMessage({ text, channelId, threadTs, userId, context: slackContext });
   } catch (err: unknown) {
     const errMessage = err instanceof Error ? err.message : "Unknown error";
     console.error("Slack event processing error:", errMessage);
     await sendSlackMessage(channelId, "Sorry, I encountered an error processing your message.", threadTs).catch(() => {});
+  }
+}
+
+// User ID → display name cache (cleared on restart)
+const userNameCache = new Map<string, string>();
+
+async function resolveUserName(userId: string): Promise<string> {
+  if (userNameCache.has(userId)) return userNameCache.get(userId)!;
+  if (!slackConfig) return userId;
+  try {
+    const res = await fetch(`https://slack.com/api/users.info?user=${userId}`, {
+      headers: { Authorization: `Bearer ${slackConfig.bot_token}` },
+    });
+    const data: any = await res.json();
+    if (data.ok) {
+      const name = data.user.profile?.display_name || data.user.real_name || data.user.name || userId;
+      userNameCache.set(userId, name);
+      return name;
+    }
+  } catch {}
+  userNameCache.set(userId, userId);
+  return userId;
+}
+
+/**
+ * Fetch all messages in a Slack thread and format them as context.
+ * Excludes the bot's own messages to avoid noise, but includes
+ * everything else so the agent can reference links, text, etc.
+ */
+async function fetchThreadContext(channelId: string, threadTs: string, botUserId: string): Promise<string> {
+  if (!slackConfig) return "";
+  try {
+    const res = await fetch(
+      `https://slack.com/api/conversations.replies?channel=${channelId}&ts=${threadTs}&limit=50`,
+      { headers: { Authorization: `Bearer ${slackConfig.bot_token}` } }
+    );
+    const data: any = await res.json();
+    if (!data.ok || !data.messages?.length) return "";
+
+    // Drop the last non-bot message (that's the current request, already the input)
+    const threadMessages = data.messages.filter((m: any) => m.user !== botUserId);
+    if (threadMessages.length > 0) threadMessages.pop();
+
+    const lines: string[] = [];
+    for (const msg of threadMessages) {
+
+      const userName = await resolveUserName(msg.user || "unknown");
+      let msgText = msg.text || "";
+
+      // Include file attachments info
+      if (msg.files?.length) {
+        const fileDescs = msg.files.map((f: any) => {
+          const url = f.url_private || f.permalink || "";
+          return `[File: ${f.name || f.title || "attachment"} (${f.mimetype || f.filetype || "unknown"})${url ? " " + url : ""}]`;
+        });
+        msgText = msgText ? `${msgText}\n${fileDescs.join("\n")}` : fileDescs.join("\n");
+      }
+
+      // Include link unfurls / attachments
+      if (msg.attachments?.length) {
+        for (const att of msg.attachments) {
+          if (att.title || att.text) {
+            const attText = [att.title, att.text].filter(Boolean).join(": ");
+            msgText += `\n[Link preview: ${attText}]`;
+          }
+          if (att.original_url) {
+            msgText += `\n[URL: ${att.original_url}]`;
+          }
+        }
+      }
+
+      if (msgText.trim()) {
+        lines.push(`${userName}: ${msgText.trim()}`);
+      }
+    }
+
+    if (lines.length === 0) return "";
+    console.log(`[slack] Fetched ${lines.length} thread messages as context for ${channelId}:${threadTs}`);
+    return lines.join("\n");
+  } catch (err) {
+    console.error("[slack] Failed to fetch thread context:", err instanceof Error ? err.message : err);
+    return "";
   }
 }
 
