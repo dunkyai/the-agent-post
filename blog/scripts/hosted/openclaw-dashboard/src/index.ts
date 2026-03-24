@@ -14,6 +14,7 @@ import chatRouter from "./routes/chat";
 import healthRouter from "./routes/health";
 import webhookRouter from "./routes/webhook";
 import jobsRouter from "./routes/jobs";
+import tasksRouter from "./routes/tasks";
 import bugReportRouter from "./routes/bug-report";
 
 const app = express();
@@ -67,6 +68,7 @@ app.use(chatRouter);
 app.use(healthRouter);
 app.use(webhookRouter);
 app.use(jobsRouter);
+app.use(tasksRouter);
 app.use(bugReportRouter);
 
 // Root redirect

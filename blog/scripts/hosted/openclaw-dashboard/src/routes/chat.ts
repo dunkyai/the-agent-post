@@ -1,20 +1,10 @@
 import { Router, Request, Response } from "express";
 import { getOrCreateConversation, getMessages, deleteConversation, getSetting } from "../services/db";
-import { processMessage } from "../services/ai";
+import { submitChatMessage, pollChatStatus } from "../adapters/chat";
 
 const router = Router();
 
 const CHAT_EXTERNAL_ID = "dashboard";
-
-// In-flight request state per session
-interface PendingRequest {
-  status: string;
-  result: { role: string; content: string } | null;
-  error: string | null;
-  done: boolean;
-}
-const pending = new Map<string, PendingRequest>();
-const cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 router.get("/chat", (req: Request, res: Response) => {
   const conversationId = getOrCreateConversation("dashboard", CHAT_EXTERNAL_ID);
@@ -26,10 +16,8 @@ router.get("/chat", (req: Request, res: Response) => {
   res.render("chat", { messages, agentName, userName });
 });
 
-const REQUEST_TIMEOUT_MS = 180_000; // 3 minutes
-
-// POST: submit a message, returns immediately
-router.post("/chat/message", async (req: Request, res: Response) => {
+// POST: submit a message — creates a task, returns immediately
+router.post("/chat/message", (req: Request, res: Response) => {
   try {
     const { message } = req.body;
     if (!message || !message.trim()) {
@@ -39,46 +27,11 @@ router.post("/chat/message", async (req: Request, res: Response) => {
 
     const sessionId = req.cookies?.openclaw_session || "anon";
     console.log(`[chat] POST from session: ${sessionId.slice(0, 8)}...`);
-    // Cancel any pending cleanup timer from a previous request
-    const oldTimer = cleanupTimers.get(sessionId);
-    if (oldTimer) clearTimeout(oldTimer);
-    const state: PendingRequest = { status: "Thinking...", result: null, error: null, done: false };
-    pending.set(sessionId, state);
 
-    res.json({ ok: true });
+    const { taskId } = submitChatMessage(sessionId, message.trim());
+    console.log(`[chat] Task ${taskId} created for session ${sessionId.slice(0, 8)}...`);
 
-    // Process in background
-    const onStatus = (status: string) => {
-      state.status = status;
-    };
-
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("__TIMEOUT__")), REQUEST_TIMEOUT_MS)
-    );
-
-    try {
-      const reply = await Promise.race([
-        processMessage("dashboard", CHAT_EXTERNAL_ID, message.trim(), undefined, onStatus),
-        timeout,
-      ]);
-      state.result = { role: "assistant", content: reply };
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      if (msg === "__TIMEOUT__") {
-        console.error("Chat timeout: request exceeded 3 minutes");
-        state.error = "That took longer than expected — could you try asking in a simpler way?";
-      } else {
-        console.error("Chat error:", msg);
-        state.error = msg;
-      }
-    }
-    state.done = true;
-    console.log(`[chat] processMessage completed for ${sessionId.slice(0, 8)}... (result: ${state.result ? "yes" : "no"}, error: ${state.error || "none"})`);
-    // Clean up after 30s (track timer so it can be cancelled by a new request)
-    cleanupTimers.set(sessionId, setTimeout(() => {
-      pending.delete(sessionId);
-      cleanupTimers.delete(sessionId);
-    }, 30_000));
+    res.json({ ok: true, taskId });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("Chat error:", msg);
@@ -91,21 +44,9 @@ router.post("/chat/message", async (req: Request, res: Response) => {
 // GET: poll for status/result
 router.get("/chat/poll", (req: Request, res: Response) => {
   const sessionId = req.cookies?.openclaw_session || "anon";
-  const state = pending.get(sessionId);
-  console.log(`[chat] POLL from ${sessionId.slice(0, 8)}... -> ${state ? `status=${state.status}, done=${state.done}` : "no state"}`);
-  if (!state) {
-    res.json({ status: "idle", done: true });
-    return;
-  }
-  if (state.done) {
-    const result = state.error
-      ? { status: "error", error: state.error, done: true }
-      : { status: "done", result: state.result, done: true };
-    pending.delete(sessionId);
-    res.json(result);
-    return;
-  }
-  res.json({ status: state.status, done: false });
+  const result = pollChatStatus(sessionId);
+  console.log(`[chat] POLL from ${sessionId.slice(0, 8)}... -> status=${result.status}, done=${result.done}`);
+  res.json(result);
 });
 
 router.post("/chat/reset", (req: Request, res: Response) => {
