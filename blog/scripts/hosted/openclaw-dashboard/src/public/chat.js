@@ -67,12 +67,24 @@
         continue;
       }
 
-      // Ordered list block
-      if (/^\d+\. /.test(block)) {
-        var items = block.split(/\n/).map(function (line) {
-          return '<li>' + line.replace(/^\d+\. /, '') + '</li>';
+      // Ordered list block — use start attribute to preserve original numbering
+      if (/^\d+\.\s/.test(block)) {
+        var lines = block.split(/\n/);
+        var startMatch = lines[0].match(/^(\d+)\.\s/);
+        var startNum = startMatch ? parseInt(startMatch[1], 10) : 1;
+        var items = lines.map(function (line) {
+          return '<li>' + line.replace(/^\d+\.\s/, '') + '</li>';
         }).join('');
-        out.push('<ol>' + items + '</ol>');
+        out.push('<ol start="' + startNum + '">' + items + '</ol>');
+        continue;
+      }
+
+      // Headings (# to ######)
+      var headingMatch = block.match(/^(#{1,6}) (.+)/);
+      if (headingMatch) {
+        var level = headingMatch[1].length;
+        var text = headingMatch[2];
+        out.push('<h' + level + '>' + text + '</h' + level + '>');
         continue;
       }
 
