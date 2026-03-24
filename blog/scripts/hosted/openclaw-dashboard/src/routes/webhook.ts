@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { getIntegration, upsertIntegration } from "../services/db";
 import { encrypt, decrypt } from "../services/encryption";
 import { startGoogle } from "../services/google";
-import { startSlack, handleSlackEvent } from "../services/slack";
+import { startSlack, handleSlackEvent, setSlackOwnerUserId } from "../services/slack";
 import { isEmailAllowed, sanitizeEmailContent } from "../services/email";
 import { startAirtable } from "../services/airtable";
 import { startNotion } from "../services/notion";
@@ -174,12 +174,18 @@ router.post("/webhook/slack/tokens", async (req: Request, res: Response) => {
   }
 
   try {
-    const { bot_token, bot_user_id, team_id, team_name } = req.body;
+    const { bot_token, bot_user_id, team_id, team_name, installer_user_id } = req.body;
 
     const configData = { bot_token, bot_user_id, team_id, team_name };
     const config = encrypt(JSON.stringify(configData));
     upsertIntegration("slack", config, "connected");
     startSlack(configData);
+
+    // If provisioning tells us who installed the app, store them as the owner
+    if (installer_user_id && typeof installer_user_id === "string") {
+      setSlackOwnerUserId(installer_user_id);
+      console.log(`Slack owner set to installer: ${installer_user_id}`);
+    }
 
     console.log(`Slack connected for team ${team_name} (${team_id})`);
     res.json({ ok: true });

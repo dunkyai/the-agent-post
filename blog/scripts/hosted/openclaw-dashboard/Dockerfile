@@ -17,6 +17,7 @@ RUN apk add --no-cache python3 make g++ && \
     npm cache clean --force && \
     apk del python3 make g++ && \
     rm -rf /var/cache/apk/*
+RUN apk add --no-cache ffmpeg
 COPY --from=builder /app/dist/ ./dist/
 COPY src/views/ ./dist/views/
 COPY src/public/ ./dist/public/

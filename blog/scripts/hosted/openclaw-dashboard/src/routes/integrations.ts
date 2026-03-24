@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { getIntegration, upsertIntegration, deleteIntegration, getAllIntegrations, getGoogleIntegrations, getSetting, setSetting } from "../services/db";
 import { encrypt, decrypt } from "../services/encryption";
-import { buildSlackOAuthUrl, stopSlack, isSlackRunning } from "../services/slack";
+import { buildSlackOAuthUrl, stopSlack, isSlackRunning, getSlackOwnerUserId, setSlackOwnerUserId, isApprovalEnabled } from "../services/slack";
 import { signupAndCreateInbox, createInbox, startEmail, stopEmail, isEmailRunning } from "../services/email";
 import { buildOAuthUrl, stopGoogle, isGoogleRunning, startGmailPolling, stopGmailPolling } from "../services/google";
 import { startSupabase, stopSupabase, testSupabaseConnection, probeSupabaseHealth } from "../services/supabase";
@@ -93,6 +93,8 @@ router.get("/integrations", async (req: Request, res: Response) => {
     slack: {
       ...(integrationMap["slack"] || { status: "disconnected", error_message: null }),
       team_name: slackTeamName,
+      owner_user_id: getSlackOwnerUserId() || "",
+      approval_enabled: isApprovalEnabled(),
     },
     email: {
       ...(integrationMap["email"] || { status: "disconnected", error_message: null }),
@@ -211,6 +213,23 @@ router.post("/integrations/slack/disconnect", async (req: Request, res: Response
   stopSlack();
   upsertIntegration("slack", "{}", "disconnected");
   res.redirect(303, "/integrations?flash=Slack+disconnected");
+});
+
+router.post("/integrations/slack/approval", (req: Request, res: Response) => {
+  try {
+    const enabled = req.body.approval_enabled === "on";
+    setSetting("slack_approval_enabled", enabled ? "true" : "false");
+
+    const ownerUserId = (req.body.owner_user_id || "").trim();
+    if (ownerUserId) {
+      setSlackOwnerUserId(ownerUserId);
+    }
+
+    res.redirect(303, "/integrations?flash=Slack+access+control+saved");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.redirect(303, "/integrations?flash=Slack+error:+" + encodeURIComponent(message));
+  }
 });
 
 router.post("/integrations/email/connect", async (req: Request, res: Response) => {
