@@ -39,6 +39,9 @@
     // Links [text](url) — only match if not preceded by !
     html = html.replace(/(?<!!)\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 
+    // Bare URLs — auto-link URLs not already inside an href or src attribute
+    html = html.replace(/(?<!=&quot;|="|src="|href=")(https?:\/\/[^\s<)\]]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+
     // Bold **text**
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 
@@ -67,12 +70,29 @@
         continue;
       }
 
-      // Ordered list block
-      if (/^\d+\. /.test(block)) {
-        var items = block.split(/\n/).map(function (line) {
-          return '<li>' + line.replace(/^\d+\. /, '') + '</li>';
+      // Ordered list block — use start attribute to preserve original numbering
+      if (/^\d+\.\s/.test(block)) {
+        var lines = block.split(/\n/);
+        var startMatch = lines[0].match(/^(\d+)\.\s/);
+        var startNum = startMatch ? parseInt(startMatch[1], 10) : 1;
+        var items = lines.map(function (line) {
+          return '<li>' + line.replace(/^\d+\.\s/, '') + '</li>';
         }).join('');
-        out.push('<ol>' + items + '</ol>');
+        out.push('<ol start="' + startNum + '">' + items + '</ol>');
+        continue;
+      }
+
+      // Headings (# to ######) — if more lines follow, split them out
+      var headingMatch = block.match(/^(#{1,6}) (.+)/);
+      if (headingMatch) {
+        var level = headingMatch[1].length;
+        var text = headingMatch[2];
+        out.push('<h' + level + '>' + text + '</h' + level + '>');
+        // Re-queue remaining lines after the heading for processing
+        var remaining = block.substring(block.indexOf('\n') + 1).trim();
+        if (remaining && block.indexOf('\n') !== -1) {
+          blocks.splice(i + 1, 0, remaining);
+        }
         continue;
       }
 

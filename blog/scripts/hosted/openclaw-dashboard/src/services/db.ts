@@ -95,6 +95,42 @@ function initSchema(): void {
       account_id TEXT NOT NULL,
       processed_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS tasks (
+      task_id TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      status TEXT NOT NULL DEFAULT 'pending',
+      active INTEGER NOT NULL DEFAULT 1,
+      input TEXT NOT NULL DEFAULT '{}',
+      intent TEXT NOT NULL DEFAULT '{}',
+      context TEXT NOT NULL DEFAULT '{}',
+      output TEXT NOT NULL DEFAULT '{}',
+      execution TEXT NOT NULL DEFAULT '{}',
+      conversation_id TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_tasks_active ON tasks(active);
+    CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
+
+    CREATE TABLE IF NOT EXISTS task_execution_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id TEXT NOT NULL,
+      tool TEXT NOT NULL,
+      input TEXT NOT NULL DEFAULT '{}',
+      output TEXT NOT NULL DEFAULT '',
+      duration_ms INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_task_exec_log_task ON task_execution_log(task_id);
+
+    CREATE TABLE IF NOT EXISTS confirmation_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tool_pattern TEXT NOT NULL,
+      description TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1
+    );
   `);
 }
 
@@ -410,4 +446,157 @@ export function cleanExpiredSessions(): number {
     .prepare("DELETE FROM sessions WHERE expires_at < datetime('now')")
     .run();
   return result.changes;
+}
+
+// --- Tasks ---
+
+import { generateTaskId, type TaskStatus, type CreateTaskParams, type ExecutionLogEntry } from "../types/task";
+
+interface TaskRow {
+  task_id: string;
+  created_at: string;
+  updated_at: string;
+  status: string;
+  active: number;
+  input: string;
+  intent: string;
+  context: string;
+  output: string;
+  execution: string;
+  conversation_id: string | null;
+}
+
+export { generateTaskId };
+
+export function insertTask(params: CreateTaskParams): string {
+  const taskId = generateTaskId();
+  const input = JSON.stringify({
+    raw_input: params.raw_input,
+    source_channel: params.source_channel,
+    metadata: params.metadata || {},
+  });
+  const output = JSON.stringify({
+    reply_channel: params.reply_channel,
+  });
+  getDb()
+    .prepare(
+      `INSERT INTO tasks (task_id, input, output, conversation_id)
+       VALUES (?, ?, ?, ?)`
+    )
+    .run(taskId, input, output, params.conversation_id || null);
+  return taskId;
+}
+
+export function getTask(taskId: string): TaskRow | undefined {
+  return getDb()
+    .prepare("SELECT * FROM tasks WHERE task_id = ?")
+    .get(taskId) as TaskRow | undefined;
+}
+
+export function updateTask(
+  taskId: string,
+  updates: Partial<{
+    status: TaskStatus;
+    active: number;
+    intent: string;
+    context: string;
+    output: string;
+    execution: string;
+    conversation_id: string;
+  }>
+): void {
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  for (const [key, value] of Object.entries(updates)) {
+    if (value !== undefined) {
+      fields.push(`${key} = ?`);
+      values.push(value);
+    }
+  }
+  if (fields.length === 0) return;
+  fields.push("updated_at = datetime('now')");
+  values.push(taskId);
+  getDb()
+    .prepare(`UPDATE tasks SET ${fields.join(", ")} WHERE task_id = ?`)
+    .run(...values);
+}
+
+export function getPendingTasks(): TaskRow[] {
+  return getDb()
+    .prepare("SELECT * FROM tasks WHERE status = 'pending' AND active = 1 ORDER BY created_at ASC")
+    .all() as TaskRow[];
+}
+
+export function getRecentTasks(limit = 50): TaskRow[] {
+  return getDb()
+    .prepare("SELECT * FROM tasks WHERE active = 1 ORDER BY created_at DESC LIMIT ?")
+    .all(limit) as TaskRow[];
+}
+
+export function appendExecutionLog(
+  taskId: string,
+  entry: Omit<ExecutionLogEntry, "timestamp">
+): void {
+  getDb()
+    .prepare(
+      `INSERT INTO task_execution_log (task_id, tool, input, output, duration_ms)
+       VALUES (?, ?, ?, ?, ?)`
+    )
+    .run(
+      taskId,
+      entry.tool,
+      JSON.stringify(entry.input),
+      entry.output,
+      entry.duration_ms
+    );
+}
+
+export function getExecutionLog(taskId: string) {
+  return getDb()
+    .prepare(
+      "SELECT * FROM task_execution_log WHERE task_id = ? ORDER BY created_at ASC"
+    )
+    .all(taskId) as {
+    id: number;
+    task_id: string;
+    tool: string;
+    input: string;
+    output: string;
+    duration_ms: number;
+    created_at: string;
+  }[];
+}
+
+export function deactivateOldTasks(days: number): number {
+  const result = getDb()
+    .prepare(
+      `UPDATE tasks SET active = 0, updated_at = datetime('now')
+       WHERE active = 1
+       AND status IN ('completed', 'failed', 'cancelled')
+       AND updated_at < datetime('now', '-' || ? || ' days')`
+    )
+    .run(days);
+  return result.changes;
+}
+
+export function markStuckTasksFailed(): number {
+  const result = getDb()
+    .prepare(
+      `UPDATE tasks SET status = 'failed', active = 1, updated_at = datetime('now'),
+       execution = json_set(COALESCE(execution, '{}'), '$.error', 'Task was stuck in processing state on restart')
+       WHERE status = 'processing'`
+    )
+    .run();
+  return result.changes;
+}
+
+export function getConfirmationRules() {
+  return getDb()
+    .prepare("SELECT * FROM confirmation_rules WHERE enabled = 1")
+    .all() as {
+    id: number;
+    tool_pattern: string;
+    description: string;
+    enabled: number;
+  }[];
 }

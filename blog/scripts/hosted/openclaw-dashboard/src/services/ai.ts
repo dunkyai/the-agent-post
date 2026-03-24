@@ -52,13 +52,13 @@ interface AIResponse {
   content: string;
 }
 
-function getProvider(model: string): "anthropic" | "openai" {
+export function getProvider(model: string): "anthropic" | "openai" {
   if (model.startsWith("claude")) return "anthropic";
   if (model.startsWith("gpt") || model.startsWith("o1") || model.startsWith("o3") || model.startsWith("o4")) return "openai";
   return "openai"; // default fallback
 }
 
-function getApiKey(provider: "anthropic" | "openai"): string {
+export function getApiKey(provider: "anthropic" | "openai"): string {
   const key = provider === "anthropic" ? "anthropic_api_key" : "openai_api_key";
   const encrypted = getSetting(key);
   if (!encrypted) {
@@ -2186,14 +2186,17 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
 
 // --- Anthropic API with tool use loop ---
 
-async function callAnthropic(
+export type ToolCallCallback = (toolName: string, input: Record<string, unknown>, output: string, durationMs: number) => void;
+
+export async function callAnthropic(
   model: string,
   apiKey: string,
   systemPrompt: string,
   messages: { role: string; content: string }[],
   temperature: number,
   maxTokens: number,
-  onStatus?: StatusCallback
+  onStatus?: StatusCallback,
+  onToolCall?: ToolCallCallback
 ): Promise<AIResponse> {
   const tools: any[] = [
     { type: "web_search_20250305", name: "web_search" },
@@ -2348,6 +2351,7 @@ async function callAnthropic(
           continue;
         }
 
+        const toolStartTime = Date.now();
         let result: string | any[];
         if (memoryTools.includes(toolBlock.name)) {
           result = executeMemoryTool(toolBlock.name, toolBlock.input);
@@ -2382,7 +2386,10 @@ async function callAnthropic(
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input);
         }
+        const toolDurationMs = Date.now() - toolStartTime;
         console.log(`Tool result: ${toolBlock.name}`, typeof result === "string" ? result.slice(0, 300) : "[multipart content]");
+        const toolOutputStr = typeof result === "string" ? result : JSON.stringify(result);
+        onToolCall?.(toolBlock.name, toolBlock.input, toolOutputStr.slice(0, 2000), toolDurationMs);
 
         // Save the latest screenshot so we can include it in the final response
         if (toolBlock.name === "browser_screenshot" && Array.isArray(result)) {
@@ -2467,14 +2474,15 @@ async function callAnthropic(
   return { role: "assistant", content: "Hmmm...this was pretty complex and I hit a tool limit. Could you break this into smaller steps or ask again in a simpler way? For example, instead of asking me to do everything at once, try one piece at a time." };
 }
 
-async function callOpenAI(
+export async function callOpenAI(
   model: string,
   apiKey: string,
   systemPrompt: string,
   messages: { role: string; content: string }[],
   temperature: number,
   maxTokens: number,
-  onStatus?: StatusCallback
+  onStatus?: StatusCallback,
+  onToolCall?: ToolCallCallback
 ): Promise<AIResponse> {
   // Build tools list (same as Anthropic minus server-side web_search)
   const customTools: any[] = [
@@ -2638,6 +2646,7 @@ async function callOpenAI(
           continue;
         }
 
+        const toolStartTime = Date.now();
         let result: string | any[];
         if (memoryTools.includes(toolName)) {
           result = executeMemoryTool(toolName, toolInput);
@@ -2672,6 +2681,7 @@ async function callOpenAI(
         } else {
           result = executeSchedulingTool(toolName, toolInput);
         }
+        const toolDurationMs = Date.now() - toolStartTime;
 
         console.log(`Tool result: ${toolName}`, typeof result === "string" ? result.slice(0, 300) : "[multipart content]");
 
@@ -2682,6 +2692,7 @@ async function callOpenAI(
 
         // OpenAI tool results must be strings
         const resultStr = typeof result === "string" ? result : JSON.stringify(result);
+        onToolCall?.(toolName, toolInput, resultStr.slice(0, 2000), toolDurationMs);
 
         allMessages.push({
           role: "tool",
@@ -2825,17 +2836,8 @@ function cleanEmailDraft(text: string): string {
   return cleaned.trim();
 }
 
-export async function processMessage(
-  source: string,
-  externalId: string,
-  text: string,
-  context?: string,
-  onStatus?: StatusCallback
-): Promise<string> {
-  const model = getSetting("model") || "claude-sonnet-4-20250514";
+export function buildSystemPrompt(extraContext?: string): string {
   let systemPrompt = getSetting("system_prompt") || "";
-  const temperature = parseFloat(getSetting("temperature") || "0.7");
-  const maxTokens = parseInt(getSetting("max_tokens") || "4096", 10);
 
   // Inject agent name
   const agentName = getSetting("agent_name");
@@ -2849,8 +2851,8 @@ export async function processMessage(
   const tzContext = `The user's timezone is ${userTimezone}. Cron expressions in create_scheduled_job are interpreted in the user's local timezone, so use the user's local time directly. For example, if the user says "8:30 AM", use "30 8 * * *" — do NOT convert to UTC. Always confirm the scheduled time back to the user in their local timezone.`;
   systemPrompt = systemPrompt ? `${systemPrompt}\n\n${tzContext}` : tzContext;
 
-  if (context) {
-    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${context}` : context;
+  if (extraContext) {
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${extraContext}` : extraContext;
   }
 
   // Inject structured context fields
@@ -3116,6 +3118,22 @@ After they answer, use the update_context tool to save their answers to the appr
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${onboardingDirective}` : onboardingDirective;
     }
   }
+
+  return systemPrompt;
+}
+
+export async function processMessage(
+  source: string,
+  externalId: string,
+  text: string,
+  context?: string,
+  onStatus?: StatusCallback
+): Promise<string> {
+  const model = getSetting("model") || "claude-sonnet-4-20250514";
+  const temperature = parseFloat(getSetting("temperature") || "0.7");
+  const maxTokens = parseInt(getSetting("max_tokens") || "4096", 10);
+
+  const systemPrompt = buildSystemPrompt(context);
 
   const provider = getProvider(model);
   const apiKey = getApiKey(provider);

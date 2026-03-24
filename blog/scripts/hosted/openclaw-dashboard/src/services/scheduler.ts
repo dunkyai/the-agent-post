@@ -1,16 +1,30 @@
 import { getDueJobs, getScheduledJob, markJobRun, deleteConversation, getOrCreateConversation, getSetting } from "./db";
 import { processMessage } from "./ai";
 import { getNextRun } from "./cron";
+import { getPendingTasks, markStuckTasksFailed, deactivateOldTasks } from "./task";
+import { processTask } from "./processor";
+import { routeTaskOutput } from "./router";
+import { updateChatStatus } from "../adapters/chat";
 
 let tickInterval: ReturnType<typeof setInterval> | null = null;
 let isProcessing = false;
+let lastDeactivateCheck = 0;
+
+const TICK_INTERVAL_MS = 2_000; // 2 seconds
+const DEACTIVATE_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export function startScheduler(): void {
   if (tickInterval) return;
 
-  console.log("Scheduler started (60s tick)");
+  // On startup: mark stuck "processing" tasks as failed
+  const stuck = markStuckTasksFailed();
+  if (stuck > 0) {
+    console.log(`[scheduler] Marked ${stuck} stuck processing task(s) as failed on startup`);
+  }
+
+  console.log(`Scheduler started (${TICK_INTERVAL_MS / 1000}s tick)`);
   tick();
-  tickInterval = setInterval(() => tick(), 60_000);
+  tickInterval = setInterval(() => tick(), TICK_INTERVAL_MS);
 }
 
 export function stopScheduler(): void {
@@ -30,9 +44,36 @@ async function tick(): Promise<void> {
   isProcessing = true;
 
   try {
+    // 1. Process pending tasks from the task queue
+    const pendingTasks = getPendingTasks();
+    for (const task of pendingTasks) {
+      console.log(`[scheduler] Processing task ${task.task_id} (${task.input.source_channel})`);
+
+      // Status callback for chat tasks
+      const onStatus = (status: string) => {
+        if (task.input.source_channel === "chat") {
+          updateChatStatus(task.task_id, status);
+        }
+      };
+
+      const completedTask = await processTask(task, onStatus);
+      routeTaskOutput(completedTask);
+    }
+
+    // 2. Process due cron jobs (existing behavior)
     const dueJobs = getDueJobs();
     for (const job of dueJobs) {
       await executeJob(job.id);
+    }
+
+    // 3. Periodic cleanup: deactivate old tasks (once per day)
+    const now = Date.now();
+    if (now - lastDeactivateCheck > DEACTIVATE_INTERVAL_MS) {
+      lastDeactivateCheck = now;
+      const deactivated = deactivateOldTasks(1);
+      if (deactivated > 0) {
+        console.log(`[scheduler] Deactivated ${deactivated} old task(s)`);
+      }
     }
   } catch (err: unknown) {
     console.error("Scheduler tick error:", err instanceof Error ? err.message : err);
