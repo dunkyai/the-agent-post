@@ -1866,10 +1866,10 @@ async function pollGmail(): Promise<void> {
           continue;
         }
 
-        // Step 3b: If a draft exists but a NEW message arrived, delete the old draft
+        // Step 3b: If a draft exists, delete it so we can re-process with the latest message
         const existingDraftId = draftThreadMap.get(threadId);
-        if (existingDraftId && processed && processed.last_message_id !== lastMsgId) {
-          console.log(`Gmail poll: new message in thread with existing draft — deleting old draft — ${subject}`);
+        if (existingDraftId) {
+          console.log(`Gmail poll: new/unprocessed message in thread with existing draft — deleting old draft — ${subject}`);
           try {
             await googleFetch(
               `https://gmail.googleapis.com/gmail/v1/users/me/drafts/${existingDraftId}`,
@@ -1880,11 +1880,6 @@ async function pollGmail(): Promise<void> {
           } catch (err: unknown) {
             console.error(`Gmail poll: failed to delete old draft:`, err instanceof Error ? err.message : err);
           }
-        } else if (existingDraftId && !processed) {
-          // Draft exists but we have no processing record — skip (legacy draft)
-          console.log(`Gmail poll: skipped (draft already exists) — ${subject}`);
-          markGmailThreadProcessed(threadId, lastMsgId, accountId);
-          continue;
         }
 
         // Step 3c: Is the latest message from our own account? (already replied)
