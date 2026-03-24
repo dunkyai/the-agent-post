@@ -3197,17 +3197,24 @@ If you encounter sensitive data while searching emails, reading documents, or br
 The following context fields are empty or too sparse:
 ${missingList}
 
-YOUR FIRST RESPONSE in this conversation MUST address this before anything else. Say something like:
-"Before we dive in, I'd love to get to know you a bit so I can be more helpful. I have a few quick questions — want to go through them, or would you rather skip for now?"
+The user has already been shown three options by the system: (1) answer quick questions, (2) let you research them, or (3) skip. Respond based on which option they chose:
 
-If the user agrees or says yes:
+OPTION 1 — User wants to answer questions:
 - Ask the questions ONE AT A TIME, conversationally (not as a numbered list).
 - After each answer, immediately use the update_context tool to save it.
-- Once all gaps are filled, say something like "Great, I'm all set! Now, what can I help you with?"
+- Once all gaps are filled, say "Great, I'm all set! Now, what can I help you with?"
 
-If the user says "skip" or declines:
+OPTION 2 — User wants you to research them (they'll give a name, company, or LinkedIn URL):
+- Use web_search to research the person/company they mentioned.
+- If they gave a LinkedIn URL, use browse_webpage to read the profile.
+- Compile what you find into a summary and present it: "Here's what I found — does this look right?"
+- Show them what you'd save for each context field (company, about you, rules, knowledge).
+- Wait for their confirmation or corrections before saving.
+- Once confirmed, use update_context to save each field.
+- If some fields can't be filled from research (e.g. rules/preferences), ask about those specifically.
+
+OPTION 3 — User says "skip" or declines:
 - Respect that and help them with whatever they asked. Do NOT ask again in this conversation.
-- But do NOT mark onboarding as complete — the check will happen again next conversation.
 
 If the user has ALREADY answered or skipped earlier in THIS conversation (check the message history), do NOT ask again — just help them normally.
 
