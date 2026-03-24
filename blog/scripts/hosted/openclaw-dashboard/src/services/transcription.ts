@@ -33,54 +33,53 @@ function getMimeType(filename: string): string {
 export async function transcribeAudio(
   audioBuffer: Buffer,
   filename: string,
-  apiKey?: string
+  openaiKey?: string
 ): Promise<string> {
-  // Use Groq API key from env (free), fall back to provided key with OpenAI
   const groqKey = process.env.GROQ_API_KEY;
-  const key = groqKey || apiKey;
 
-  if (!key) {
+  if (!groqKey && !openaiKey) {
     throw new Error("No transcription API key available (set GROQ_API_KEY or configure OpenAI key in Settings)");
   }
 
   const mimeType = getMimeType(filename);
-  const blob = new Blob([audioBuffer], { type: mimeType });
-  const form = new FormData();
-  form.append("file", blob, filename);
-  form.append("model", groqKey ? "whisper-large-v3" : "whisper-1");
 
-  // Try Groq first, fall back to OpenAI on failure
-  const urls = groqKey
-    ? [GROQ_WHISPER_API, "https://api.openai.com/v1/audio/transcriptions"]
-    : ["https://api.openai.com/v1/audio/transcriptions"];
+  // Build ordered list of attempts: Groq turbo → Groq v3 → OpenAI
+  const attempts: { url: string; key: string; model: string }[] = [];
+  if (groqKey) {
+    attempts.push({ url: GROQ_WHISPER_API, key: groqKey, model: "whisper-large-v3-turbo" });
+    attempts.push({ url: GROQ_WHISPER_API, key: groqKey, model: "whisper-large-v3" });
+  }
+  if (openaiKey) {
+    attempts.push({ url: "https://api.openai.com/v1/audio/transcriptions", key: openaiKey, model: "whisper-1" });
+  }
 
   let lastError = "";
-  for (const url of urls) {
-    const useKey = url === GROQ_WHISPER_API ? groqKey! : (apiKey || groqKey!);
-    // Rebuild form for each attempt (Blob is consumed)
-    const retryForm = new FormData();
-    retryForm.append("file", new Blob([audioBuffer], { type: mimeType }), filename);
-    retryForm.append("model", url === GROQ_WHISPER_API ? "whisper-large-v3" : "whisper-1");
+  for (const attempt of attempts) {
+    const form = new FormData();
+    form.append("file", new Blob([audioBuffer], { type: mimeType }), filename);
+    form.append("model", attempt.model);
 
     try {
-      const res = await fetch(url, {
+      console.log(`Trying transcription: ${attempt.model} at ${attempt.url}`);
+      const res = await fetch(attempt.url, {
         method: "POST",
-        headers: { Authorization: `Bearer ${useKey}` },
-        body: retryForm,
+        headers: { Authorization: `Bearer ${attempt.key}` },
+        body: form,
       });
 
       if (!res.ok) {
         const body = await res.text();
-        lastError = `${url} error (${res.status}): ${body}`;
+        lastError = `${attempt.url} (${attempt.model}) error (${res.status}): ${body}`;
         console.error(`Transcription API error: ${lastError}`);
         continue;
       }
 
       const data: any = await res.json();
+      console.log(`Transcription succeeded with ${attempt.model}`);
       return data.text || "";
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
-      console.error(`Transcription fetch error (${url}): ${lastError}`);
+      console.error(`Transcription fetch error (${attempt.model}): ${lastError}`);
       continue;
     }
   }
