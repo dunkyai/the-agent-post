@@ -18,6 +18,7 @@
           <th>Duration</th>
           <th>Tool Calls</th>
           <th>Time</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -29,6 +30,17 @@
             <td class="task-meta"><% if (task.execution.duration_ms) { %><%= (task.execution.duration_ms / 1000).toFixed(1) %>s<% } else { %>-<% } %></td>
             <td class="task-meta"><% if (task.execution.tool_calls_count) { %><%= task.execution.tool_calls_count %><% } else { %>-<% } %></td>
             <td class="task-meta"><span class="local-time" data-utc="<%= task.created_at %>"><%= task.created_at %></span></td>
+            <td class="task-meta" onclick="event.stopPropagation()">
+              <a href="#" class="bug-link" data-task-id="<%= task.task_id %>" data-task-input="<%= task.input.raw_input.slice(0, 200).replace(/"/g, '&quot;') %>" onclick="showBugForm(this, event)">Report a bug</a>
+              <div class="task-bug-form" style="display:none;">
+                <textarea rows="2" placeholder="What did you expect to happen?"></textarea>
+                <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
+                  <button class="btn btn-sm" onclick="submitTaskBug(this)">Send</button>
+                  <button class="btn btn-sm" onclick="closeBugForm(this)" style="background:transparent;color:var(--text-secondary);">Cancel</button>
+                  <span class="bug-status" style="font-size:11px;"></span>
+                </div>
+              </div>
+            </td>
           </tr>
         <% }); %>
       </tbody>
@@ -90,6 +102,29 @@
 .task-status-completed { background: #d1fae5; color: #065f46; }
 .task-status-failed { background: #fee2e2; color: #991b1b; }
 .task-status-cancelled { background: var(--bg-secondary, #e0e0e0); color: var(--text-secondary); }
+.bug-link {
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.bug-link:hover { color: var(--accent); text-decoration: underline; }
+.task-bug-form {
+  margin-top: 8px;
+  min-width: 260px;
+}
+.task-bug-form textarea {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--rule-light, #ddd);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  resize: vertical;
+  color: var(--fg);
+  background: var(--bg);
+}
+.task-bug-form textarea:focus { outline: none; border-color: var(--accent); }
 </style>
 
 <script>
@@ -118,6 +153,50 @@
       .catch(function() {});
   }, POLL_INTERVAL);
 })();
+
+function showBugForm(link, e) {
+  e.preventDefault();
+  var td = link.parentElement;
+  link.style.display = 'none';
+  td.querySelector('.task-bug-form').style.display = 'block';
+  td.querySelector('textarea').focus();
+}
+function closeBugForm(btn) {
+  var td = btn.closest('td');
+  td.querySelector('.task-bug-form').style.display = 'none';
+  td.querySelector('.bug-link').style.display = '';
+  td.querySelector('textarea').value = '';
+  td.querySelector('.bug-status').textContent = '';
+}
+function submitTaskBug(btn) {
+  var td = btn.closest('td');
+  var textarea = td.querySelector('textarea');
+  var status = td.querySelector('.bug-status');
+  var feedback = textarea.value.trim();
+  if (!feedback) { status.textContent = 'Please describe the issue.'; status.style.color = 'var(--danger)'; return; }
+  var link = td.querySelector('.bug-link');
+  var taskId = link.getAttribute('data-task-id');
+  var taskInput = link.getAttribute('data-task-input');
+  var msg = '[Task Bug Report]\nTask ID: ' + taskId + '\nTask Input: ' + taskInput + '\n\nExpected: ' + feedback;
+  btn.disabled = true;
+  status.textContent = 'Sending...';
+  status.style.color = 'var(--text-secondary)';
+  fetch('/bug-report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg }) })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) {
+        status.textContent = 'Sent — thank you!';
+        status.style.color = 'var(--success, green)';
+        textarea.value = '';
+        setTimeout(function() { closeBugForm(btn); }, 2000);
+      } else {
+        status.textContent = data.error || 'Failed.';
+        status.style.color = 'var(--danger)';
+      }
+    })
+    .catch(function() { status.textContent = 'Failed to send.'; status.style.color = 'var(--danger)'; })
+    .finally(function() { btn.disabled = false; });
+}
 </script>
 
 <%- include('partials/foot') %>
