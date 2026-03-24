@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { getSetting, getOrCreateConversation, deleteConversation, getDb } from "./db";
+import { getSetting, setSetting, getOrCreateConversation, deleteConversation, getDb } from "./db";
 import { submitSlackMessage } from "../adapters/slack";
 import { decrypt } from "./encryption";
 import { isSlackAudioFile, isAudioMimeType, transcribeAudio } from "./transcription";
@@ -20,6 +20,162 @@ const EVENT_DEDUP_TTL = 5 * 60 * 1000; // 5 minutes
 
 // Track threads where we've already sent the "is this for me?" nudge (resets on reboot)
 const nudgedThreads = new Set<string>();
+
+// --- Approval gate for non-owner users ---
+
+interface PendingApproval {
+  taskText: string;
+  requesterId: string;
+  requesterName: string;
+  channelId: string;
+  threadTs: string;
+  dmChannelId: string;
+  dmMessageTs: string;
+  context: string;
+  timeoutHandle: ReturnType<typeof setTimeout>;
+}
+
+const pendingApprovals = new Map<string, PendingApproval>();
+const APPROVAL_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+export function getSlackOwnerUserId(): string | null {
+  return getSetting("slack_owner_user_id") || null;
+}
+
+export function setSlackOwnerUserId(userId: string): void {
+  setSetting("slack_owner_user_id", userId);
+}
+
+export function isApprovalEnabled(): boolean {
+  return getSetting("slack_approval_enabled") === "true";
+}
+
+async function openDmChannel(userId: string): Promise<string> {
+  if (!slackConfig) throw new Error("Slack is not connected");
+  const res = await fetch("https://slack.com/api/conversations.open", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${slackConfig.bot_token}`,
+    },
+    body: JSON.stringify({ users: userId }),
+  });
+  const data: any = await res.json();
+  if (!data.ok) throw new Error(`conversations.open failed: ${data.error}`);
+  return data.channel.id;
+}
+
+async function sendSlackMessageWithTs(channelId: string, text: string, threadTs?: string): Promise<string> {
+  if (!slackConfig) throw new Error("Slack is not connected");
+  const payload: any = { channel: channelId, text };
+  if (threadTs) payload.thread_ts = threadTs;
+
+  const res = await fetch("https://slack.com/api/chat.postMessage", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${slackConfig.bot_token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Slack API error (${res.status})`);
+  const data: any = await res.json();
+  if (!data.ok) throw new Error(`Slack API error: ${data.error}`);
+  return data.ts;
+}
+
+async function requestApproval(params: {
+  text: string;
+  userId: string;
+  channelId: string;
+  threadTs: string;
+  context: string;
+}): Promise<void> {
+  const ownerUserId = getSlackOwnerUserId();
+  if (!ownerUserId || !slackConfig) return;
+
+  const requesterName = await resolveUserName(params.userId);
+
+  // Resolve channel name
+  let channelLabel = params.channelId;
+  try {
+    const res = await fetch(
+      `https://slack.com/api/conversations.info?channel=${params.channelId}`,
+      { headers: { Authorization: `Bearer ${slackConfig.bot_token}` } }
+    );
+    const data: any = await res.json();
+    if (data.ok && data.channel?.name) channelLabel = `#${data.channel.name}`;
+  } catch {}
+
+  const dmChannelId = await openDmChannel(ownerUserId);
+
+  const truncated = params.text.length > 300 ? params.text.slice(0, 300) + "..." : params.text;
+  const approvalMsg =
+    `*New request from ${requesterName}* (<@${params.userId}>) in ${channelLabel}:\n\n` +
+    `> ${truncated.replace(/\n/g, "\n> ")}\n\n` +
+    `Reply *approve* or *reject* in this thread.`;
+
+  const dmMessageTs = await sendSlackMessageWithTs(dmChannelId, approvalMsg);
+
+  const timeoutHandle = setTimeout(async () => {
+    const pending = pendingApprovals.get(dmMessageTs);
+    if (!pending) return;
+    pendingApprovals.delete(dmMessageTs);
+    await sendSlackMessage(dmChannelId, "This request timed out (24 hours) and was automatically declined.", dmMessageTs).catch(() => {});
+    await sendSlackMessage(params.channelId, "Unfortunately, I couldn't get a response, so we'll have to skip on this.", params.threadTs).catch(() => {});
+    console.log(`[slack-approval] Request from ${params.userId} timed out`);
+  }, APPROVAL_TIMEOUT_MS);
+
+  pendingApprovals.set(dmMessageTs, {
+    taskText: params.text,
+    requesterId: params.userId,
+    requesterName,
+    channelId: params.channelId,
+    threadTs: params.threadTs,
+    dmChannelId,
+    dmMessageTs,
+    context: params.context,
+    timeoutHandle,
+  });
+
+  console.log(`[slack-approval] Approval requested for ${requesterName} (${params.userId}) -> DM ${dmMessageTs}`);
+}
+
+async function handleApprovalResponse(parentTs: string, responseText: string): Promise<boolean> {
+  const pending = pendingApprovals.get(parentTs);
+  if (!pending) return false;
+
+  const normalized = responseText.trim().toLowerCase();
+  const isApproved = /^(approve|approved|yes|ok|go|do it|go ahead|sure|yep|yeah)\b/i.test(normalized);
+  const isRejected = /^(reject|rejected|no|deny|denied|decline|nope|nah|pass)\b/i.test(normalized);
+
+  if (!isApproved && !isRejected) {
+    await sendSlackMessage(pending.dmChannelId, "I didn't catch that. Reply *approve* or *reject* in this thread.", parentTs).catch(() => {});
+    return true;
+  }
+
+  clearTimeout(pending.timeoutHandle);
+  pendingApprovals.delete(parentTs);
+
+  if (isApproved) {
+    await sendSlackMessage(pending.dmChannelId, `Approved. Processing ${pending.requesterName}'s request now.`, parentTs).catch(() => {});
+    await sendSlackMessage(pending.channelId, "Got the green light! Working on it now.", pending.threadTs).catch(() => {});
+    submitSlackMessage({
+      text: pending.taskText,
+      channelId: pending.channelId,
+      threadTs: pending.threadTs,
+      userId: pending.requesterId,
+      context: pending.context,
+    });
+    console.log(`[slack-approval] Approved request from ${pending.requesterName}`);
+  } else {
+    await sendSlackMessage(pending.dmChannelId, `Rejected. I'll let ${pending.requesterName} know.`, parentTs).catch(() => {});
+    await sendSlackMessage(pending.channelId, "Sorry, I'm not able to help with that right now.", pending.threadTs).catch(() => {});
+    console.log(`[slack-approval] Rejected request from ${pending.requesterName}`);
+  }
+
+  return true;
+}
 
 // --- OAuth URL ---
 
@@ -44,6 +200,7 @@ export function buildSlackOAuthUrl(): string {
     "channels:history",
     "groups:history",
     "im:history",
+    "im:write",
     "mpim:history",
     "users:read",
     "files:read",
@@ -138,6 +295,13 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
   const isMentioned = text.includes(`<@${slackConfig.bot_user_id}>`);
   const isDM = channelId.startsWith("D");
   const hasAudioInThread = audioFiles.length > 0 && !!event.thread_ts;
+
+  // Check if this is an approval response (owner replying in DM approval thread)
+  if (isDM && event.thread_ts) {
+    const handled = await handleApprovalResponse(event.thread_ts, text);
+    if (handled) return;
+  }
+
   if (!isMentioned && !isDM && !hasAudioInThread) {
     // If this is a thread the bot has participated in, send a one-time nudge
     if (event.thread_ts && !nudgedThreads.has(externalId)) {
@@ -170,6 +334,37 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
       await sendSlackMessage(channelId, "Conversation cleared! Starting fresh.", threadTs);
     } catch {}
     return;
+  }
+
+  // --- Approval gate for non-owner users ---
+  if (isApprovalEnabled() && !isDM) {
+    const ownerUserId = getSlackOwnerUserId();
+    if (!ownerUserId) {
+      // Auto-claim: first user to @mention becomes the owner
+      setSlackOwnerUserId(userId);
+      console.log(`[slack-approval] Auto-claimed owner: ${userId}`);
+      // Fall through to normal processing — they're the owner
+    } else if (userId !== ownerUserId) {
+      // Non-owner: route to approval
+      try {
+        await sendSlackMessage(channelId, "Let me check with my boss on this one. I'll get back to you shortly.", threadTs);
+
+        let threadContext = "";
+        if (event.thread_ts) {
+          threadContext = await fetchThreadContext(channelId, event.thread_ts, slackConfig.bot_user_id);
+        }
+        let slackContext = "You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. Be BRIEF. This is Slack, not email — keep replies short (1-3 sentences when possible). No preamble, no filler, no restating the question. Lead with the answer. Only elaborate if the user asks for more detail. Always follow the user's formatting and style preferences (e.g. if they ask for no emojis, stop using emojis). IMPORTANT: You CAN handle audio files and voice clips in Slack. When a user shares audio, the system automatically transcribes it before you see the message — the transcribed text appears as [Audio transcription: ...] at the start of the message. You do NOT need to access files directly; transcription is handled for you. If asked whether you can process audio, say YES.";
+        if (threadContext) {
+          slackContext += `\n\n[Thread context — all messages in this thread prior to your current request]\n${threadContext}\n[End of thread context]`;
+        }
+
+        await requestApproval({ text, userId, channelId, threadTs, context: slackContext });
+      } catch (err) {
+        // Fail open: if approval DM fails, process normally
+        console.error("[slack-approval] Error requesting approval, processing normally:", err instanceof Error ? err.message : err);
+      }
+      if (!getSlackOwnerUserId() || userId !== getSlackOwnerUserId()) return;
+    }
   }
 
   try {

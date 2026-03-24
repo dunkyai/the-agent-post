@@ -29,6 +29,22 @@
                 <code style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px;"><%= slack.team_name || 'Unknown' %></code>
               </div>
             </div>
+            <hr style="border: none; border-top: 1px solid var(--rule-light); margin: 16px 0;">
+            <form method="POST" action="/integrations/slack/approval">
+              <h4 style="font-size: 14px; margin-bottom: 8px;">Access Control</h4>
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; margin-bottom: 10px;">
+                <input type="checkbox" name="approval_enabled" <%= slack.approval_enabled ? 'checked' : '' %>>
+                Require my approval for other users' requests
+              </label>
+              <div style="margin-bottom: 10px;">
+                <label style="font-size: 13px; color: var(--text-secondary);">Owner Slack User ID</label>
+                <input type="text" name="owner_user_id" value="<%= slack.owner_user_id %>" placeholder="Auto-detected on first @mention" style="width: 100%; margin-top: 4px; padding: 6px 10px; font-size: 13px; border: 1px solid var(--rule-light); border-radius: 4px; background: var(--bg); color: var(--text);">
+                <span style="font-size: 11px; color: var(--text-secondary);">Auto-set when you install Slack or first @mention the bot. Find yours in Slack: Profile → ⋯ → Copy member ID.</span>
+              </div>
+              <button type="submit" class="btn btn-sm">Save</button>
+            </form>
+
+            <hr style="border: none; border-top: 1px solid var(--rule-light); margin: 16px 0;">
             <form method="POST" action="/integrations/slack/disconnect">
               <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
             </form>
