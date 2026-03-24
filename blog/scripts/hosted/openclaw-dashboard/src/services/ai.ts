@@ -391,8 +391,27 @@ async function executeFindImage(input: { query: string; style?: string }): Promi
 
   const allImages: { source: string; url: string }[] = [];
 
-  // Strategy 1: Wikimedia Commons API (free, direct image URLs, good for both photos and illustrations)
-  try {
+  // Strategy 1: Pixabay API (free, direct image URLs, excellent for illustrations/vectors/photos)
+  const pixabayKey = process.env.PIXABAY_API_KEY;
+  if (pixabayKey) {
+    try {
+      const imageType = isIllustration ? "illustration" : "all";
+      const pixabayUrl = `https://pixabay.com/api/?key=${pixabayKey}&q=${encodeURIComponent(input.query)}&image_type=${imageType}&per_page=8&safesearch=true`;
+      const pixRes = await fetch(pixabayUrl);
+      if (pixRes.ok) {
+        const pixData: any = await pixRes.json();
+        for (const hit of (pixData.hits || [])) {
+          // webformatURL is 640px wide, good for chat display
+          if (hit.webformatURL) {
+            allImages.push({ source: "Pixabay", url: hit.webformatURL });
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // Strategy 2: Wikimedia Commons API (free, direct image URLs, good for both photos and illustrations)
+  if (allImages.length < 3) try {
     const commonsApiUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(input.query)}&gsrlimit=10&gsrnamespace=6&prop=imageinfo&iiprop=url|mime|extmetadata&iiurlwidth=800&format=json&origin=*`;
     const commonsRes = await fetch(commonsApiUrl);
     if (commonsRes.ok) {
@@ -412,7 +431,7 @@ async function executeFindImage(input: { query: string; style?: string }): Promi
     }
   } catch {}
 
-  // Strategy 2: Wikipedia article images (good for real-world topics)
+  // Strategy 3: Wikipedia article images (good for real-world topics)
   if (!isIllustration && allImages.length < 3) {
     try {
       const wikiApiUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(input.query.replace(/ /g, '_'))}&prop=images&imlimit=10&format=json&origin=*`;
@@ -447,7 +466,7 @@ async function executeFindImage(input: { query: string; style?: string }): Promi
     } catch {}
   }
 
-  // Strategy 3: Browse Wikipedia page directly via browser (fallback if API didn't find enough)
+  // Strategy 4: Browse Wikipedia page directly via browser (fallback if API didn't find enough)
   if (allImages.length < 2 && provisioningUrl && instanceId && gatewayToken) {
     try {
       const wikiUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(input.query.replace(/ /g, '_'))}`;

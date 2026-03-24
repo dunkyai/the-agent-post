@@ -128,6 +128,7 @@ deploy_instance() {
       -e TWITTER_CLIENT_ID="$TWITTER_CLIENT_ID" \\
       -e TWITTER_CLIENT_SECRET="$TWITTER_CLIENT_SECRET" \\
       -e GROQ_API_KEY="$GROQ_API_KEY" \\
+      -e PIXABAY_API_KEY="$PIXABAY_API_KEY" \\
       $([ "$ID" = "cb1d6d97" ] && echo '-e SKIP_AUTH=true') \\
       $IMAGE
 EOF
