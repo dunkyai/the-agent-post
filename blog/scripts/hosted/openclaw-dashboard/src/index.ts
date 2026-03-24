@@ -231,6 +231,19 @@ async function reconnectIntegrations() {
     console.error("Failed to reconnect Twitter:", err instanceof Error ? err.message : err);
   }
 
+  // Beehiiv
+  try {
+    const beehiiv = getIntegration("beehiiv");
+    if (beehiiv && beehiiv.status === "connected") {
+      const config = JSON.parse(decrypt(beehiiv.config));
+      const { startBeehiiv } = require("./services/beehiiv");
+      startBeehiiv(config);
+      console.log(`Beehiiv reconnected${config.publication_name ? ` (${config.publication_name})` : ""}`);
+    }
+  } catch (err: unknown) {
+    console.error("Failed to reconnect Beehiiv:", err instanceof Error ? err.message : err);
+  }
+
   try {
     const googleRows = getGoogleIntegrations();
     for (const row of googleRows) {
