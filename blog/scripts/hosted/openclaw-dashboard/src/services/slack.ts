@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { getSetting, getOrCreateConversation, deleteConversation } from "./db";
+import { getSetting, getOrCreateConversation, deleteConversation, getDb } from "./db";
 import { submitSlackMessage } from "../adapters/slack";
 import { decrypt } from "./encryption";
 import { isSlackAudioFile, isAudioMimeType, transcribeAudio } from "./transcription";
@@ -17,6 +17,9 @@ let slackConfig: SlackConfig | null = null;
 // Event deduplication
 const recentEventIds = new Set<string>();
 const EVENT_DEDUP_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Track threads where we've already sent the "is this for me?" nudge (resets on reboot)
+const nudgedThreads = new Set<string>();
 
 // --- OAuth URL ---
 
@@ -136,6 +139,20 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
   const isDM = channelId.startsWith("D");
   const hasAudioInThread = audioFiles.length > 0 && !!event.thread_ts;
   if (!isMentioned && !isDM && !hasAudioInThread) {
+    // If this is a thread the bot has participated in, send a one-time nudge
+    if (event.thread_ts && !nudgedThreads.has(externalId)) {
+      const existing = getDb()
+        .prepare("SELECT id FROM conversations WHERE integration_type = 'slack' AND external_id = ?")
+        .get(externalId) as { id: string } | undefined;
+      if (existing) {
+        nudgedThreads.add(externalId);
+        await sendSlackMessage(
+          channelId,
+          "Is this message meant for me? If so, please include @theagentpost in your ask so that I can take action.",
+          event.thread_ts
+        ).catch(() => {});
+      }
+    }
     return;
   }
   console.log(`Slack event: channel=${channelId} user=${userId} mentioned=${isMentioned} dm=${isDM} thread=${!!event.thread_ts}`);
