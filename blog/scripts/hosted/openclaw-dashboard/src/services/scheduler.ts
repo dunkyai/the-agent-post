@@ -91,15 +91,18 @@ async function executeJob(jobId: number): Promise<void> {
   // Clear conversation history so the AI starts fresh each run.
   // Without this, models (especially GPT-4o) copy previous responses
   // instead of actually calling tools to gather real data.
+  // Use a job-specific conversation key so jobs never share conversations,
+  // even when they deliver to the same Slack channel or email address.
+  const jobConvKey = `job:${job.id}`;
   try {
-    const existingConvId = getOrCreateConversation(job.target_source, job.target_external_id);
+    const existingConvId = getOrCreateConversation("scheduled_job", jobConvKey);
     deleteConversation(existingConvId);
   } catch {}
 
   try {
     const result = await processMessage(
-      job.target_source,
-      job.target_external_id,
+      "scheduled_job",
+      jobConvKey,
       job.prompt,
       `This is a scheduled job execution. Job name: "${job.name}". Schedule: ${job.schedule}. IMPORTANT: You MUST use your tools (gmail_search, calendar_list_events, etc.) to gather real, current data before responding. Do NOT generate information from memory or previous responses — always call the relevant tools first and base your response entirely on their results. If a tool returns no data, say so honestly rather than inventing content.`
     );
