@@ -12,9 +12,9 @@ router.get("/getting-started", (req: Request, res: Response) => {
   const contextRules = getSetting("context_rules") || "";
   const contextKnowledge = getSetting("context_knowledge") || "";
 
-  // Context completeness: count fields with 40+ chars as "filled"
+  // Context completeness: count fields with 20+ chars as "filled" (matches ai.ts threshold)
   const contextFields = [contextCompany, contextUser, contextRules, contextKnowledge];
-  const filledCount = contextFields.filter((f) => f.trim().length >= 40).length;
+  const filledCount = contextFields.filter((f) => f.trim().length >= 20).length;
 
   res.render("getting-started", {
     agentName,

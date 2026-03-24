@@ -2063,15 +2063,12 @@ function executeMemoryTool(toolName: string, input: any): string {
         return JSON.stringify({ error: `Invalid field: ${input.field}. Must be one of: ${validFields.join(", ")}` });
       }
       setSetting(input.field, (input.content || "").trim());
-      // Mark onboarding complete only when all four context fields have meaningful content
-      const allPopulated = validFields.every((f) => {
+      // Check how many fields are now filled (>=20 chars)
+      const filledCount = validFields.filter((f) => {
         const val = getSetting(f);
-        return val && val.trim().length >= 10;
-      });
-      if (allPopulated) {
-        setSetting("onboarding_complete", "true");
-      }
-      return JSON.stringify({ success: true, field: input.field, saved: true, onboarding_complete: allPopulated });
+        return val && val.trim().length >= 20;
+      }).length;
+      return JSON.stringify({ success: true, field: input.field, saved: true, fields_filled: filledCount, fields_total: validFields.length });
     }
     default:
       return JSON.stringify({ error: `Unknown tool: ${toolName}` });
@@ -3180,48 +3177,41 @@ If you encounter sensitive data while searching emails, reading documents, or br
     }
   } catch {}
 
-  // Onboarding — progressively ask questions until all context fields are rich
-  if (getSetting("onboarding_complete") !== "true") {
-    const fields = [
-      { key: "context_company", label: "company", desc: "what their company/org does, size, industry, stage" },
-      { key: "context_user", label: "user", desc: "their role, responsibilities, goals" },
-      { key: "context_rules", label: "rules", desc: "communication tone, things to avoid, formatting preferences" },
-      { key: "context_knowledge", label: "knowledge", desc: "key facts, domain-specific info, numbers, names" },
+  // Onboarding — check actual field content every time (survives reboots)
+  {
+    const ctxFields = [
+      { key: "context_company", label: "About Your Company", q: "What does your company or organization do? What industry, size, stage?" },
+      { key: "context_user", label: "About You", q: "What's your role? What are you responsible for day-to-day?" },
+      { key: "context_rules", label: "Rules & Guidelines", q: "Any rules I should follow? Preferred tone, things to avoid, formatting preferences?" },
+      { key: "context_knowledge", label: "Knowledge Base", q: "Any key facts I should know? Numbers, names, terminology specific to your work?" },
     ];
-    const empty: string[] = [];
-    const sparse: string[] = [];
-    const filled: string[] = [];
-    for (const f of fields) {
+    const missing: typeof ctxFields = [];
+    for (const f of ctxFields) {
       const val = getSetting(f.key);
-      if (!val || val.trim().length === 0) empty.push(f.label);
-      else if (val.trim().length < 40) sparse.push(f.label);
-      else filled.push(f.label);
+      if (!val || val.trim().length < 20) missing.push(f);
     }
 
-    let directive = "";
-    if (empty.length === 4) {
-      // Brand new user — warm intro + broad questions
-      directive = `This is a new user with no context configured yet. At the START of your very first response, briefly introduce yourself, then ask 2-3 friendly questions to learn about them — e.g. what their company does, their role, and what they'd like help with. Keep it conversational, not a numbered list. After they answer, use the update_context tool to save answers to the appropriate fields (context_company, context_user, context_rules, context_knowledge).`;
-    } else if (empty.length > 0 || sparse.length > 0) {
-      // Partially filled — ask about gaps naturally
-      const gaps: string[] = [];
-      for (const f of fields) {
-        const val = getSetting(f.key);
-        if (!val || val.trim().length < 40) {
-          gaps.push(`${f.label} (${f.desc})`);
-        }
-      }
-      directive = `The user's context is partially filled. These areas still need more detail: ${gaps.join("; ")}. ` +
-        `At a natural point in the conversation (not necessarily at the start), weave in 1-2 follow-up questions about the gaps. ` +
-        `Be specific — e.g. instead of "tell me about your company" ask "what industry are you in and how large is your team?" ` +
-        `Use update_context to save any new info. Don't repeat questions they've already answered.`;
-      if (filled.length > 0) {
-        directive += ` Areas already covered: ${filled.join(", ")}. Ask more granular follow-ups about these if relevant — e.g. specific product names, key metrics, team structure.`;
-      }
-    }
+    if (missing.length > 0) {
+      const missingList = missing.map((f) => `- ${f.label}: "${f.q}"`).join("\n");
+      const directive = `[ONBOARDING CHECK — MANDATORY]
+The following context fields are empty or too sparse:
+${missingList}
 
-    if (directive) {
-      directive += "\n\nIMPORTANT: Only ask 1-2 questions per turn. Don't overwhelm the user. If they ask you to do something, help them first, then ask a follow-up question at the end. Never skip their request to ask onboarding questions.";
+YOUR FIRST RESPONSE in this conversation MUST address this before anything else. Say something like:
+"Before we dive in, I'd love to get to know you a bit so I can be more helpful. I have a few quick questions — want to go through them, or would you rather skip for now?"
+
+If the user agrees or says yes:
+- Ask the questions ONE AT A TIME, conversationally (not as a numbered list).
+- After each answer, immediately use the update_context tool to save it.
+- Once all gaps are filled, say something like "Great, I'm all set! Now, what can I help you with?"
+
+If the user says "skip" or declines:
+- Respect that and help them with whatever they asked. Do NOT ask again in this conversation.
+- But do NOT mark onboarding as complete — the check will happen again next conversation.
+
+If the user has ALREADY answered or skipped earlier in THIS conversation (check the message history), do NOT ask again — just help them normally.
+
+IMPORTANT: Ask only 1 question per turn. Keep it natural and conversational.`;
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${directive}` : directive;
     }
   }
