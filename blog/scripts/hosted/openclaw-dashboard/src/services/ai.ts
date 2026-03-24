@@ -42,6 +42,10 @@ import {
   isTwitterRunning, getTwitterUsername,
   twitterGetMe, twitterPostTweet, twitterPostThread, twitterGetRecentTweets, twitterDeleteTweet,
 } from "./twitter";
+import {
+  isBeehiivRunning, getBeehiivPublicationName,
+  beehiivListTemplates, beehiivCreateDraft, beehiivListPosts, beehiivGetPost,
+} from "./beehiiv";
 
 interface AIResponse {
   role: string;
@@ -1278,6 +1282,87 @@ async function executeTwitterTool(toolName: string, input: any): Promise<string>
   }
 }
 
+// --- Beehiiv Tools ---
+
+const BEEHIIV_TOOLS = [
+  {
+    name: "beehiiv_list_templates",
+    description: "List the configured design templates for Beehiiv newsletters. Use this first to show template options before creating a draft.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "beehiiv_create_draft",
+    description: "Create a draft newsletter post in Beehiiv. The draft can be reviewed and published from the Beehiiv dashboard. Use beehiiv_list_templates first to see available templates.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string", description: "Newsletter title/heading" },
+        body_content: { type: "string", description: "Newsletter body as HTML" },
+        subtitle: { type: "string", description: "Optional subtitle" },
+        email_subject_line: { type: "string", description: "Email subject line (defaults to title if not set)" },
+        email_preview_text: { type: "string", description: "Email preview/preheader text" },
+        content_tags: { type: "array", items: { type: "string" }, description: "Content tags/categories" },
+        slug: { type: "string", description: "URL slug for the web version" },
+        template_id: { type: "string", description: "Design template ID (from beehiiv_list_templates). If omitted, uses the default template." },
+      },
+      required: ["title", "body_content"],
+    },
+  },
+  {
+    name: "beehiiv_list_posts",
+    description: "List newsletter posts from Beehiiv with optional status filter.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        status: { type: "string", enum: ["draft", "confirmed", "archived"], description: "Filter by post status (default: all)" },
+        limit: { type: "number", description: "Max posts to return (default: 20, max: 50)" },
+      },
+    },
+  },
+  {
+    name: "beehiiv_get_post",
+    description: "Get a single Beehiiv newsletter post by ID, including full content and stats.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        post_id: { type: "string", description: "The Beehiiv post ID" },
+      },
+      required: ["post_id"],
+    },
+  },
+];
+
+async function executeBeehiivTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "beehiiv_list_templates":
+        return beehiivListTemplates();
+      case "beehiiv_create_draft":
+        return await beehiivCreateDraft({
+          title: input.title,
+          body_content: input.body_content,
+          subtitle: input.subtitle,
+          email_subject_line: input.email_subject_line,
+          email_preview_text: input.email_preview_text,
+          content_tags: input.content_tags,
+          slug: input.slug,
+          template_id: input.template_id,
+        });
+      case "beehiiv_list_posts":
+        return await beehiivListPosts({
+          status: input.status,
+          limit: input.limit,
+        });
+      case "beehiiv_get_post":
+        return await beehiivGetPost(input.post_id);
+      default:
+        return JSON.stringify({ error: `Unknown Beehiiv tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Beehiiv operation failed" });
+  }
+}
+
 // --- Public Google Doc Tool (no OAuth needed) ---
 
 const PUBLIC_GDOC_TOOLS = [
@@ -2087,6 +2172,10 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   luma_send_invites: "Sending event invitations...",
   twitter_get_me: "Checking Twitter profile...",
   twitter_post_tweet: "Posting to X...",
+  beehiiv_list_templates: "Listing newsletter templates...",
+  beehiiv_create_draft: "Creating newsletter draft...",
+  beehiiv_list_posts: "Checking Beehiiv posts...",
+  beehiiv_get_post: "Reading newsletter post...",
   twitter_post_thread: "Posting thread to X...",
   twitter_get_recent_tweets: "Checking recent tweets...",
   twitter_delete_tweet: "Deleting a tweet...",
@@ -2131,6 +2220,7 @@ async function callAnthropic(
   if (isBufferRunning()) tools.push(...BUFFER_TOOLS);
   if (isLumaRunning()) tools.push(...LUMA_TOOLS);
   if (isTwitterRunning()) tools.push(...TWITTER_TOOLS);
+  if (isBeehiivRunning()) tools.push(...BEEHIIV_TOOLS);
 
   // Conditionally add Google tools based on connected services
   const googleServices = getConnectedServices();
@@ -2234,6 +2324,7 @@ async function callAnthropic(
       const bufferToolNames = ["buffer_list_channels", "buffer_create_post", "buffer_list_posts", "buffer_delete_post"];
       const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
       const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet"];
+      const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
 
@@ -2286,6 +2377,8 @@ async function callAnthropic(
           result = await executeLumaTool(toolBlock.name, toolBlock.input);
         } else if (twitterToolNames.includes(toolBlock.name)) {
           result = await executeTwitterTool(toolBlock.name, toolBlock.input);
+        } else if (beehiivToolNames.includes(toolBlock.name)) {
+          result = await executeBeehiivTool(toolBlock.name, toolBlock.input);
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input);
         }
@@ -2406,6 +2499,7 @@ async function callOpenAI(
   if (isBufferRunning()) customTools.push(...BUFFER_TOOLS);
   if (isLumaRunning()) customTools.push(...LUMA_TOOLS);
   if (isTwitterRunning()) customTools.push(...TWITTER_TOOLS);
+  if (isBeehiivRunning()) customTools.push(...BEEHIIV_TOOLS);
   const googleServices = getConnectedServices();
   if (googleServices) {
     if (googleServices.includes("gmail")) {
@@ -2463,6 +2557,7 @@ async function callOpenAI(
   const bufferToolNames = ["buffer_list_profiles", "buffer_create_post", "buffer_get_pending", "buffer_get_sent"];
   const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
   const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet"];
+  const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
 
   const MAX_TOOL_ROUNDS = 50;
   const toolCallLog: string[] = [];
@@ -2572,6 +2667,8 @@ async function callOpenAI(
           result = await executeLumaTool(toolName, toolInput);
         } else if (twitterToolNames.includes(toolName)) {
           result = await executeTwitterTool(toolName, toolInput);
+        } else if (beehiivToolNames.includes(toolName)) {
+          result = await executeBeehiivTool(toolName, toolInput);
         } else {
           result = executeSchedulingTool(toolName, toolInput);
         }
@@ -2925,6 +3022,13 @@ CRITICAL — READ THIS CAREFULLY: To post a tweet, you MUST call the twitter_pos
     const lumaUser = getLumaUserName();
     const lumaContext = `You are connected to Luma (lu.ma) for event management${lumaUser ? ` as ${lumaUser}` : ""}. You can list upcoming events, get event details, create and update events, view guest lists/RSVPs, add guests, and send invitations using the luma_* tools. Use luma_list_events to see upcoming events first. All times should be in ISO 8601 format with an IANA timezone. IMPORTANT: When creating events, always ask the user to confirm or provide the exact date/time, timezone, duration, whether it's virtual or in-person, and a description before calling luma_create_event.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${lumaContext}` : lumaContext;
+  }
+
+  // Inject Beehiiv context
+  if (isBeehiivRunning()) {
+    const pubName = getBeehiivPublicationName();
+    const beehiivContext = `You are connected to Beehiiv for newsletter management${pubName ? ` (publication: ${pubName})` : ""}. You can create draft newsletters, list posts, and view post details using the beehiiv_* tools. When asked to create a newsletter, use beehiiv_list_templates first to show available design templates, then beehiiv_create_draft with the chosen template. Drafts are created in Beehiiv for review — they are NOT published automatically. Write newsletter content as well-formatted HTML. Always confirm the content with the user before creating the draft.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${beehiivContext}` : beehiivContext;
   }
 
   // Inject long-term memories
