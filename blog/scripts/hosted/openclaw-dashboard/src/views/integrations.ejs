@@ -497,6 +497,100 @@
         </div>
       </details>
 
+      <!-- Beehiiv -->
+      <details class="integration-tile">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #FD9B28;"><img src="/logos/beehiiv.svg" alt="Beehiiv" width="24" height="24"></span>
+          <div class="integration-tile-info">
+            <h3>Beehiiv</h3>
+            <p>Draft &amp; manage newsletters</p>
+          </div>
+          <span class="status-badge status-<%= beehiiv.status === 'pending' ? 'disconnected' : beehiiv.status %>"><%= beehiiv.status === 'pending' ? 'choose pub' : beehiiv.status %></span>
+        </summary>
+        <div class="integration-tile-body">
+          <% if (beehiiv.error_message) { %>
+            <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= beehiiv.error_message %></p>
+          <% } %>
+
+          <% if (beehiiv.status === 'pending' && beehiiv.pending_pubs.length > 0) { %>
+            <p style="font-size: 14px; margin-bottom: 12px;">Your Beehiiv account has multiple publications. Choose which one to connect:</p>
+            <form method="POST" action="/integrations/beehiiv/select-pub">
+              <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;">
+                <% beehiiv.pending_pubs.forEach(function(pub) { %>
+                  <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; padding: 8px 12px; border: 1px solid var(--rule-light); border-radius: 6px;">
+                    <input type="radio" name="publication_id" value="<%= pub.id %>" required>
+                    <span><%= pub.name %></span>
+                  </label>
+                <% }); %>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button type="submit" class="btn">Connect</button>
+              </div>
+            </form>
+            <form method="POST" action="/integrations/beehiiv/disconnect" style="margin-top: 8px;">
+              <button type="submit" class="btn btn-danger btn-sm">Cancel</button>
+            </form>
+
+          <% } else if (beehiiv.status === 'connected') { %>
+            <div style="margin-bottom: 12px;">
+              <label style="font-size: 13px; color: var(--text-secondary);">Connected Publication</label>
+              <div style="margin-top: 4px;">
+                <code style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px;"><%= beehiiv.publication_name || 'Connected' %></code>
+              </div>
+            </div>
+
+            <form method="POST" action="/integrations/beehiiv/templates">
+              <label style="font-size: 13px; color: var(--text-secondary); display: block; margin-bottom: 8px;">Design Templates <span style="font-weight: normal;">(optional — find IDs in Beehiiv dashboard under My Templates)</span></label>
+              <div id="beehiiv-templates" style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;">
+                <% if (beehiiv.templates.length > 0) { %>
+                  <% beehiiv.templates.forEach(function(t) { %>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                      <input type="text" name="template_name" value="<%= t.name %>" placeholder="Template name" style="flex: 1; padding: 6px 10px; border: 1px solid var(--rule-light); border-radius: 4px; font-size: 13px; background: var(--bg); color: var(--text);">
+                      <input type="text" name="template_id" value="<%= t.id %>" placeholder="post_template_..." style="flex: 2; padding: 6px 10px; border: 1px solid var(--rule-light); border-radius: 4px; font-size: 13px; background: var(--bg); color: var(--text); font-family: monospace;">
+                    </div>
+                  <% }); %>
+                <% } else { %>
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <input type="text" name="template_name" placeholder="Template name" style="flex: 1; padding: 6px 10px; border: 1px solid var(--rule-light); border-radius: 4px; font-size: 13px; background: var(--bg); color: var(--text);">
+                    <input type="text" name="template_id" placeholder="post_template_..." style="flex: 2; padding: 6px 10px; border: 1px solid var(--rule-light); border-radius: 4px; font-size: 13px; background: var(--bg); color: var(--text); font-family: monospace;">
+                  </div>
+                <% } %>
+              </div>
+              <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                <button type="button" class="btn btn-sm" onclick="(function(){var c=document.getElementById('beehiiv-templates');var r=c.children[0].cloneNode(true);r.querySelectorAll('input').forEach(function(i){i.value=''});c.appendChild(r);})()">+ Add Template</button>
+                <button type="submit" class="btn btn-sm">Save Templates</button>
+              </div>
+            </form>
+
+            <form method="POST" action="/integrations/beehiiv/disconnect">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+            </form>
+          <% } else { %>
+            <form method="POST" action="/integrations/beehiiv/connect">
+              <p style="font-size: 14px; margin-bottom: 12px;">Connect your Beehiiv account so your agent can draft and manage newsletters.</p>
+              <div class="form-group">
+                <label for="beehiiv_api_key">API Key</label>
+                <input type="password" id="beehiiv_api_key" name="api_key" placeholder="API key..." required>
+                <div class="hint">Generate your API key in <a href="https://app.beehiiv.com/settings/integrations" target="_blank" style="color: var(--accent);">Beehiiv Settings → Integrations → API</a></div>
+              </div>
+
+              <details style="margin-bottom: 12px;">
+                <summary style="font-size: 13px; color: var(--text-secondary); cursor: pointer;">Design Templates (optional)</summary>
+                <div id="beehiiv-templates-setup" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <input type="text" name="template_name" placeholder="Template name" style="flex: 1; padding: 6px 10px; border: 1px solid var(--rule-light); border-radius: 4px; font-size: 13px; background: var(--bg); color: var(--text);">
+                    <input type="text" name="template_id" placeholder="post_template_..." style="flex: 2; padding: 6px 10px; border: 1px solid var(--rule-light); border-radius: 4px; font-size: 13px; background: var(--bg); color: var(--text); font-family: monospace;">
+                  </div>
+                </div>
+                <button type="button" class="btn btn-sm" style="margin-top: 8px;" onclick="(function(){var c=document.getElementById('beehiiv-templates-setup');var r=c.children[0].cloneNode(true);r.querySelectorAll('input').forEach(function(i){i.value=''});c.appendChild(r);})()">+ Add Template</button>
+              </details>
+
+              <button type="submit" class="btn">Connect</button>
+            </form>
+          <% } %>
+        </div>
+      </details>
+
       <!-- Luma -->
       <details class="integration-tile">
         <summary class="integration-tile-summary">

@@ -10,6 +10,7 @@ import { buildNotionOAuthUrl, stopNotion, getNotionWorkspaceName } from "../serv
 import { startBuffer, stopBuffer, testBufferConnection, bufferListChannels, isBufferRunning } from "../services/buffer";
 import { startLuma, stopLuma, testLumaConnection } from "../services/luma";
 import { buildTwitterOAuthUrl, stopTwitter } from "../services/twitter";
+import { startBeehiiv, stopBeehiiv, testBeehiivConnection } from "../services/beehiiv";
 
 const router = Router();
 
@@ -158,6 +159,23 @@ router.get("/integrations", async (req: Request, res: Response) => {
         return null;
       })(),
     },
+    beehiiv: (() => {
+      const bi = integrationMap["beehiiv"];
+      const base = { ...(bi || { status: "disconnected", error_message: null }), publication_name: null as string | null, templates: [] as { name: string; id: string }[], pending_pubs: [] as { id: string; name: string }[] };
+      if (bi && bi.status === "pending") {
+        try {
+          const pending = JSON.parse(decrypt(bi.config));
+          base.pending_pubs = pending.publications || [];
+        } catch {}
+      } else if (bi && bi.status === "connected") {
+        try {
+          const config = JSON.parse(decrypt(bi.config));
+          base.publication_name = config.publication_name || null;
+          base.templates = config.templates || [];
+        } catch {}
+      }
+      return base;
+    })(),
     flash: req.query.flash || null,
   });
 });
@@ -621,5 +639,106 @@ router.post("/integrations/twitter/disconnect", async (req: Request, res: Respon
   upsertIntegration("twitter", "{}", "disconnected");
   res.redirect(303, "/integrations?flash=Twitter+disconnected");
 });
+
+// --- Beehiiv ---
+
+router.post("/integrations/beehiiv/connect", async (req: Request, res: Response) => {
+  try {
+    const apiKey = (req.body.api_key || "").trim();
+    if (!apiKey) {
+      res.redirect(303, "/integrations?flash=API+key+is+required");
+      return;
+    }
+
+    const { publications } = await testBeehiivConnection(apiKey);
+
+    if (publications.length === 1) {
+      // Parse templates from form
+      const templates = parseTemplateRows(req.body);
+      const configData = { api_key: apiKey, publication_id: publications[0].id, publication_name: publications[0].name, templates };
+      const config = encrypt(JSON.stringify(configData));
+      upsertIntegration("beehiiv", config, "connected");
+      startBeehiiv(configData);
+      res.redirect(303, "/integrations?flash=Beehiiv+connected+successfully");
+    } else {
+      // Multiple publications — store key temporarily and show picker
+      const templates = parseTemplateRows(req.body);
+      const pending = encrypt(JSON.stringify({ api_key: apiKey, publications, templates }));
+      upsertIntegration("beehiiv", pending, "pending");
+      res.redirect(303, "/integrations?flash=Choose+a+publication");
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Connection failed";
+    upsertIntegration("beehiiv", "{}", "disconnected", message);
+    res.redirect(303, "/integrations?flash=" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/beehiiv/select-pub", (req: Request, res: Response) => {
+  try {
+    const integration = getIntegration("beehiiv");
+    if (!integration || integration.status !== "pending") {
+      res.redirect(303, "/integrations?flash=No+pending+Beehiiv+connection");
+      return;
+    }
+
+    const pending = JSON.parse(decrypt(integration.config));
+    const selectedPubId = req.body.publication_id;
+    const pub = pending.publications.find((p: any) => p.id === selectedPubId);
+    if (!pub) {
+      res.redirect(303, "/integrations?flash=Invalid+publication");
+      return;
+    }
+
+    const configData = { api_key: pending.api_key, publication_id: pub.id, publication_name: pub.name, templates: pending.templates || [] };
+    const config = encrypt(JSON.stringify(configData));
+    upsertIntegration("beehiiv", config, "connected");
+    startBeehiiv(configData);
+    res.redirect(303, "/integrations?flash=Beehiiv+connected+to+" + encodeURIComponent(pub.name));
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.redirect(303, "/integrations?flash=Beehiiv+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/beehiiv/templates", (req: Request, res: Response) => {
+  try {
+    const integration = getIntegration("beehiiv");
+    if (!integration || integration.status !== "connected") {
+      res.redirect(303, "/integrations?flash=Beehiiv+not+connected");
+      return;
+    }
+
+    const config = JSON.parse(decrypt(integration.config));
+    config.templates = parseTemplateRows(req.body);
+
+    const encrypted = encrypt(JSON.stringify(config));
+    upsertIntegration("beehiiv", encrypted, "connected");
+    startBeehiiv(config);
+
+    res.redirect(303, "/integrations?flash=Beehiiv+templates+saved");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.redirect(303, "/integrations?flash=Template+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/beehiiv/disconnect", (req: Request, res: Response) => {
+  stopBeehiiv();
+  upsertIntegration("beehiiv", "{}", "disconnected");
+  res.redirect(303, "/integrations?flash=Beehiiv+disconnected");
+});
+
+function parseTemplateRows(body: any): { name: string; id: string }[] {
+  const names = Array.isArray(body.template_name) ? body.template_name : body.template_name ? [body.template_name] : [];
+  const ids = Array.isArray(body.template_id) ? body.template_id : body.template_id ? [body.template_id] : [];
+  const templates: { name: string; id: string }[] = [];
+  for (let i = 0; i < names.length; i++) {
+    const name = (names[i] || "").trim();
+    const id = (ids[i] || "").trim();
+    if (name && id) templates.push({ name, id });
+  }
+  return templates;
+}
 
 export default router;
