@@ -2063,8 +2063,15 @@ function executeMemoryTool(toolName: string, input: any): string {
         return JSON.stringify({ error: `Invalid field: ${input.field}. Must be one of: ${validFields.join(", ")}` });
       }
       setSetting(input.field, (input.content || "").trim());
-      setSetting("onboarding_complete", "true");
-      return JSON.stringify({ success: true, field: input.field, saved: true });
+      // Mark onboarding complete only when all four context fields have meaningful content
+      const allPopulated = validFields.every((f) => {
+        const val = getSetting(f);
+        return val && val.trim().length >= 10;
+      });
+      if (allPopulated) {
+        setSetting("onboarding_complete", "true");
+      }
+      return JSON.stringify({ success: true, field: input.field, saved: true, onboarding_complete: allPopulated });
     }
     default:
       return JSON.stringify({ error: `Unknown tool: ${toolName}` });
@@ -3173,18 +3180,49 @@ If you encounter sensitive data while searching emails, reading documents, or br
     }
   } catch {}
 
-  // Onboarding directive for new users without context
+  // Onboarding — progressively ask questions until all context fields are rich
   if (getSetting("onboarding_complete") !== "true") {
-    const hasContext = getSetting("context_company") || getSetting("context_user") || getSetting("system_prompt");
-    if (!hasContext) {
-      const onboardingDirective = `This is your first conversation with this user. Before doing anything else, introduce yourself briefly and ask them a few quick questions to personalize their experience:
-1. What does your company do?
-2. What's your role?
-3. What would you like me to help you with most?
-4. Any rules I should follow? (e.g., tone, things to avoid)
+    const fields = [
+      { key: "context_company", label: "company", desc: "what their company/org does, size, industry, stage" },
+      { key: "context_user", label: "user", desc: "their role, responsibilities, goals" },
+      { key: "context_rules", label: "rules", desc: "communication tone, things to avoid, formatting preferences" },
+      { key: "context_knowledge", label: "knowledge", desc: "key facts, domain-specific info, numbers, names" },
+    ];
+    const empty: string[] = [];
+    const sparse: string[] = [];
+    const filled: string[] = [];
+    for (const f of fields) {
+      const val = getSetting(f.key);
+      if (!val || val.trim().length === 0) empty.push(f.label);
+      else if (val.trim().length < 40) sparse.push(f.label);
+      else filled.push(f.label);
+    }
 
-After they answer, use the update_context tool to save their answers to the appropriate fields (context_company, context_user, context_rules). Also use save_memory for any specific facts worth remembering. Let them know they can always update these in Settings.`;
-      systemPrompt = systemPrompt ? `${systemPrompt}\n\n${onboardingDirective}` : onboardingDirective;
+    let directive = "";
+    if (empty.length === 4) {
+      // Brand new user — warm intro + broad questions
+      directive = `This is a new user with no context configured yet. At the START of your very first response, briefly introduce yourself, then ask 2-3 friendly questions to learn about them — e.g. what their company does, their role, and what they'd like help with. Keep it conversational, not a numbered list. After they answer, use the update_context tool to save answers to the appropriate fields (context_company, context_user, context_rules, context_knowledge).`;
+    } else if (empty.length > 0 || sparse.length > 0) {
+      // Partially filled — ask about gaps naturally
+      const gaps: string[] = [];
+      for (const f of fields) {
+        const val = getSetting(f.key);
+        if (!val || val.trim().length < 40) {
+          gaps.push(`${f.label} (${f.desc})`);
+        }
+      }
+      directive = `The user's context is partially filled. These areas still need more detail: ${gaps.join("; ")}. ` +
+        `At a natural point in the conversation (not necessarily at the start), weave in 1-2 follow-up questions about the gaps. ` +
+        `Be specific — e.g. instead of "tell me about your company" ask "what industry are you in and how large is your team?" ` +
+        `Use update_context to save any new info. Don't repeat questions they've already answered.`;
+      if (filled.length > 0) {
+        directive += ` Areas already covered: ${filled.join(", ")}. Ask more granular follow-ups about these if relevant — e.g. specific product names, key metrics, team structure.`;
+      }
+    }
+
+    if (directive) {
+      directive += "\n\nIMPORTANT: Only ask 1-2 questions per turn. Don't overwhelm the user. If they ask you to do something, help them first, then ask a follow-up question at the end. Never skip their request to ask onboarding questions.";
+      systemPrompt = systemPrompt ? `${systemPrompt}\n\n${directive}` : directive;
     }
   }
 

@@ -12,6 +12,10 @@ router.get("/getting-started", (req: Request, res: Response) => {
   const contextRules = getSetting("context_rules") || "";
   const contextKnowledge = getSetting("context_knowledge") || "";
 
+  // Context completeness: count fields with 40+ chars as "filled"
+  const contextFields = [contextCompany, contextUser, contextRules, contextKnowledge];
+  const filledCount = contextFields.filter((f) => f.trim().length >= 40).length;
+
   res.render("getting-started", {
     agentName,
     userName,
@@ -19,6 +23,8 @@ router.get("/getting-started", (req: Request, res: Response) => {
     contextUser,
     contextRules,
     contextKnowledge,
+    contextFilled: filledCount,
+    contextTotal: contextFields.length,
     flash: req.query.flash || null,
   });
 });
