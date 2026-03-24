@@ -3043,7 +3043,15 @@ CRITICAL Supabase query rules:
   // Inject Notion context
   if (isNotionRunning()) {
     const workspaceName = getNotionWorkspaceName();
-    const notionContext = `You are connected to Notion${workspaceName ? ` (workspace: ${workspaceName})` : ""}. You can search pages and databases, read page content, create and update pages, and query databases using the notion_* tools. Use notion_search to find content, notion_get_database to see a database's schema before querying it, and notion_query_database to list records. You can create pages with notion_create_page and update them with notion_update_page. You cannot delete pages or databases.`;
+    const notionContext = `You are connected to Notion${workspaceName ? ` (workspace: ${workspaceName})` : ""}. You can search pages and databases, read page content, create and update pages, and query databases using the notion_* tools. Use notion_search to find content, notion_get_database to see a database's schema before querying it, and notion_query_database to list records. You can create pages with notion_create_page and update them with notion_update_page. You cannot delete pages or databases.
+
+IMPORTANT — Notion workspaces can be large and complex with many pages, databases, and nested structures. Before creating or editing Notion content, ALWAYS ask clarifying questions first:
+- Where should the page go? (Which database, parent page, or section?)
+- What properties or fields should it have?
+- What format or structure do they want?
+- If updating, confirm which specific page they mean (search first and present options if ambiguous).
+Do NOT guess or assume — ask the user to confirm before making changes. When the request is vague (e.g. "add a page to Notion"), search first to understand the workspace structure, then ask where they want it and what it should contain.
+Before actually creating or updating a page, show the user a preview of what you plan to write (title, content, properties) and get their explicit approval. Never post to Notion without confirmation.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${notionContext}` : notionContext;
   }
 
