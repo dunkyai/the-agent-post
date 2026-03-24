@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { getSetting, getOrCreateConversation, deleteConversation } from "./db";
+import { getSetting, getOrCreateConversation, deleteConversation, getDb } from "./db";
 import { submitSlackMessage } from "../adapters/slack";
 import { decrypt } from "./encryption";
 import { isSlackAudioFile, isAudioMimeType, transcribeAudio } from "./transcription";
@@ -17,6 +17,9 @@ let slackConfig: SlackConfig | null = null;
 // Event deduplication
 const recentEventIds = new Set<string>();
 const EVENT_DEDUP_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Track threads where we've already sent the "is this for me?" nudge (resets on reboot)
+const nudgedThreads = new Set<string>();
 
 // --- OAuth URL ---
 
@@ -136,6 +139,20 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
   const isDM = channelId.startsWith("D");
   const hasAudioInThread = audioFiles.length > 0 && !!event.thread_ts;
   if (!isMentioned && !isDM && !hasAudioInThread) {
+    // If this is a thread the bot has participated in, send a one-time nudge
+    if (event.thread_ts && !nudgedThreads.has(externalId)) {
+      const existing = getDb()
+        .prepare("SELECT id FROM conversations WHERE integration_type = 'slack' AND external_id = ?")
+        .get(externalId) as { id: string } | undefined;
+      if (existing) {
+        nudgedThreads.add(externalId);
+        await sendSlackMessage(
+          channelId,
+          "Is this message meant for me? If so, please include @theagentpost in your ask so that I can take action.",
+          event.thread_ts
+        ).catch(() => {});
+      }
+    }
     return;
   }
   console.log(`Slack event: channel=${channelId} user=${userId} mentioned=${isMentioned} dm=${isDM} thread=${!!event.thread_ts}`);
@@ -263,29 +280,32 @@ async function fetchThreadContext(channelId: string, threadTs: string, botUserId
 }
 
 async function transcribeSlackAudioFiles(files: any[]): Promise<string> {
-  // Prefer Groq (free, via env var); fall back to OpenAI API key from settings
   const hasGroq = !!process.env.GROQ_API_KEY;
-  let openaiKey: string | undefined;
 
-  if (!hasGroq) {
-    const encryptedKey = getSetting("openai_api_key");
-    if (!encryptedKey) {
-      console.log("Audio file detected but no transcription API key available (set GROQ_API_KEY or configure OpenAI key in Settings)");
-      return "[An audio file was shared, but transcription is unavailable — set GROQ_API_KEY or add an OpenAI API key in Settings.]";
-    }
-    try {
-      openaiKey = decrypt(encryptedKey);
-    } catch {
-      console.error("Failed to decrypt OpenAI API key for transcription");
-      return "[An audio file was shared, but transcription failed — could not load API key.]";
-    }
+  // Always try to get OpenAI key as fallback (even when Groq is primary)
+  let openaiKey: string | undefined;
+  const encryptedKey = getSetting("openai_api_key");
+  if (encryptedKey) {
+    try { openaiKey = decrypt(encryptedKey); } catch { /* ignore — Groq may still work */ }
+  }
+
+  if (!hasGroq && !openaiKey) {
+    console.log("Audio file detected but no transcription API key available (set GROQ_API_KEY or configure OpenAI key in Settings)");
+    return "[An audio file was shared, but transcription is unavailable — set GROQ_API_KEY or add an OpenAI API key in Settings.]";
   }
 
   const parts: string[] = [];
   for (const file of files) {
     try {
       const downloadUrl = file.url_private_download || file.url_private;
-      console.log(`Transcribing audio: ${file.name} (${file.mimetype}, filetype=${file.filetype}, ${file.size} bytes) via ${hasGroq ? "Groq" : "OpenAI"}, url=${downloadUrl ? "present" : "MISSING"}`);
+      const fileSizeMB = (file.size || 0) / (1024 * 1024);
+      console.log(`Transcribing audio: ${file.name} (${file.mimetype}, filetype=${file.filetype}, ${fileSizeMB.toFixed(1)}MB) url=${downloadUrl ? "present" : "MISSING"}`);
+
+      if (file.size && file.size > 25 * 1024 * 1024) {
+        console.log(`Audio file "${file.name}" is ${fileSizeMB.toFixed(1)}MB — exceeds 25MB limit`);
+        parts.push(`[This audio file is too large for me to transcribe. I may have a hippo-sized mouth but can only consume shorter clips. (< 25MB) Please try a different one - thanks!]`);
+        continue;
+      }
 
       if (!downloadUrl) {
         console.error(`No download URL for Slack file ${file.name}`);
@@ -323,11 +343,11 @@ async function transcribeSlackFileUrls(urls: string[]): Promise<string> {
 
   const hasGroq = !!process.env.GROQ_API_KEY;
   let openaiKey: string | undefined;
-  if (!hasGroq) {
-    const encryptedKey = getSetting("openai_api_key");
-    if (!encryptedKey) return "";
-    try { openaiKey = decrypt(encryptedKey); } catch { return ""; }
+  const encryptedKey = getSetting("openai_api_key");
+  if (encryptedKey) {
+    try { openaiKey = decrypt(encryptedKey); } catch { /* ignore */ }
   }
+  if (!hasGroq && !openaiKey) return "";
 
   const parts: string[] = [];
   for (const fileUrl of urls) {
