@@ -1160,7 +1160,7 @@ const LUMA_TOOLS = [
   },
   {
     name: "luma_create_event",
-    description: "Create a new event on the user's Luma calendar. IMPORTANT: Before calling this tool, you MUST ask the user to confirm or provide: (1) exact date and time, (2) timezone, (3) duration/end time, (4) whether it's virtual or in-person, and (5) any description. Do NOT guess or use defaults for these fields — always clarify with the user first.",
+    description: "Create a new event on the user's Luma calendar. IMPORTANT: Before calling this tool, you MUST ask the user to confirm or provide: (1) exact date and time, (2) timezone, (3) duration/end time, (4) whether it's virtual or in-person (and location if in-person), and (5) any description. Do NOT guess or use defaults for these fields — always clarify with the user first.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -1168,8 +1168,9 @@ const LUMA_TOOLS = [
         start_at: { type: "string", description: "ISO 8601 datetime for event start (e.g. 2026-04-01T18:00:00Z)" },
         end_at: { type: "string", description: "ISO 8601 datetime for event end" },
         timezone: { type: "string", description: "IANA timezone (e.g. America/New_York, America/Los_Angeles)" },
-        description: { type: "string", description: "Event description (plain text)" },
-        meeting_url: { type: "string", description: "Virtual meeting link (Zoom, Google Meet, etc.)" },
+        description: { type: "string", description: "Event description (plain text or markdown)" },
+        location: { type: "string", description: "Physical location/address for in-person events (e.g. '123 Main St, San Francisco, CA'). Omit for virtual-only events." },
+        meeting_url: { type: "string", description: "Virtual meeting link (Zoom, Google Meet, etc.) for virtual or hybrid events" },
         visibility: { type: "string", enum: ["public", "members-only", "private"], description: "Event visibility (default: public)" },
       },
       required: ["name", "start_at", "end_at", "timezone"],
@@ -1187,6 +1188,7 @@ const LUMA_TOOLS = [
         end_at: { type: "string", description: "New end time (ISO 8601)" },
         timezone: { type: "string", description: "New timezone (IANA format)" },
         description: { type: "string", description: "New description" },
+        location: { type: "string", description: "Physical location/address (e.g. '123 Main St, San Francisco, CA'). Set to empty string to remove." },
         meeting_url: { type: "string", description: "New meeting link (or empty to remove)" },
         visibility: { type: "string", enum: ["public", "members-only", "private"], description: "New visibility" },
       },
