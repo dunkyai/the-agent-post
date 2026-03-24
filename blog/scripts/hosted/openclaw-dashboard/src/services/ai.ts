@@ -369,84 +369,129 @@ const BROWSER_TOOLS = [
 const IMAGE_SEARCH_TOOLS = [
   {
     name: "find_image",
-    description: "Search for an image by topic and return direct image URLs you can embed. Use this whenever the user asks to see a picture or image of something. Returns a list of image URLs — pick the best one and embed it in your response as ![description](url).",
+    description: "Search for an image by topic and return direct image URLs you can embed. Use this whenever the user asks to see a picture, photo, illustration, or image of something. Returns a list of image URLs — pick the best one and embed it in your response as ![description](url). Works for photos, illustrations, clipart, cartoons, logos, and more.",
     input_schema: {
       type: "object" as const,
       properties: {
-        query: { type: "string", description: "What to search for (e.g. 'hippopotamus', 'golden gate bridge')" },
+        query: { type: "string", description: "What to search for (e.g. 'cartoon hippo', 'golden gate bridge photo', 'cute cat illustration')" },
+        style: { type: "string", enum: ["any", "photo", "illustration", "clipart"], description: "Image style preference. Use 'illustration' or 'clipart' for cartoons/drawings, 'photo' for real photographs. Defaults to 'any'." },
       },
       required: ["query"],
     },
   },
 ];
 
-async function executeFindImage(input: { query: string }): Promise<string> {
+async function executeFindImage(input: { query: string; style?: string }): Promise<string> {
   const provisioningUrl = process.env.PROVISIONING_URL;
   const instanceId = process.env.INSTANCE_ID;
   const gatewayToken = process.env.GATEWAY_TOKEN;
+  const style = input.style || "any";
+  const isIllustration = style === "illustration" || style === "clipart" ||
+    /cartoon|illustration|clipart|drawing|animated|cute|mascot|icon|logo|vector/i.test(input.query);
 
-  if (!provisioningUrl || !instanceId || !gatewayToken) {
-    return JSON.stringify({ error: "Browser not configured" });
-  }
+  const allImages: { source: string; url: string }[] = [];
 
+  // Strategy 1: Wikimedia Commons API (free, direct image URLs, good for both photos and illustrations)
   try {
-    // Browse Wikipedia directly for the topic
-    const wikiUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(input.query.replace(/ /g, '_'))}`;
-    const res = await fetch(`${provisioningUrl}/instances/${instanceId}/browser/navigate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${gatewayToken}` },
-      body: JSON.stringify({ url: wikiUrl }),
-    });
-
-    if (res.ok) {
-      const data: any = await res.json();
-      const images = (data.images || []).filter((u: string) =>
-        u.includes("upload.wikimedia.org") && !u.includes("/icon") && !u.includes("OOjs") &&
-        !u.includes("edit-ltr") && !u.includes("static/images") && (u.endsWith(".jpg") || u.includes(".jpg/") || u.endsWith(".png") || u.includes(".png/") || u.endsWith(".JPG") || u.includes(".JPG/"))
-      );
-      if (images.length > 0) {
-        // Return higher resolution versions (replace thumbnail size)
-        const fullRes = images.slice(0, 5).map((u: string) =>
-          u.replace(/\/\d+px-/, '/800px-')
-        );
-        return JSON.stringify({
-          source: "Wikipedia",
-          images: fullRes,
-          hint: "Pick the best image and embed it as: ![description](url)",
-        });
+    const commonsApiUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(input.query)}&gsrlimit=10&gsrnamespace=6&prop=imageinfo&iiprop=url|mime|extmetadata&iiurlwidth=800&format=json&origin=*`;
+    const commonsRes = await fetch(commonsApiUrl);
+    if (commonsRes.ok) {
+      const commonsData: any = await commonsRes.json();
+      const pages = commonsData?.query?.pages || {};
+      for (const page of Object.values(pages) as any[]) {
+        const info = page.imageinfo?.[0];
+        if (!info) continue;
+        const mime = info.mime || "";
+        if (!mime.startsWith("image/")) continue;
+        // Use the thumbnail URL (800px wide) if available, else full URL
+        const imgUrl = info.thumburl || info.url;
+        if (imgUrl && !imgUrl.includes("/icon") && !imgUrl.includes("OOjs")) {
+          allImages.push({ source: "Wikimedia Commons", url: imgUrl });
+        }
       }
     }
+  } catch {}
 
-    // Fallback: try Wikimedia Commons search
-    const commonsUrl = `https://commons.wikimedia.org/w/index.php?search=${encodeURIComponent(input.query)}&title=Special:MediaSearch&type=image`;
-    const res2 = await fetch(`${provisioningUrl}/instances/${instanceId}/browser/navigate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${gatewayToken}` },
-      body: JSON.stringify({ url: commonsUrl }),
-    });
-
-    if (res2.ok) {
-      const data2: any = await res2.json();
-      const images2 = (data2.images || []).filter((u: string) =>
-        u.includes("upload.wikimedia.org") && !u.includes("/icon") && !u.includes("static/images") &&
-        (u.endsWith(".jpg") || u.includes(".jpg/") || u.endsWith(".png") || u.includes(".png/") || u.endsWith(".JPG") || u.includes(".JPG/"))
-      );
-      if (images2.length > 0) {
-        const fullRes2 = images2.slice(0, 5).map((u: string) =>
-          u.replace(/\/\d+px-/, '/800px-')
-        );
-        return JSON.stringify({
-          source: "Wikimedia Commons",
-          images: fullRes2,
-          hint: "Pick the best image and embed it as: ![description](url)",
-        });
+  // Strategy 2: Wikipedia article images (good for real-world topics)
+  if (!isIllustration && allImages.length < 3) {
+    try {
+      const wikiApiUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(input.query.replace(/ /g, '_'))}&prop=images&imlimit=10&format=json&origin=*`;
+      const wikiRes = await fetch(wikiApiUrl);
+      if (wikiRes.ok) {
+        const wikiData: any = await wikiRes.json();
+        const pages = wikiData?.query?.pages || {};
+        const imageNames: string[] = [];
+        for (const page of Object.values(pages) as any[]) {
+          for (const img of (page.images || [])) {
+            const name = img.title as string;
+            if (name && /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(name) && !/Commons-logo|Wiki.*logo|Flag_of|Edit-clear|Ambox/i.test(name)) {
+              imageNames.push(name);
+            }
+          }
+        }
+        // Fetch actual URLs for the image names
+        if (imageNames.length > 0) {
+          const titles = imageNames.slice(0, 5).join("|");
+          const infoUrl = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(titles)}&prop=imageinfo&iiprop=url&iiurlwidth=800&format=json&origin=*`;
+          const infoRes = await fetch(infoUrl);
+          if (infoRes.ok) {
+            const infoData: any = await infoRes.json();
+            const infoPages = infoData?.query?.pages || {};
+            for (const p of Object.values(infoPages) as any[]) {
+              const url = p.imageinfo?.[0]?.thumburl || p.imageinfo?.[0]?.url;
+              if (url) allImages.push({ source: "Wikipedia", url });
+            }
+          }
+        }
       }
-    }
-
-    return JSON.stringify({ error: "No images found. Try describing what you want differently, or tell the user you couldn't find an image." });
-  } catch (err) {
-    return JSON.stringify({ error: err instanceof Error ? err.message : "Image search failed" });
+    } catch {}
   }
+
+  // Strategy 3: Browse Wikipedia page directly via browser (fallback if API didn't find enough)
+  if (allImages.length < 2 && provisioningUrl && instanceId && gatewayToken) {
+    try {
+      const wikiUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(input.query.replace(/ /g, '_'))}`;
+      const res = await fetch(`${provisioningUrl}/instances/${instanceId}/browser/navigate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${gatewayToken}` },
+        body: JSON.stringify({ url: wikiUrl }),
+      });
+      if (res.ok) {
+        const data: any = await res.json();
+        const images = (data.images || []).filter((u: string) =>
+          u.includes("upload.wikimedia.org") && !u.includes("/icon") && !u.includes("OOjs") &&
+          !u.includes("edit-ltr") && !u.includes("static/images") &&
+          /\.(jpg|jpeg|png|gif|webp)/i.test(u)
+        );
+        for (const u of images.slice(0, 3)) {
+          const fullRes = u.replace(/\/\d+px-/, '/800px-');
+          allImages.push({ source: "Wikipedia (browser)", url: fullRes });
+        }
+      }
+    } catch {}
+  }
+
+  // Deduplicate by URL
+  const seen = new Set<string>();
+  const uniqueImages = allImages.filter(img => {
+    if (seen.has(img.url)) return false;
+    seen.add(img.url);
+    return true;
+  });
+
+  if (uniqueImages.length > 0) {
+    return JSON.stringify({
+      images: uniqueImages.slice(0, 8).map(img => ({ url: img.url, source: img.source })),
+      hint: "Pick the best image and embed it as: ![description](url). If none of these match what the user wants, try a different query or tell them what you found.",
+    });
+  }
+
+  // No results from any source
+  return JSON.stringify({
+    error: "No images found from Wikipedia or Wikimedia Commons.",
+    suggestion: "Use web_search with a query like: \"" + input.query + " image\" site:wikimedia.org OR site:flickr.com OR site:publicdomainpictures.net — then look for direct image URLs in the results and embed them.",
+    hint: "You can also try web_search for the topic and look for pages that contain direct image URLs (ending in .jpg, .png, .gif, .webp). Then embed the URL directly as ![description](url).",
+  });
 }
 
 async function executeBrowserTool(toolName: string, input: any): Promise<string | any[]> {
@@ -3056,7 +3101,12 @@ CRITICAL — READ THIS CAREFULLY: To post a tweet, you MUST call the twitter_pos
 
 IMPORTANT: Never use the browser to search Google, Bing, or other search engines — they block automated browsers. Never navigate to google.com, images.google.com, or similar search pages. Use web_search instead, then use browse_webpage only if you need to visit a specific result URL.
 
-SHOWING IMAGES: When the user asks you to find or show an image, use web_search to find the image. Then embed it directly in your response using markdown: ![description](https://example.com/image.jpg). The chat supports rendering images from URLs. For best results, use direct image URLs from Wikipedia/Wikimedia Commons (e.g. https://upload.wikimedia.org/...) or other public image hosts. Do NOT use the browser to navigate to image pages and take screenshots — just embed the URL directly.`;
+SHOWING IMAGES: When the user asks you to find or show an image, use the find_image tool FIRST — it searches Wikipedia and Wikimedia Commons for direct image URLs. If find_image doesn't return good results, fall back to web_search with these strategies:
+- For illustrations/cartoons/clipart: search "cartoon hippo wikimedia" or "hippo illustration site:openclipart.org" or "hippo clipart site:publicdomainvectors.org"
+- For photos: search "hippo photo site:wikimedia.org" or just the topic name
+- Look for direct image URLs in the results (ending in .jpg, .png, .gif, .webp, or from upload.wikimedia.org, cdn.pixabay.com, images.unsplash.com)
+- Then embed directly: ![description](https://example.com/image.jpg)
+The chat supports rendering images from URLs. Do NOT use the browser to navigate to image pages and take screenshots — just embed the URL directly.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${browserContext}` : browserContext;
   }
 
@@ -3085,7 +3135,7 @@ If you encounter sensitive data while searching emails, reading documents, or br
 
   // Inject image/markdown guidance
   {
-    const imageDirective = "The chat supports markdown formatting including images. To show an image to the user, include it as a markdown image: ![description](url). For example, if you find an image URL via web_search, embed it directly: ![A hippo](https://example.com/hippo.jpg). When the user asks to see a picture, use web_search to find a direct image URL (ending in .jpg, .png, .gif, .webp) and embed it in your response.";
+    const imageDirective = "The chat supports markdown formatting including images. To show an image to the user, include it as a markdown image: ![description](url). When the user asks to see a picture, ALWAYS use the find_image tool first — it searches Wikipedia and Wikimedia Commons and returns direct image URLs. If find_image returns no results or the results don't match, use web_search to find a direct image URL (ending in .jpg, .png, .gif, .webp) from public image hosts. For cartoons/illustrations, try searching with terms like 'cartoon', 'illustration', 'clipart' plus 'site:openclipart.org' or 'site:publicdomainvectors.org'. Never give up after one failed search — try 2-3 different search queries with different terms before telling the user you couldn't find an image.";
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${imageDirective}` : imageDirective;
   }
 
