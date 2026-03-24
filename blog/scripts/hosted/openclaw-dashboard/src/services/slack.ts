@@ -1,6 +1,6 @@
 import crypto from "crypto";
-import { processMessage } from "./ai";
 import { getSetting, getOrCreateConversation, deleteConversation } from "./db";
+import { submitSlackMessage } from "../adapters/slack";
 import { decrypt } from "./encryption";
 import { isSlackAudioFile, isAudioMimeType, transcribeAudio } from "./transcription";
 
@@ -161,8 +161,9 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
     const ack = acks[Math.floor(Math.random() * acks.length)];
     await sendSlackMessage(channelId, ack, threadTs);
 
-    const reply = await processMessage("slack", externalId, text, "You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. Be BRIEF. This is Slack, not email — keep replies short (1-3 sentences when possible). No preamble, no filler, no restating the question. Lead with the answer. Only elaborate if the user asks for more detail. Always follow the user's formatting and style preferences (e.g. if they ask for no emojis, stop using emojis). IMPORTANT: You CAN handle audio files and voice clips in Slack. When a user shares audio, the system automatically transcribes it before you see the message — the transcribed text appears as [Audio transcription: ...] at the start of the message. You do NOT need to access files directly; transcription is handled for you. If asked whether you can process audio, say YES.");
-    await sendSlackMessage(channelId, reply, threadTs);
+    // Create task — scheduler picks it up within ~2s, router delivers reply
+    const slackContext = "You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. Be BRIEF. This is Slack, not email — keep replies short (1-3 sentences when possible). No preamble, no filler, no restating the question. Lead with the answer. Only elaborate if the user asks for more detail. Always follow the user's formatting and style preferences (e.g. if they ask for no emojis, stop using emojis). IMPORTANT: You CAN handle audio files and voice clips in Slack. When a user shares audio, the system automatically transcribes it before you see the message — the transcribed text appears as [Audio transcription: ...] at the start of the message. You do NOT need to access files directly; transcription is handled for you. If asked whether you can process audio, say YES.";
+    submitSlackMessage({ text, channelId, threadTs, userId, context: slackContext });
   } catch (err: unknown) {
     const errMessage = err instanceof Error ? err.message : "Unknown error";
     console.error("Slack event processing error:", errMessage);
