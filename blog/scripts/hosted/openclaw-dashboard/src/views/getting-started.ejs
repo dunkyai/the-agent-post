@@ -6,65 +6,60 @@
     <%- include('partials/flash', { flash }) %>
 
     <form method="POST" action="/getting-started">
-      <div class="card card-compact">
-        <h3>Identity</h3>
+      <h3 class="gs-section">Identity</h3>
+      <div class="gs-row">
         <div class="form-group">
           <label for="agent_name">Agent Name</label>
           <input type="text" id="agent_name" name="agent_name" value="<%= agentName %>" placeholder="e.g. Archie, Nova, Pepper...">
-          <div class="hint">Your agent will introduce itself with this name</div>
         </div>
         <div class="form-group">
           <label for="user_name">Your Name</label>
           <input type="text" id="user_name" name="user_name" value="<%= userName %>" placeholder="e.g. Elizabeth, Alex...">
-          <div class="hint">Shown in the chat window next to your messages</div>
         </div>
       </div>
 
-      <div class="card card-compact">
-        <h3>Agent Context</h3>
-        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">The more context you provide, the better your agent performs. These fields are automatically included in every conversation.</p>
+      <h3 class="gs-section">Agent Context</h3>
+      <p style="font-size: 12px; color: var(--text-secondary); margin: -4px 0 10px;">The more context you provide, the better your agent performs.</p>
 
-        <div class="form-group">
-          <label for="context_company">About Your Company</label>
-          <textarea id="context_company" name="context_company" rows="3" placeholder="e.g. We're a seed-stage VC fund that invests in developer tools and infrastructure. We manage a $50M fund and have 23 portfolio companies."><%= contextCompany %></textarea>
-          <div class="hint">What your company does, products, industry, size</div>
-        </div>
-        <div class="form-group">
-          <label for="context_user">About You</label>
-          <textarea id="context_user" name="context_user" rows="3" placeholder="e.g. I'm a GP focused on sourcing deals in the AI/ML space. I also manage LP relations and our quarterly reports."><%= contextUser %></textarea>
-          <div class="hint">Your role, responsibilities, key contacts, working style</div>
-        </div>
-        <div class="form-group">
-          <label for="context_rules">Rules & Guidelines</label>
-          <textarea id="context_rules" name="context_rules" rows="3" placeholder="e.g. Always be professional. Never promise investments or share confidential LP information. Use a warm but concise tone."><%= contextRules %></textarea>
-          <div class="hint">Things your agent should always or never do</div>
-        </div>
-        <div class="form-group">
-          <label for="context_knowledge">Knowledge Base</label>
-          <textarea id="context_knowledge" name="context_knowledge" rows="3" placeholder="e.g. Our fund size is $50M. Key LPs include Acme Endowment and Smith Family Office. Our typical check size is $500K-$2M."><%= contextKnowledge %></textarea>
-          <div class="hint">Key facts, product info, pricing, domain knowledge your agent should know</div>
-        </div>
+      <div class="form-group">
+        <label for="context_company">About Your Company</label>
+        <textarea id="context_company" name="context_company" rows="2" placeholder="e.g. We're a seed-stage VC fund that invests in developer tools and infrastructure."><%= contextCompany %></textarea>
+      </div>
+      <div class="form-group">
+        <label for="context_user">About You</label>
+        <textarea id="context_user" name="context_user" rows="2" placeholder="e.g. I'm a GP focused on sourcing deals in the AI/ML space."><%= contextUser %></textarea>
+      </div>
+      <div class="form-group">
+        <label for="context_rules">Rules & Guidelines</label>
+        <textarea id="context_rules" name="context_rules" rows="2" placeholder="e.g. Always be professional. Use a warm but concise tone."><%= contextRules %></textarea>
+      </div>
+      <div class="form-group">
+        <label for="context_knowledge">Knowledge Base</label>
+        <textarea id="context_knowledge" name="context_knowledge" rows="2" placeholder="e.g. Our fund size is $50M. Typical check size is $500K-$2M."><%= contextKnowledge %></textarea>
       </div>
 
-      <button type="submit" class="btn">Save</button>
+      <button type="submit" class="btn" style="margin-bottom: 16px;">Save</button>
     </form>
 
-    <div class="card card-compact" style="margin-top: 20px;">
-      <h3>Auto-fill from LinkedIn</h3>
-      <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">Paste your LinkedIn URL and we'll research your profile, generate context, and save it automatically.</p>
-      <div class="form-group">
-        <label for="linkedin_url">LinkedIn Profile URL</label>
-        <div style="display: flex; gap: 8px;">
-          <input type="url" id="linkedin_url" placeholder="https://linkedin.com/in/yourname" style="flex: 1;">
-          <button type="button" id="research-btn" class="btn btn-sm" style="white-space: nowrap;">Research me</button>
-        </div>
+    <h3 class="gs-section" style="border-top: 1px solid var(--rule-light, #e0e0e0); padding-top: 16px;">Auto-fill from LinkedIn</h3>
+    <div class="form-group">
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <input type="url" id="linkedin_url" placeholder="https://linkedin.com/in/yourname" style="flex: 1;">
+        <button type="button" id="research-btn" class="btn btn-sm" style="white-space: nowrap;">Research me</button>
       </div>
-      <div id="research-status" style="display: none; margin-top: 8px; font-size: 13px; color: var(--text-secondary);"></div>
     </div>
+    <div id="research-status" style="display: none; font-size: 13px; color: var(--text-secondary);"></div>
   </div>
 </div>
+<style>
+  .gs-section { font-size: 11px; text-transform: uppercase; font-weight: 600; color: var(--text-secondary); letter-spacing: 0.5px; margin: 0 0 8px; }
+  .gs-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .getting-started .form-group { margin-bottom: 10px; }
+  .getting-started textarea, .getting-started input[type="text"], .getting-started input[type="url"] { font-size: 13px; }
+</style>
 <script>
 (function () {
+  document.querySelector('.main').classList.add('getting-started');
   var researchBtn = document.getElementById("research-btn");
   var statusDiv = document.getElementById("research-status");
 
