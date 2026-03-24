@@ -1874,9 +1874,9 @@ async function pollGmail(): Promise<void> {
         const ownDomain = ownEmail.split("@")[1];
         const processed = getGmailProcessedThread(threadId);
 
-        // Step 3a: Scan ALL messages for unprocessed team instructions (same-domain senders)
-        // This catches instructions even when the connected account replied after them
-        let handledTeamInstruction = false;
+        // Step 3a: Collect ALL unprocessed team messages (same-domain senders)
+        // then process them together as one combined context
+        const teamMessages: { from: string; subject: string; body: string; msgId: string }[] = [];
         for (const msg of threadMsgs) {
           // Skip messages we already processed
           if (processed && msg.id <= processed.last_message_id) continue;
@@ -1895,21 +1895,51 @@ async function pollGmail(): Promise<void> {
           if (isMsgOwn) continue;
           if (msgDomain !== ownDomain) continue;
 
-          // Found an unprocessed team instruction
           let msgBody = msg.payload ? extractTextFromPart(msg.payload) : "";
           msgBody = sanitizeEmailContent(msgBody);
           const msgSubject = msgHeaders.subject || subject;
-          const msgText = `From: ${msgHeaders.from || msgFrom}\nSubject: ${msgSubject}\n\n${msgBody}`;
-          if (!msgText.trim()) continue;
+          if (!msgBody.trim() && !msgSubject.trim()) continue;
 
-          console.log(`Gmail poll: team instruction from ${msgFrom} (message ${msg.id}) — routing to processMessage — ${subject}`);
+          teamMessages.push({
+            from: msgHeaders.from || msgFrom,
+            subject: msgSubject,
+            body: msgBody,
+            msgId: msg.id,
+          });
+        }
+
+        // Process all collected team messages as ONE combined call
+        let handledTeamInstruction = false;
+        if (teamMessages.length > 0) {
+          const threadSummary = teamMessages.map((tm, i) =>
+            `--- Email ${i + 1} of ${teamMessages.length} ---\nFrom: ${tm.from}\nSubject: ${tm.subject}\n\n${tm.body}`
+          ).join("\n\n");
+
+          const lastTeamSender = teamMessages[teamMessages.length - 1].from;
+          const lastMessageIdHeader = lastHeaders["message-id"] || "";
+
+          console.log(`Gmail poll: ${teamMessages.length} team message(s) in thread "${subject}" — processing as combined context`);
+
           try {
             const convId = getOrCreateConversation("gmail", threadId);
             deleteConversation(convId);
           } catch {}
-          const gmailContext = `You received an email from a team member (${msgHeaders.from || msgFrom}) at the connected Gmail account (${accountId}). This is an instruction from your team — follow their directions using your tools. You have access to Gmail tools (gmail_search, gmail_create_draft, gmail_send), Google Docs, Sheets, and other integrations. Act on the instructions in the email. Do NOT draft a reply to this team member — instead, execute what they asked you to do.`;
-          await processMessage("gmail", threadId, msgText, gmailContext);
-          console.log(`Gmail poll: completed team instruction from ${msgFrom}`);
+
+          const gmailContext = `You received a team email thread at the connected Gmail account (${accountId}).
+
+Below is the FULL conversation from your team members (same-domain senders). Read the entire thread to understand the context before acting.
+
+IMPORTANT RULES FOR TEAM INSTRUCTIONS:
+1. Read the entire thread holistically. Not every reply is an actionable instruction — team members may be commenting, agreeing, brainstorming, or just chatting. Focus on the LATEST message and any clear, specific requests it contains.
+2. For EXTERNAL actions (posting to Slack, sending tweets, posting to social media, sending emails to people outside the team, creating calendar events for others, etc.): Do NOT execute them immediately. Instead, create a Gmail draft reply to the latest team sender (${lastTeamSender}) summarizing what you plan to do and asking for confirmation. Include specifics like: which Slack channel to post in, what content you would post, and whether to do it now or later. Use gmail_create_draft with thread_id="${threadId}" and in_reply_to="${lastMessageIdHeader}" so the draft stays in this thread.
+3. For INTERNAL actions that only affect the team's own workspace (creating a Google Doc, drafting an email to someone, searching for information, reading a document, etc.): You may execute these directly.
+4. If the request is vague or could be interpreted multiple ways, create a Gmail draft reply asking for clarification rather than guessing.
+5. Do NOT create duplicate memories — check your existing memories first with list_memories before saving new ones.
+
+Thread subject: ${subject}`;
+
+          await processMessage("gmail", threadId, threadSummary, gmailContext);
+          console.log(`Gmail poll: completed team instruction processing for thread "${subject}"`);
           handledTeamInstruction = true;
         }
 
