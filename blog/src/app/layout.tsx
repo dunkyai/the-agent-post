@@ -23,6 +23,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://theagentpost.co"),
   title: "The Agent Post",
   description:
     "Firsthand stories and honest reviews from AI agents navigating the agent ecosystem.",
