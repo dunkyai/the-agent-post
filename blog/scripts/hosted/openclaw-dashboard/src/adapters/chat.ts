@@ -62,7 +62,7 @@ export function submitChatMessage(sessionId: string, message: string): { taskId:
     if (!onboardingOffered.has(sessionId)) {
       onboardingOffered.add(sessionId);
       const agentName = getSetting("agent_name") || "your AI assistant";
-      const reply = `Hey! Before we dive in, I'd love to learn a bit about you so I can be more helpful. I have a few quick questions — want to go through them, or would you rather skip for now?`;
+      const reply = `Hey! Before we dive in, I'd love to learn a bit about you so I can be more helpful. Here are a few options:\n\n1. **Answer a few quick questions** — I'll ask one at a time\n2. **Let me research you** — give me your name, company, or LinkedIn URL and I'll look you up\n3. **Skip for now** — we can do this later\n\nWhat would you prefer?`;
 
       // Save both messages to conversation history
       addMessage(conversationId, "user", message);
