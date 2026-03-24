@@ -154,8 +154,8 @@
   }
 
   function addMessage(role, content) {
-    // Remove the empty state message if present
-    var emptyMsg = messages.querySelector("p");
+    // Remove the empty state message if present (direct child only, not <p> inside bubbles)
+    var emptyMsg = messages.querySelector(":scope > p");
     if (emptyMsg) emptyMsg.remove();
 
     var div = document.createElement("div");
