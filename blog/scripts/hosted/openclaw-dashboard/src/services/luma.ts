@@ -161,6 +161,7 @@ export async function lumaCreateEvent(input: {
   end_at: string;
   timezone: string;
   description?: string;
+  location?: string;
   meeting_url?: string;
   visibility?: string;
 }): Promise<string> {
@@ -173,7 +174,10 @@ export async function lumaCreateEvent(input: {
       end_at: input.end_at,
       timezone: input.timezone,
     };
-    if (input.description) body.description = input.description;
+    if (input.description) body.description_md = input.description;
+    if (input.location) {
+      body.geo_address_json = { address: input.location, full_address: input.location };
+    }
     if (input.meeting_url) body.meeting_url = input.meeting_url;
     if (input.visibility) body.visibility = input.visibility;
 
@@ -210,6 +214,7 @@ export async function lumaUpdateEvent(input: {
   end_at?: string;
   timezone?: string;
   description?: string;
+  location?: string;
   meeting_url?: string;
   visibility?: string;
 }): Promise<string> {
@@ -221,7 +226,10 @@ export async function lumaUpdateEvent(input: {
     if (input.start_at !== undefined) body.start_at = input.start_at;
     if (input.end_at !== undefined) body.end_at = input.end_at;
     if (input.timezone !== undefined) body.timezone = input.timezone;
-    if (input.description !== undefined) body.description = input.description;
+    if (input.description !== undefined) body.description_md = input.description;
+    if (input.location !== undefined) {
+      body.geo_address_json = input.location ? { address: input.location, full_address: input.location } : null;
+    }
     if (input.meeting_url !== undefined) body.meeting_url = input.meeting_url;
     if (input.visibility !== undefined) body.visibility = input.visibility;
 

@@ -1160,7 +1160,7 @@ const LUMA_TOOLS = [
   },
   {
     name: "luma_create_event",
-    description: "Create a new event on the user's Luma calendar. IMPORTANT: Before calling this tool, you MUST ask the user to confirm or provide: (1) exact date and time, (2) timezone, (3) duration/end time, (4) whether it's virtual or in-person, and (5) any description. Do NOT guess or use defaults for these fields — always clarify with the user first.",
+    description: "Create a new event on the user's Luma calendar. IMPORTANT: Before calling this tool, you MUST ask the user to confirm or provide: (1) exact date and time, (2) timezone, (3) duration/end time, (4) whether it's virtual or in-person (and location if in-person), and (5) any description. Do NOT guess or use defaults for these fields — always clarify with the user first.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -1168,8 +1168,9 @@ const LUMA_TOOLS = [
         start_at: { type: "string", description: "ISO 8601 datetime for event start (e.g. 2026-04-01T18:00:00Z)" },
         end_at: { type: "string", description: "ISO 8601 datetime for event end" },
         timezone: { type: "string", description: "IANA timezone (e.g. America/New_York, America/Los_Angeles)" },
-        description: { type: "string", description: "Event description (plain text)" },
-        meeting_url: { type: "string", description: "Virtual meeting link (Zoom, Google Meet, etc.)" },
+        description: { type: "string", description: "Event body/description shown on the event page. Supports markdown formatting." },
+        location: { type: "string", description: "Physical location/address for in-person events (e.g. '123 Main St, San Francisco, CA'). Omit for virtual-only events." },
+        meeting_url: { type: "string", description: "Virtual meeting link (Zoom, Google Meet, etc.) for virtual or hybrid events" },
         visibility: { type: "string", enum: ["public", "members-only", "private"], description: "Event visibility (default: public)" },
       },
       required: ["name", "start_at", "end_at", "timezone"],
@@ -1186,7 +1187,8 @@ const LUMA_TOOLS = [
         start_at: { type: "string", description: "New start time (ISO 8601)" },
         end_at: { type: "string", description: "New end time (ISO 8601)" },
         timezone: { type: "string", description: "New timezone (IANA format)" },
-        description: { type: "string", description: "New description" },
+        description: { type: "string", description: "New event body/description. Supports markdown." },
+        location: { type: "string", description: "Physical location/address (e.g. '123 Main St, San Francisco, CA'). Set to empty string to remove." },
         meeting_url: { type: "string", description: "New meeting link (or empty to remove)" },
         visibility: { type: "string", enum: ["public", "members-only", "private"], description: "New visibility" },
       },
@@ -3041,7 +3043,15 @@ CRITICAL Supabase query rules:
   // Inject Notion context
   if (isNotionRunning()) {
     const workspaceName = getNotionWorkspaceName();
-    const notionContext = `You are connected to Notion${workspaceName ? ` (workspace: ${workspaceName})` : ""}. You can search pages and databases, read page content, create and update pages, and query databases using the notion_* tools. Use notion_search to find content, notion_get_database to see a database's schema before querying it, and notion_query_database to list records. You can create pages with notion_create_page and update them with notion_update_page. You cannot delete pages or databases.`;
+    const notionContext = `You are connected to Notion${workspaceName ? ` (workspace: ${workspaceName})` : ""}. You can search pages and databases, read page content, create and update pages, and query databases using the notion_* tools. Use notion_search to find content, notion_get_database to see a database's schema before querying it, and notion_query_database to list records. You can create pages with notion_create_page and update them with notion_update_page. You cannot delete pages or databases.
+
+IMPORTANT — Notion workspaces can be large and complex with many pages, databases, and nested structures. Before creating or editing Notion content, ALWAYS ask clarifying questions first:
+- Where should the page go? (Which database, parent page, or section?)
+- What properties or fields should it have?
+- What format or structure do they want?
+- If updating, confirm which specific page they mean (search first and present options if ambiguous).
+Do NOT guess or assume — ask the user to confirm before making changes. When the request is vague (e.g. "add a page to Notion"), search first to understand the workspace structure, then ask where they want it and what it should contain.
+Before actually creating or updating a page, show the user a preview of what you plan to write (title, content, properties) and get their explicit approval. Never post to Notion without confirmation.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${notionContext}` : notionContext;
   }
 
