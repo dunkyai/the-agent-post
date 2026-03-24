@@ -4,56 +4,84 @@
   <div class="main">
     <h2>Tasks</h2>
 
-    <div id="tasks-list">
     <% if (tasks.length === 0) { %>
-      <div class="card">
-        <p style="color: var(--text-secondary); text-align: center;">
-          No tasks yet. Send a message via chat to create one.
-        </p>
-      </div>
+      <p style="color: var(--text-secondary); text-align: center; padding: 32px 0;">
+        No tasks yet. Send a message via chat to create one.
+      </p>
+    <% } else { %>
+    <table class="tasks-table">
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Source</th>
+          <th>Input</th>
+          <th>Duration</th>
+          <th>Tools</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% tasks.forEach(function(task) { %>
+          <tr onclick="location.href='/tasks/<%= task.task_id %>'" style="cursor: pointer;">
+            <td><span class="task-status task-status-<%= task.status %>"><%= task.status.replace('_', ' ') %></span></td>
+            <td><span class="task-channel"><%= task.input.source_channel %></span></td>
+            <td class="task-input"><%= task.input.raw_input.length > 120 ? task.input.raw_input.slice(0, 120) + '...' : task.input.raw_input %></td>
+            <td class="task-meta"><% if (task.execution.duration_ms) { %><%= (task.execution.duration_ms / 1000).toFixed(1) %>s<% } else { %>-<% } %></td>
+            <td class="task-meta"><% if (task.execution.tool_calls_count) { %><%= task.execution.tool_calls_count %><% } else { %>-<% } %></td>
+            <td class="task-meta"><span class="local-time" data-utc="<%= task.created_at %>"><%= task.created_at %></span></td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
     <% } %>
-
-    <% tasks.forEach(function(task) { %>
-      <a href="/tasks/<%= task.task_id %>" style="text-decoration: none; color: inherit; display: block;">
-        <div class="card" style="cursor: pointer; transition: border-color 0.15s;">
-          <div class="integration-header">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="font-size: 13px; color: var(--text-secondary); font-family: monospace;"><%= task.task_id %></span>
-              <span class="task-channel-badge"><%= task.input.source_channel %></span>
-            </div>
-            <span class="status-badge task-status-<%= task.status %>">
-              <%= task.status.replace('_', ' ') %>
-            </span>
-          </div>
-
-          <div style="margin: 8px 0; font-size: 14px;">
-            <%= task.input.raw_input.length > 150 ? task.input.raw_input.slice(0, 150) + '...' : task.input.raw_input %>
-          </div>
-
-          <div style="font-size: 12px; color: var(--text-secondary); display: flex; gap: 16px;">
-            <span class="local-time" data-utc="<%= task.created_at %>"><%= task.created_at %></span>
-            <% if (task.execution.duration_ms) { %>
-              <span><%= (task.execution.duration_ms / 1000).toFixed(1) %>s</span>
-            <% } %>
-            <% if (task.execution.tool_calls_count) { %>
-              <span><%= task.execution.tool_calls_count %> tool call<%= task.execution.tool_calls_count !== 1 ? 's' : '' %></span>
-            <% } %>
-          </div>
-        </div>
-      </a>
-    <% }); %>
-    </div>
   </div>
 </div>
 
 <style>
-.task-channel-badge {
+.tasks-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.tasks-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 600;
+  padding: 8px 12px;
+  border-bottom: 2px solid var(--border, #e0e0e0);
+  white-space: nowrap;
+}
+.tasks-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border, #e0e0e0);
+  vertical-align: middle;
+}
+.tasks-table tbody tr:hover {
+  background: var(--bg-secondary, #f5f5f5);
+}
+.task-input {
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-meta {
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+.task-status {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 4px;
-  background: var(--bg-secondary, #f0f0f0);
-  color: var(--text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.task-channel {
+  font-size: 11px;
   text-transform: uppercase;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 .task-status-pending { background: var(--bg-secondary, #e0e0e0); color: var(--text-secondary); }
@@ -71,7 +99,6 @@
 
   function formatLocal(utcStr, tz) {
     try {
-      // SQLite datetime('now') omits Z — append it so JS parses as UTC
       var normalized = utcStr.indexOf('Z') === -1 && utcStr.indexOf('+') === -1 ? utcStr.replace(' ', 'T') + 'Z' : utcStr;
       var d = new Date(normalized);
       if (isNaN(d.getTime())) return utcStr;
@@ -79,21 +106,15 @@
     } catch (e) { return utcStr; }
   }
 
-  // Convert times on page load
   document.querySelectorAll('.local-time').forEach(function(el) {
     var utc = el.getAttribute('data-utc');
     if (utc) el.textContent = formatLocal(utc, userTimezone);
   });
 
-  // Auto-refresh
   setInterval(function() {
     fetch('/tasks/api')
       .then(function(r) { return r.json(); })
-      .then(function(data) {
-        // Reload page if task count or any status changed
-        // Simple approach: reload the page
-        location.reload();
-      })
+      .then(function() { location.reload(); })
       .catch(function() {});
   }, POLL_INTERVAL);
 })();
