@@ -67,6 +67,44 @@ export function getApiKey(provider: "anthropic" | "openai"): string {
   return decrypt(encrypted);
 }
 
+// --- Timezone conversion helper ---
+
+/**
+ * Convert a local datetime string (e.g. "2026-03-25T09:30:00") to UTC ISO string,
+ * interpreting it in the given IANA timezone. Handles DST automatically.
+ */
+function localTimeToUtc(localDatetime: string, timezone: string): string {
+  // Build a date string in the target timezone, then find the UTC equivalent
+  // by comparing the local interpretation against UTC
+  const naive = new Date(localDatetime); // parsed as local system time (not what we want)
+  if (isNaN(naive.getTime())) return localDatetime; // unparseable, return as-is
+
+  // Extract the date/time components from the input string
+  const match = localDatetime.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return localDatetime;
+  const [, year, month, day, hour, minute, second] = match;
+
+  // Use Intl to find what UTC time corresponds to these local components
+  // Strategy: start from a rough UTC guess, then adjust by the difference
+  const roughUtc = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second || "00"}Z`);
+  const localAtRough = new Date(roughUtc.toLocaleString("en-US", { timeZone: timezone }));
+  const diffMs = roughUtc.getTime() - localAtRough.getTime();
+  const corrected = new Date(roughUtc.getTime() + diffMs);
+
+  // Verify: the corrected UTC time, when displayed in the target timezone, should match the input
+  const verify = new Date(corrected.toLocaleString("en-US", { timeZone: timezone }));
+  const verifyRough = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second || "00"}Z`);
+  if (Math.abs(verify.getTime() - verifyRough.getTime()) > 60000) {
+    // Edge case near DST transition — try one more correction
+    const localAtCorrected = new Date(corrected.toLocaleString("en-US", { timeZone: timezone }));
+    const diff2 = corrected.getTime() - localAtCorrected.getTime();
+    const target = new Date(verifyRough.getTime() + diff2);
+    return target.toISOString();
+  }
+
+  return corrected.toISOString();
+}
+
 // --- Scheduling Tools ---
 
 const SCHEDULING_TOOLS = [
@@ -77,11 +115,11 @@ const SCHEDULING_TOOLS = [
       type: "object" as const,
       properties: {
         name: { type: "string", description: "A short descriptive name for the job" },
-        schedule: { type: "string", description: "A 5-field cron expression. Examples: '0 9 * * 1' (Monday 9am), '*/30 * * * *' (every 30 min), '0 0 * * *' (daily midnight). Fields: minute hour day-of-month month day-of-week." },
+        schedule: { type: "string", description: "A 5-field cron expression. Fields: minute hour day-of-month month day-of-week. Examples: '0 9 * * 1' (every Monday 9am), '*/30 * * * *' (every 30 min), '0 0 * * *' (daily midnight). IMPORTANT: For a specific date, use '*' for day-of-week — e.g. '30 9 28 3 *' (March 28 at 9:30am). Never combine a specific day-of-month with a specific day-of-week — the date may not fall on that weekday, causing the job to fail." },
         prompt: { type: "string", description: "The prompt/instruction sent to the AI when the job fires" },
         target_source: { type: "string", enum: ["slack", "email"], description: "Where to deliver results. Must be one of: slack, email." },
         target_external_id: { type: "string", description: "The delivery target ID. For Slack: must be a real Slack channel ID (C...), DM ID (D...), or user ID (U...) — e.g. C01HCS46FPB or U07FQCAACN8. NEVER use placeholder values like 'scheduler' or 'dashboard'. If you don't know the ID, ask the user. For email: recipient email address." },
-        run_once: { type: "boolean", description: "If true, the job runs once at the scheduled time then auto-disables. Use for one-time tasks like 'post tomorrow at 9am'. Default: false (recurring)." },
+        run_once: { type: "boolean", description: "Default: true (one-time). Set to false ONLY when the user explicitly asks for a recurring schedule (e.g. 'every Monday', 'daily', 'weekly'). If the user says a specific day like 'Friday' or 'tomorrow', that means once — not every Friday." },
       },
       required: ["name", "schedule", "prompt", "target_source", "target_external_id"],
     },
@@ -1057,7 +1095,7 @@ const BUFFER_TOOLS = [
         channel_id: { type: "string", description: "Buffer channel ID to post to" },
         text: { type: "string", description: "The post text content" },
         mode: { type: "string", enum: ["add_to_queue", "custom_scheduled", "share_now"], description: "Posting mode (default: add_to_queue)" },
-        due_at: { type: "string", description: "ISO 8601 datetime in UTC with Z suffix (e.g. '2026-03-25T16:30:00Z'). Convert from user's local time to UTC. Required when mode is custom_scheduled." },
+        due_at: { type: "string", description: "ISO 8601 datetime for when to publish. Pass the user's LOCAL time without a Z suffix (e.g. '2026-03-25T09:30:00' for 9:30 AM in the user's timezone) — the system will convert to UTC automatically. Required when mode is custom_scheduled." },
         image_url: { type: "string", description: "URL of an image to attach to the post" },
         link_url: { type: "string", description: "URL to attach as a link preview" },
       },
@@ -1109,9 +1147,13 @@ async function executeBufferTool(toolName: string, input: any): Promise<string> 
         if (selected.length > 0 && !selected.includes(input.channel_id)) {
           return JSON.stringify({ error: "This channel is not enabled. Use buffer_list_channels to see available channels." });
         }
-        // Normalize due_at to UTC to prevent DST offset errors
+        // Normalize due_at to UTC — convert local time using user's timezone
         let dueAt = input.due_at;
-        if (dueAt && !dueAt.endsWith("Z")) {
+        if (dueAt && !dueAt.endsWith("Z") && !dueAt.match(/[+-]\d{2}:\d{2}$/)) {
+          // No timezone indicator — treat as user's local time and convert to UTC
+          dueAt = localTimeToUtc(dueAt, getSetting("timezone") || "America/Los_Angeles");
+        } else if (dueAt && !dueAt.endsWith("Z") && dueAt.match(/[+-]\d{2}:\d{2}$/)) {
+          // Has explicit offset — just normalize to ISO
           const parsed = new Date(dueAt);
           if (!isNaN(parsed.getTime())) dueAt = parsed.toISOString();
         }
@@ -2113,7 +2155,7 @@ function executeSchedulingTool(toolName: string, input: any): string {
       }
       const jobTimezone = getSetting("timezone") || "America/Los_Angeles";
       const nextRun = getNextRun(input.schedule, new Date(), jobTimezone);
-      const runOnce = input.run_once ? 1 : 0;
+      const runOnce = input.run_once === false ? 0 : 1;
       const id = createScheduledJob({
         name: input.name,
         schedule: input.schedule,
@@ -2937,11 +2979,22 @@ export function buildSystemPrompt(extraContext?: string, options?: { skipMemorie
     systemPrompt = nameContext + (systemPrompt ? `\n\n${systemPrompt}` : "");
   }
 
-  // Inject user timezone
+  // Inject user timezone with explicit UTC offset for accurate conversions
   const userTimezone = getSetting("timezone") || "America/Los_Angeles";
   const now = new Date();
   const localNow = new Intl.DateTimeFormat("en-US", { timeZone: userTimezone, dateStyle: "full", timeStyle: "long" }).format(now);
-  const tzContext = `The current date and time is ${localNow} (${userTimezone}). ALWAYS convert any timestamps, dates, or times to the user's local timezone (${userTimezone}) before presenting them. This applies to ALL responses — event times from Luma/Calendar, email timestamps, scheduled job times, or any other time data from tools. Never show raw UTC or ISO timestamps to the user. Format times naturally (e.g. "Tuesday, March 25 at 3:00 PM PT"). When providing ISO 8601 timestamps to tools (e.g. due_at, start_at), ALWAYS use UTC (with Z suffix) — convert from the user's local time to UTC before passing to any tool. Cron expressions in create_scheduled_job are interpreted in the user's local timezone, so use the user's local time directly — do NOT convert to UTC for cron.`;
+  // Compute the exact current UTC offset for this timezone (handles DST automatically)
+  const utcOffsetMinutes = (() => {
+    const utcStr = now.toLocaleString("en-US", { timeZone: "UTC" });
+    const localStr = now.toLocaleString("en-US", { timeZone: userTimezone });
+    const diffMs = new Date(localStr).getTime() - new Date(utcStr).getTime();
+    return Math.round(diffMs / 60000);
+  })();
+  const offsetHours = Math.floor(Math.abs(utcOffsetMinutes) / 60);
+  const offsetMins = Math.abs(utcOffsetMinutes) % 60;
+  const offsetSign = utcOffsetMinutes >= 0 ? "+" : "-";
+  const utcOffsetStr = `UTC${offsetSign}${offsetHours}${offsetMins ? `:${String(offsetMins).padStart(2, "0")}` : ""}`;
+  const tzContext = `The current date and time is ${localNow} (${userTimezone}, currently ${utcOffsetStr}). The user's timezone is ${userTimezone} which is currently ${utcOffsetStr}. ALWAYS convert any timestamps, dates, or times to the user's local timezone (${userTimezone}) before presenting them. This applies to ALL responses — event times from Luma/Calendar, email timestamps, scheduled job times, or any other time data from tools. Never show raw UTC or ISO timestamps to the user. Format times naturally (e.g. "Tuesday, March 25 at 3:00 PM PT"). When providing ISO 8601 timestamps to tools (e.g. due_at, start_at), you may pass the time in the user's local timezone as an ISO 8601 string WITHOUT a Z suffix (e.g. '2026-03-25T09:30:00') — the system will convert it to UTC using the user's timezone (${userTimezone}, ${utcOffsetStr}). You can also pass UTC directly with a Z suffix. Cron expressions in create_scheduled_job are interpreted in the user's local timezone, so use the user's local time directly — do NOT convert to UTC for cron.`;
   systemPrompt = systemPrompt ? `${systemPrompt}\n\n${tzContext}` : tzContext;
 
   if (extraContext) {
