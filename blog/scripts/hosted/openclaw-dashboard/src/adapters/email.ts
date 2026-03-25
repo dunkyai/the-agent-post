@@ -67,18 +67,31 @@ const MAX_MESSAGE_BODY_LENGTH = 5000;
 
 // --- Triage AI System Prompt ---
 
-const TRIAGE_SYSTEM_PROMPT = `You are an email triage assistant. Your job is to analyze an email thread and determine:
+function buildTriageSystemPrompt(): string {
+  const agentName = getSetting("agent_name") || "the AI assistant";
+  const agentEmail = "the account email address listed in the thread";
 
-1. Is this email asking the agent (the email account owner's AI assistant) to DO something? (a "request")
-2. If yes, what exactly is the request?
-3. If unclear, what clarifying question should be asked?
-4. Where should the response be delivered?
+  return `You are an email triage assistant for ${agentName}. Your job is to analyze an email thread and determine whether the sender is specifically asking ${agentName} (an AI assistant) to do something.
+
+CRITICAL: ${agentName} is an AI assistant that receives emails. Not all emails sent to this address are requests FOR the assistant. People email each other — the assistant may just be CC'd, forwarded a thread for awareness, or the request in the email may be directed at a different person. You must determine whether the sender is specifically asking the AI assistant to take action.
 
 CLASSIFICATION RULES:
-- "request": The email clearly asks the agent to take an action, answer a question, create something, research something, or perform a task. Examples: "Can you draft a blog post about X?", "Please send the report to the team", "What's the status of project Y?", "Schedule a meeting for next week"
-- "not_a_request": The email is informational only — newsletters, FYI messages, automated notifications, confirmations, receipts, marketing, social media notifications, calendar invites with no action needed, or messages where the sender is clearly not expecting the AI assistant to do anything. Also: messages that are responses/acknowledgments like "Thanks!", "Got it", "Looks good", "Sounds great", or simple agreements.
-- "unclear": You cannot determine if this is a request or not. The email is ambiguous — it could be either informational or a request. When in doubt, classify as "unclear" and ask a brief, friendly clarifying question.
-- "needs_info": This IS a request, but critical details are missing that are needed to fulfill it. For example: "Post this to Slack" but which channel? "Create a doc" but what should be in it?
+- "request": The sender is CLEARLY and DIRECTLY asking ${agentName} to take an action. Strong signals:
+  * The email is addressed TO the assistant (not just CC'd)
+  * The sender uses the assistant's name or refers to it directly
+  * The email is a direct reply to a previous message FROM the assistant
+  * The request language is clearly directed at the recipient (e.g. "Can you draft...", "Please schedule...")
+  * The email only has the assistant as the recipient (no other humans TO'd)
+- "not_a_request": The email is informational only — newsletters, FYI messages, automated notifications, confirmations, receipts, marketing, social media notifications, calendar invites with no action needed. Also: messages that are responses/acknowledgments like "Thanks!", "Got it", "Looks good", or simple agreements. Also: emails where the request is clearly directed at a DIFFERENT person (e.g. "Hey John, can you send me the report?" when the assistant is CC'd).
+- "unclear": The email contains what COULD be a request, but it's ambiguous whether the sender is asking the AI assistant or someone else. This includes:
+  * Forwarded emails where the sender's intent is not stated
+  * Group emails where the request could be for anyone
+  * Emails where the assistant is CC'd on a thread between humans
+  * Any email where you're not confident the request is FOR the assistant
+  IMPORTANT: When in doubt, ALWAYS classify as "unclear". It's better to ask for clarification than to act on a request that wasn't meant for the assistant.
+- "needs_info": This IS clearly a request for the assistant, but critical details are missing. For example: "Post this to Slack" but which channel? "Create a doc" but what content?
+
+CONFIDENCE THRESHOLD: Only classify as "request" when confidence is 0.8 or higher. If your confidence that this is directed at the assistant is below 0.8, classify as "unclear" instead.
 
 DELIVERY CHANNEL DETECTION:
 - Default delivery is always "email" (reply in the email thread)
@@ -92,13 +105,14 @@ You MUST respond with valid JSON only. No markdown, no code fences, no explanati
 {
   "classification": "request" | "not_a_request" | "unclear" | "needs_info",
   "confidence": <number between 0.0 and 1.0>,
-  "reasoning": "<brief explanation of your classification>",
+  "reasoning": "<brief explanation — specifically address WHO the request appears to be directed at>",
   "request_summary": "<clear, actionable summary of what the agent should do — REQUIRED when classification is 'request' or 'needs_info', omit otherwise>",
-  "clarifying_question": "<a brief, friendly question to ask the sender — REQUIRED when classification is 'unclear' or 'needs_info', omit otherwise>",
+  "clarifying_question": "<a brief, friendly question to ask the sender — REQUIRED when classification is 'unclear' or 'needs_info', omit otherwise. For 'unclear', always ask whether this is something they'd like the AI assistant to handle.>",
   "delivery_channel": "email" | "slack" | "google_docs",
   "delivery_details": {},
   "thread_context_summary": "<2-3 sentence summary of the full thread context>"
 }`;
+}
 
 // --- Main Entry Point ---
 
@@ -342,12 +356,21 @@ function parseTriageResponse(response: string): TriageResult {
     throw new Error(`Invalid classification: ${parsed.classification}`);
   }
 
+  let classification = parsed.classification;
+  const confidence = typeof parsed.confidence === "number" ? parsed.confidence : 0.5;
+
+  // Enforce confidence threshold: downgrade low-confidence "request" to "unclear"
+  if (classification === "request" && confidence < 0.8) {
+    console.log(`[email-adapter] Downgrading "request" to "unclear" (confidence ${confidence} < 0.8)`);
+    classification = "unclear";
+  }
+
   return {
-    classification: parsed.classification,
-    confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.5,
+    classification,
+    confidence,
     reasoning: parsed.reasoning || "",
     request_summary: parsed.request_summary,
-    clarifying_question: parsed.clarifying_question,
+    clarifying_question: parsed.clarifying_question || (classification === "unclear" ? "I received this email — is this something you'd like me to help with?" : undefined),
     delivery_channel: parsed.delivery_channel || "email",
     delivery_details: parsed.delivery_details || {},
     thread_context_summary: parsed.thread_context_summary || "",
@@ -358,8 +381,10 @@ async function callTriageAI(
   provider: "anthropic" | "openai",
   apiKey: string,
   model: string,
-  userMessage: string
+  userMessage: string,
+  systemPrompt?: string
 ): Promise<string> {
+  const triagePrompt = systemPrompt || buildTriageSystemPrompt();
   if (provider === "anthropic") {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -372,7 +397,7 @@ async function callTriageAI(
         model,
         max_tokens: 1024,
         temperature: 0.3,
-        system: TRIAGE_SYSTEM_PROMPT,
+        system: triagePrompt,
         messages: [{ role: "user", content: userMessage }],
       }),
     });
@@ -397,7 +422,7 @@ async function callTriageAI(
         max_tokens: 1024,
         temperature: 0.3,
         messages: [
-          { role: "system", content: TRIAGE_SYSTEM_PROMPT },
+          { role: "system", content: triagePrompt },
           { role: "user", content: userMessage },
         ],
       }),
@@ -506,6 +531,8 @@ async function sendClarification(
   const accounts = getGoogleAccounts();
   const account = accounts.find((a) => a.email === ctx.accountId);
   const canSend = account?.services.includes("gmail_send");
+
+  console.log(`[email-adapter] sendClarification: to=${ctx.latestSender}, threadId=${ctx.threadId || "(none)"}, inReplyTo=${ctx.messageIdHeader || "(none)"}, replyMode=${replyMode}`);
 
   if (replyMode === "send" && canSend) {
     const result = JSON.parse(
@@ -739,6 +766,15 @@ async function sendEmailReply(
   const threadId = metadata.threadId;
   const inReplyTo = metadata.messageIdHeader;
 
+  console.log(`[email-adapter] sendEmailReply: to=${to}, subject=${subject}, threadId=${threadId || "(none)"}, inReplyTo=${inReplyTo || "(none)"}, replyMode=${replyMode}`);
+
+  if (!threadId) {
+    console.warn(`[email-adapter] Missing threadId — draft/reply will NOT be threaded`);
+  }
+  if (!inReplyTo) {
+    console.warn(`[email-adapter] Missing messageIdHeader (In-Reply-To) — threading may not work correctly`);
+  }
+
   // Build CC from allRecipients minus own email and to-address
   const ownEmail = accountId?.toLowerCase();
   const toEmail = extractEmail(to);
@@ -752,11 +788,13 @@ async function sendEmailReply(
       })
       .join(", ") || undefined;
 
+  let result: string;
   if (replyMode === "send" && canSend) {
-    await gmailSend(to, subject, body, accountId, undefined, cc, threadId, inReplyTo);
+    result = await gmailSend(to, subject, body, accountId, undefined, cc, threadId, inReplyTo);
   } else {
-    await gmailCreateDraft(to, subject, body, accountId, undefined, cc, threadId, inReplyTo);
+    result = await gmailCreateDraft(to, subject, body, accountId, undefined, cc, threadId, inReplyTo);
   }
+  console.log(`[email-adapter] sendEmailReply result: ${result}`);
 }
 
 // --- Helper: Extract email from "Name <email>" ---
