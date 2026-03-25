@@ -1,7 +1,7 @@
 import {
   getSetting, setSetting, getIntegration, getOrCreateConversation, addMessage, getMessages,
   getConversationsByType, createScheduledJob, getAllScheduledJobs, getScheduledJob,
-  deleteScheduledJob, addMemory, getAllMemories, deleteMemory, getMemory,
+  deleteScheduledJob, addMemory, getAllMemories, deleteMemory, getMemory, findDuplicateMemory,
 } from "./db";
 import { decrypt } from "./encryption";
 import { getNextRun, isValidCron, describeCron } from "./cron";
@@ -2050,6 +2050,17 @@ async function executeGoogleTool(toolName: string, input: any): Promise<string> 
 function executeMemoryTool(toolName: string, input: any): string {
   switch (toolName) {
     case "save_memory": {
+      // Check for near-duplicate before saving
+      const existing = findDuplicateMemory(input.content);
+      if (existing) {
+        return JSON.stringify({
+          success: false,
+          duplicate: true,
+          existing_memory_id: existing.id,
+          existing_content: existing.content,
+          message: "A similar memory already exists. Use delete_memory to remove the old one first if you want to replace it.",
+        });
+      }
       const id = addMemory(input.content);
       return JSON.stringify({ success: true, memory_id: id, content: input.content });
     }
@@ -2912,7 +2923,7 @@ function cleanEmailDraft(text: string): string {
   return cleaned.trim();
 }
 
-export function buildSystemPrompt(extraContext?: string): string {
+export function buildSystemPrompt(extraContext?: string, options?: { skipMemories?: boolean }): string {
   let systemPrompt = getSetting("system_prompt") || "";
 
   // Inject agent name
@@ -3119,18 +3130,20 @@ CRITICAL — READ THIS CAREFULLY: To post a tweet, you MUST call the twitter_pos
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${beehiivContext}` : beehiivContext;
   }
 
-  // Inject long-term memories
-  try {
-    const memories = getAllMemories();
-    if (memories.length > 0) {
-      const memoryList = memories.map((m) => `- ${m.content}`).join("\n");
-      const memContext = `Your long-term memories (things you've been asked to remember or proactively saved):\n${memoryList}\n\nUse the save_memory tool to remember new important facts. Use delete_memory to remove outdated ones.`;
-      systemPrompt = systemPrompt ? `${systemPrompt}\n\n${memContext}` : memContext;
-    } else {
-      const memContext = "You have a long-term memory system. Use the save_memory tool to remember important facts, user preferences, and key information across conversations. Be proactive about saving things worth remembering.";
-      systemPrompt = systemPrompt ? `${systemPrompt}\n\n${memContext}` : memContext;
-    }
-  } catch {}
+  // Inject long-term memories (skip for scheduled jobs to prevent memory contamination)
+  if (!options?.skipMemories) {
+    try {
+      const memories = getAllMemories();
+      if (memories.length > 0) {
+        const memoryList = memories.map((m) => `- ${m.content}`).join("\n");
+        const memContext = `Your long-term memories (things you've been asked to remember or proactively saved):\n${memoryList}\n\nUse the save_memory tool to remember new important facts. Use delete_memory to remove outdated ones.`;
+        systemPrompt = systemPrompt ? `${systemPrompt}\n\n${memContext}` : memContext;
+      } else {
+        const memContext = "You have a long-term memory system. Use the save_memory tool to remember important facts, user preferences, and key information across conversations. Be proactive about saving things worth remembering.";
+        systemPrompt = systemPrompt ? `${systemPrompt}\n\n${memContext}` : memContext;
+      }
+    } catch {}
+  }
 
   // Inject browser context
   {
@@ -3249,13 +3262,14 @@ export async function processMessage(
   externalId: string,
   text: string,
   context?: string,
-  onStatus?: StatusCallback
+  onStatus?: StatusCallback,
+  options?: { skipMemories?: boolean }
 ): Promise<string> {
   const model = getSetting("model") || "claude-sonnet-4-20250514";
   const temperature = parseFloat(getSetting("temperature") || "0.7");
   const maxTokens = parseInt(getSetting("max_tokens") || "4096", 10);
 
-  const systemPrompt = buildSystemPrompt(context);
+  const systemPrompt = buildSystemPrompt(context, options);
 
   const provider = getProvider(model);
   const apiKey = getApiKey(provider);

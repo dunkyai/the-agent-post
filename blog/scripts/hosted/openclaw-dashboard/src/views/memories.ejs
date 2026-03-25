@@ -1,0 +1,37 @@
+<%- include('partials/head', { title: 'Memories' }) %>
+<div class="app">
+  <%- include('partials/nav', { active: 'memories' }) %>
+  <div class="main">
+    <h2>Memories (<%= memories.length %>)</h2>
+    <%- include('partials/flash', { flash }) %>
+
+    <div class="card">
+      <p style="color: var(--text-secondary); font-size: 14px; margin: 0;">
+        These are facts your AI has saved to remember across conversations. Memories are injected into every interactive conversation (chat, Slack, email) but <strong>not</strong> into scheduled jobs. Delete any that are incorrect, outdated, or duplicated.
+      </p>
+    </div>
+
+    <% if (memories.length === 0) { %>
+      <div class="card">
+        <p style="color: var(--text-secondary); text-align: center;">
+          No memories saved yet. Your AI will save important facts as you interact with it.
+        </p>
+      </div>
+    <% } %>
+
+    <% memories.forEach(function(mem) { %>
+      <div class="card card-compact" style="display: flex; align-items: flex-start; gap: 12px;">
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 14px; line-height: 1.5;"><%= mem.content %></div>
+          <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+            #<%= mem.id %> &middot; <%= new Date(mem.created_at + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) %>
+          </div>
+        </div>
+        <form method="POST" action="/memories/<%= mem.id %>/delete" style="flex-shrink: 0;" onsubmit="return confirm('Delete this memory?')">
+          <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+        </form>
+      </div>
+    <% }); %>
+  </div>
+</div>
+<%- include('partials/foot') %>

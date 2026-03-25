@@ -472,6 +472,32 @@ export function addMemory(content: string): number {
   return result.lastInsertRowid as number;
 }
 
+/**
+ * Check if a substantially similar memory already exists.
+ * Returns the matching memory if found, undefined otherwise.
+ * Uses normalized word overlap — if 60%+ of words match, it's a duplicate.
+ */
+export function findDuplicateMemory(content: string): Memory | undefined {
+  const memories = getAllMemories();
+  const normalizeWords = (s: string) =>
+    s.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter((w) => w.length > 2);
+  const newWords = new Set(normalizeWords(content));
+  if (newWords.size === 0) return undefined;
+
+  for (const mem of memories) {
+    const existingWords = new Set(normalizeWords(mem.content));
+    if (existingWords.size === 0) continue;
+    // Count overlap
+    let overlap = 0;
+    for (const w of newWords) {
+      if (existingWords.has(w)) overlap++;
+    }
+    const overlapRatio = overlap / Math.min(newWords.size, existingWords.size);
+    if (overlapRatio >= 0.6) return mem;
+  }
+  return undefined;
+}
+
 export function getAllMemories(): Memory[] {
   return getDb()
     .prepare("SELECT * FROM memories ORDER BY created_at ASC")
