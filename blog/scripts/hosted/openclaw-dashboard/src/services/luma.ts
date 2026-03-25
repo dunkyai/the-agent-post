@@ -149,6 +149,7 @@ export async function lumaTestLocationUpdate(eventId: string, location: string):
 // Luma requires all 9 fields in geo_address_json; nullable fields can be null.
 function buildGeoAddress(location: string): Record<string, string | null> {
   return {
+    type: "manual",
     address: location,
     city: null,
     region: null,
