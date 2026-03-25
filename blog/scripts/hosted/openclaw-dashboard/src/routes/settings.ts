@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { getSetting, setSetting } from "../services/db";
+import { getSetting, setSetting, getAllMemories, getAllScheduledJobs } from "../services/db";
 import { encrypt, decrypt } from "../services/encryption";
 
 const router = Router();
@@ -86,6 +86,20 @@ router.post("/settings", (req: Request, res: Response) => {
   }
 
   res.redirect(303, "/settings?flash=Settings+saved");
+});
+
+// Debug: inspect memories, context, and scheduled jobs
+router.get("/settings/debug", (req: Request, res: Response) => {
+  const memories = getAllMemories();
+  const jobs = getAllScheduledJobs();
+  const context = {
+    context_company: getSetting("context_company") || "",
+    context_user: getSetting("context_user") || "",
+    context_rules: getSetting("context_rules") || "",
+    context_knowledge: getSetting("context_knowledge") || "",
+    system_prompt: getSetting("system_prompt") || "",
+  };
+  res.json({ memories, context, scheduled_jobs: jobs });
 });
 
 // Redirect old /agent routes to /settings
