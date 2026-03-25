@@ -146,6 +146,7 @@ function initSchema(): void {
       all_recipients TEXT NOT NULL DEFAULT '',
       message_id_header TEXT NOT NULL DEFAULT '',
       clarification_count INTEGER NOT NULL DEFAULT 0,
+      reply_mode TEXT NOT NULL DEFAULT 'draft',
       task_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -156,6 +157,7 @@ function initSchema(): void {
 
   // Migrations: add columns to existing tables
   try { db.exec("ALTER TABLE scheduled_jobs ADD COLUMN run_once INTEGER NOT NULL DEFAULT 0"); } catch {}
+  try { db.exec("ALTER TABLE email_thread_state ADD COLUMN reply_mode TEXT NOT NULL DEFAULT 'draft'"); } catch {}
 }
 
 export function getGmailProcessedThread(threadId: string): { last_message_id: string } | undefined {
@@ -185,6 +187,7 @@ export interface EmailThreadStateRow {
   all_recipients: string;
   message_id_header: string;
   clarification_count: number;
+  reply_mode: string;
   task_id: string | null;
   created_at: string;
   updated_at: string;

@@ -58,6 +58,7 @@ export interface EmailThreadContext {
     messageId: string;
   }>;
   ownEmail: string;
+  replyMode: "draft" | "send";
 }
 
 const MAX_CLARIFICATIONS = 3;
@@ -128,6 +129,7 @@ export async function processIncomingEmail(ctx: EmailThreadContext): Promise<voi
           latest_sender: ctx.latestSender,
           all_recipients: ctx.allRecipients,
           message_id_header: ctx.messageIdHeader,
+          reply_mode: ctx.replyMode,
         });
       }
 
@@ -161,6 +163,7 @@ export async function processIncomingEmail(ctx: EmailThreadContext): Promise<voi
           structured_request: "{}",
           clarification_count: 0,
           task_id: null,
+          reply_mode: ctx.replyMode,
         });
       }
     } else {
@@ -173,6 +176,7 @@ export async function processIncomingEmail(ctx: EmailThreadContext): Promise<voi
         message_id_header: ctx.messageIdHeader,
         thread_subject: ctx.subject,
         delivery_channel: "email",
+        reply_mode: ctx.replyMode,
       });
     }
 
@@ -182,12 +186,13 @@ export async function processIncomingEmail(ctx: EmailThreadContext): Promise<voi
 
     console.log(`[email-adapter] Triage result for thread ${threadId}: ${triageResult.classification} (confidence: ${triageResult.confidence})`);
 
-    // Store triage result
+    // Store triage result and reply mode
     upsertEmailThreadState(threadId, accountId, {
       triage_result: JSON.stringify(triageResult),
+      reply_mode: ctx.replyMode,
     });
 
-    const replyMode = (getSetting("gmail_reply_mode") || "draft") as "draft" | "send";
+    const replyMode = ctx.replyMode;
 
     switch (triageResult.classification) {
       case "not_a_request": {
@@ -612,7 +617,9 @@ export async function onEmailTaskComplete(task: Task): Promise<void> {
     return;
   }
 
-  const replyMode = (getSetting("gmail_reply_mode") || "draft") as "draft" | "send";
+  // Use reply mode stored in thread state (persisted at triage time)
+  const threadState = getEmailThreadState(threadId, accountId);
+  const replyMode = (threadState?.reply_mode as "draft" | "send") || "draft";
   const accounts = getGoogleAccounts();
   const account = accounts.find((a) => a.email === accountId);
   const canSend = account?.services.includes("gmail_send");
