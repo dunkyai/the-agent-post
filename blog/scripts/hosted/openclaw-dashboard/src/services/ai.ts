@@ -1056,7 +1056,7 @@ const BUFFER_TOOLS = [
         channel_id: { type: "string", description: "Buffer channel ID to post to" },
         text: { type: "string", description: "The post text content" },
         mode: { type: "string", enum: ["add_to_queue", "custom_scheduled", "share_now"], description: "Posting mode (default: add_to_queue)" },
-        due_at: { type: "string", description: "ISO 8601 datetime to schedule the post (required when mode is custom_scheduled)" },
+        due_at: { type: "string", description: "ISO 8601 datetime in UTC with Z suffix (e.g. '2026-03-25T16:30:00Z'). Convert from user's local time to UTC. Required when mode is custom_scheduled." },
         image_url: { type: "string", description: "URL of an image to attach to the post" },
         link_url: { type: "string", description: "URL to attach as a link preview" },
       },
@@ -1108,11 +1108,17 @@ async function executeBufferTool(toolName: string, input: any): Promise<string> 
         if (selected.length > 0 && !selected.includes(input.channel_id)) {
           return JSON.stringify({ error: "This channel is not enabled. Use buffer_list_channels to see available channels." });
         }
+        // Normalize due_at to UTC to prevent DST offset errors
+        let dueAt = input.due_at;
+        if (dueAt && !dueAt.endsWith("Z")) {
+          const parsed = new Date(dueAt);
+          if (!isNaN(parsed.getTime())) dueAt = parsed.toISOString();
+        }
         return await bufferCreatePost({
           channel_id: input.channel_id,
           text: input.text,
           mode: input.mode || "add_to_queue",
-          due_at: input.due_at,
+          due_at: dueAt,
           image_url: input.image_url,
           link_url: input.link_url,
         });
@@ -2918,7 +2924,9 @@ export function buildSystemPrompt(extraContext?: string): string {
 
   // Inject user timezone
   const userTimezone = getSetting("timezone") || "America/Los_Angeles";
-  const tzContext = `The user's timezone is ${userTimezone}. ALWAYS convert any timestamps, dates, or times to the user's local timezone (${userTimezone}) before presenting them. This applies to ALL responses — event times from Luma/Calendar, email timestamps, scheduled job times, or any other time data from tools. Never show raw UTC or ISO timestamps to the user. Format times naturally (e.g. "Tuesday, March 25 at 3:00 PM PT"). Cron expressions in create_scheduled_job are interpreted in the user's local timezone, so use the user's local time directly — do NOT convert to UTC.`;
+  const now = new Date();
+  const localNow = new Intl.DateTimeFormat("en-US", { timeZone: userTimezone, dateStyle: "full", timeStyle: "long" }).format(now);
+  const tzContext = `The current date and time is ${localNow} (${userTimezone}). ALWAYS convert any timestamps, dates, or times to the user's local timezone (${userTimezone}) before presenting them. This applies to ALL responses — event times from Luma/Calendar, email timestamps, scheduled job times, or any other time data from tools. Never show raw UTC or ISO timestamps to the user. Format times naturally (e.g. "Tuesday, March 25 at 3:00 PM PT"). When providing ISO 8601 timestamps to tools (e.g. due_at, start_at), ALWAYS use UTC (with Z suffix) — convert from the user's local time to UTC before passing to any tool. Cron expressions in create_scheduled_job are interpreted in the user's local timezone, so use the user's local time directly — do NOT convert to UTC for cron.`;
   systemPrompt = systemPrompt ? `${systemPrompt}\n\n${tzContext}` : tzContext;
 
   if (extraContext) {
