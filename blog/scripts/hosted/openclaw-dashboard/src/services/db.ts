@@ -131,6 +131,26 @@ function initSchema(): void {
       description TEXT NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1
     );
+
+    CREATE TABLE IF NOT EXISTS email_thread_state (
+      thread_id TEXT NOT NULL,
+      account_id TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'triaging',
+      triage_result TEXT NOT NULL DEFAULT '{}',
+      structured_request TEXT NOT NULL DEFAULT '{}',
+      delivery_channel TEXT NOT NULL DEFAULT 'email',
+      thread_subject TEXT NOT NULL DEFAULT '',
+      latest_message_id TEXT NOT NULL DEFAULT '',
+      latest_sender TEXT NOT NULL DEFAULT '',
+      all_recipients TEXT NOT NULL DEFAULT '',
+      message_id_header TEXT NOT NULL DEFAULT '',
+      clarification_count INTEGER NOT NULL DEFAULT 0,
+      task_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (thread_id, account_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_email_thread_state_state ON email_thread_state(state);
   `);
 }
 
@@ -144,6 +164,77 @@ export function markGmailThreadProcessed(threadId: string, lastMessageId: string
   getDb()
     .prepare("INSERT INTO gmail_processed_threads (thread_id, last_message_id, account_id) VALUES (?, ?, ?) ON CONFLICT(thread_id) DO UPDATE SET last_message_id = ?, processed_at = datetime('now')")
     .run(threadId, lastMessageId, accountId, lastMessageId);
+}
+
+// --- Email Thread State ---
+
+export interface EmailThreadStateRow {
+  thread_id: string;
+  account_id: string;
+  state: string;
+  triage_result: string;
+  structured_request: string;
+  delivery_channel: string;
+  thread_subject: string;
+  latest_message_id: string;
+  latest_sender: string;
+  all_recipients: string;
+  message_id_header: string;
+  clarification_count: number;
+  task_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export function getEmailThreadState(threadId: string, accountId: string): EmailThreadStateRow | undefined {
+  return getDb()
+    .prepare("SELECT * FROM email_thread_state WHERE thread_id = ? AND account_id = ?")
+    .get(threadId, accountId) as EmailThreadStateRow | undefined;
+}
+
+export function upsertEmailThreadState(
+  threadId: string,
+  accountId: string,
+  updates: Partial<Omit<EmailThreadStateRow, "thread_id" | "account_id" | "created_at">>
+): void {
+  const existing = getEmailThreadState(threadId, accountId);
+  if (existing) {
+    const fields: string[] = ["updated_at = datetime('now')"];
+    const values: unknown[] = [];
+    for (const [key, value] of Object.entries(updates)) {
+      if (value !== undefined) {
+        fields.push(`${key} = ?`);
+        values.push(value);
+      }
+    }
+    values.push(threadId, accountId);
+    getDb()
+      .prepare(`UPDATE email_thread_state SET ${fields.join(", ")} WHERE thread_id = ? AND account_id = ?`)
+      .run(...values);
+  } else {
+    const cols = ["thread_id", "account_id"];
+    const vals: unknown[] = [threadId, accountId];
+    for (const [key, value] of Object.entries(updates)) {
+      if (value !== undefined) {
+        cols.push(key);
+        vals.push(value);
+      }
+    }
+    const placeholders = cols.map(() => "?").join(", ");
+    getDb()
+      .prepare(`INSERT INTO email_thread_state (${cols.join(", ")}) VALUES (${placeholders})`)
+      .run(...vals);
+  }
+}
+
+export function getStaleAwaitingReplyThreads(cutoffHours: number): EmailThreadStateRow[] {
+  return getDb()
+    .prepare(
+      `SELECT * FROM email_thread_state
+       WHERE state = 'awaiting_reply'
+       AND updated_at < datetime('now', '-' || ? || ' hours')`
+    )
+    .all(cutoffHours) as EmailThreadStateRow[];
 }
 
 export function getSetting(key: string): string | undefined {
