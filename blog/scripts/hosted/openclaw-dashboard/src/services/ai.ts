@@ -115,11 +115,11 @@ const SCHEDULING_TOOLS = [
       type: "object" as const,
       properties: {
         name: { type: "string", description: "A short descriptive name for the job" },
-        schedule: { type: "string", description: "A 5-field cron expression. Examples: '0 9 * * 1' (Monday 9am), '*/30 * * * *' (every 30 min), '0 0 * * *' (daily midnight). Fields: minute hour day-of-month month day-of-week." },
+        schedule: { type: "string", description: "A 5-field cron expression. Fields: minute hour day-of-month month day-of-week. Examples: '0 9 * * 1' (every Monday 9am), '*/30 * * * *' (every 30 min), '0 0 * * *' (daily midnight). IMPORTANT: For a specific date, use '*' for day-of-week — e.g. '30 9 28 3 *' (March 28 at 9:30am). Never combine a specific day-of-month with a specific day-of-week — the date may not fall on that weekday, causing the job to fail." },
         prompt: { type: "string", description: "The prompt/instruction sent to the AI when the job fires" },
         target_source: { type: "string", enum: ["slack", "email"], description: "Where to deliver results. Must be one of: slack, email." },
         target_external_id: { type: "string", description: "The delivery target ID. For Slack: must be a real Slack channel ID (C...), DM ID (D...), or user ID (U...) — e.g. C01HCS46FPB or U07FQCAACN8. NEVER use placeholder values like 'scheduler' or 'dashboard'. If you don't know the ID, ask the user. For email: recipient email address." },
-        run_once: { type: "boolean", description: "If true, the job runs once at the scheduled time then auto-disables. Use for one-time tasks like 'post tomorrow at 9am'. Default: false (recurring)." },
+        run_once: { type: "boolean", description: "Default: true (one-time). Set to false ONLY when the user explicitly asks for a recurring schedule (e.g. 'every Monday', 'daily', 'weekly'). If the user says a specific day like 'Friday' or 'tomorrow', that means once — not every Friday." },
       },
       required: ["name", "schedule", "prompt", "target_source", "target_external_id"],
     },
@@ -2155,7 +2155,7 @@ function executeSchedulingTool(toolName: string, input: any): string {
       }
       const jobTimezone = getSetting("timezone") || "America/Los_Angeles";
       const nextRun = getNextRun(input.schedule, new Date(), jobTimezone);
-      const runOnce = input.run_once ? 1 : 0;
+      const runOnce = input.run_once === false ? 0 : 1;
       const id = createScheduledJob({
         name: input.name,
         schedule: input.schedule,
