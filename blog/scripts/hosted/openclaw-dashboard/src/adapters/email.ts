@@ -69,27 +69,32 @@ const MAX_MESSAGE_BODY_LENGTH = 5000;
 
 function buildTriageSystemPrompt(): string {
   const agentName = getSetting("agent_name") || "the AI assistant";
+  const userName = getSetting("user_name") || "";
   const agentEmail = "the account email address listed in the thread";
 
-  return `You are an email triage assistant for ${agentName}. Your job is to analyze an email thread and determine whether the sender is specifically asking ${agentName} (an AI assistant) to do something.
+  const userNameContext = userName
+    ? `\n\nIMPORTANT: ${agentName} acts on behalf of ${userName}. Emails that ask ${userName} (or any recognizable variation of their name) to do something should ALSO be classified as requests, because ${agentName} handles ${userName}'s tasks. For example, if someone emails "${userName}, can you send me the report?" — that is a request for ${agentName} to handle.`
+    : "";
 
-CRITICAL: ${agentName} is an AI assistant that receives emails. Not all emails sent to this address are requests FOR the assistant. People email each other — the assistant may just be CC'd, forwarded a thread for awareness, or the request in the email may be directed at a different person. You must determine whether the sender is specifically asking the AI assistant to take action.
+  return `You are an email triage assistant for ${agentName}. Your job is to analyze an email thread and determine whether the sender is asking ${agentName} or its owner to do something.
+
+CRITICAL: ${agentName} is an AI assistant that receives emails on behalf of its owner.${userNameContext} Not all emails sent to this address are requests. People email each other — the assistant may just be CC'd, forwarded a thread for awareness, or the request in the email may be directed at a different person not associated with this account. You must determine whether the sender is asking the assistant or its owner to take action.
 
 CLASSIFICATION RULES:
-- "request": The sender is CLEARLY and DIRECTLY asking ${agentName} to take an action. Strong signals:
-  * The email is addressed TO the assistant (not just CC'd)
-  * The sender uses the assistant's name or refers to it directly
-  * The email is a direct reply to a previous message FROM the assistant
+- "request": The sender is CLEARLY and DIRECTLY asking ${agentName}${userName ? ` or ${userName}` : ""} to take an action. Strong signals:
+  * The email is addressed TO the assistant or its owner (not just CC'd)
+  * The sender uses the assistant's name, the owner's name, or refers to them directly
+  * The email is a direct reply to a previous message FROM the assistant or owner
   * The request language is clearly directed at the recipient (e.g. "Can you draft...", "Please schedule...")
-  * The email only has the assistant as the recipient (no other humans TO'd)
-- "not_a_request": The email is informational only — newsletters, FYI messages, automated notifications, confirmations, receipts, marketing, social media notifications, calendar invites with no action needed. Also: messages that are responses/acknowledgments like "Thanks!", "Got it", "Looks good", or simple agreements. Also: emails where the request is clearly directed at a DIFFERENT person (e.g. "Hey John, can you send me the report?" when the assistant is CC'd).
-- "unclear": The email contains what COULD be a request, but it's ambiguous whether the sender is asking the AI assistant or someone else. This includes:
+  * The email only has the assistant/owner as the recipient (no other humans TO'd)
+- "not_a_request": The email is informational only — newsletters, FYI messages, automated notifications, confirmations, receipts, marketing, social media notifications, calendar invites with no action needed. Also: messages that are responses/acknowledgments like "Thanks!", "Got it", "Looks good", or simple agreements. Also: emails where the request is clearly directed at a DIFFERENT person who is not the assistant or its owner (e.g. "Hey John, can you send me the report?" when the assistant is CC'd).
+- "unclear": The email contains what COULD be a request, but it's ambiguous whether the sender is asking the assistant/owner or someone else. This includes:
   * Forwarded emails where the sender's intent is not stated
   * Group emails where the request could be for anyone
   * Emails where the assistant is CC'd on a thread between humans
-  * Any email where you're not confident the request is FOR the assistant
+  * Any email where you're not confident the request is FOR the assistant or its owner
   IMPORTANT: When in doubt, ALWAYS classify as "unclear". It's better to ask for clarification than to act on a request that wasn't meant for the assistant.
-- "needs_info": This IS clearly a request for the assistant, but critical details are missing. For example: "Post this to Slack" but which channel? "Create a doc" but what content?
+- "needs_info": This IS clearly a request for the assistant/owner, but critical details are missing. For example: "Post this to Slack" but which channel? "Create a doc" but what content?
 
 CONFIDENCE THRESHOLD: Only classify as "request" when confidence is 0.8 or higher. If your confidence that this is directed at the assistant is below 0.8, classify as "unclear" instead.
 
@@ -711,7 +716,7 @@ export async function onEmailTaskComplete(task: Task): Promise<void> {
         const docTitle = delivery?.details?.doc_title || `Email Request: ${metadata.subject || "Untitled"}`;
         const docResult = JSON.parse(await docsCreate(docTitle, result, accountId));
         if (docResult.error) throw new Error(docResult.error);
-        const docUrl = docResult.url || `https://docs.google.com/document/d/${docResult.id}`;
+        const docUrl = docResult.documentUrl || `https://docs.google.com/document/d/${docResult.documentId}/edit`;
         await sendEmailReply(
           metadata as Record<string, string>,
           `I've created a Google Doc with the response: ${docUrl}\n\nLet me know if you need any changes!`,
