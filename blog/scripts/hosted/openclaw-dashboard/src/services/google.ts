@@ -1741,25 +1741,98 @@ function extractEmailAddress(from: string): string {
   return match ? match[1] : from.toLowerCase().trim();
 }
 
-function isGmailSenderAllowed(sender: string): boolean {
+interface EmailRuleTier {
+  type: "everyone" | "domains" | "addresses";
+  enabled: boolean;
+  reply_mode: "draft" | "send";
+  domains?: string[];
+  addresses?: string[];
+}
+
+function loadEmailRuleTiers(): EmailRuleTier[] {
   try {
-    const rules = JSON.parse(getSetting("gmail_email_rules") || "{}");
-    if (!rules.mode || rules.mode === "all") return true;
-
-    const senderLower = sender.trim().toLowerCase();
-    // Extract email from "Name <email>" format
-    const emailMatch = senderLower.match(/<([^>]+)>/);
-    const email = emailMatch ? emailMatch[1] : senderLower;
-    const domain = email.split("@")[1];
-
-    if (rules.mode === "domains" && rules.domains?.length > 0) {
-      return rules.domains.some((d: string) => d.toLowerCase() === domain);
+    const raw = JSON.parse(getSetting("gmail_email_rules") || "{}");
+    // New tiered format
+    if (raw.tiers && Array.isArray(raw.tiers)) {
+      return raw.tiers;
     }
-    if (rules.mode === "addresses" && rules.addresses?.length > 0) {
-      return rules.addresses.some((a: string) => a.toLowerCase() === email);
+    // Backward compat: migrate old format
+    const oldReplyMode = (getSetting("gmail_reply_mode") || "draft") as "draft" | "send";
+    if (!raw.mode || raw.mode === "all") {
+      return [
+        { type: "everyone", enabled: true, reply_mode: oldReplyMode },
+        { type: "domains", enabled: false, reply_mode: oldReplyMode, domains: [] },
+        { type: "addresses", enabled: false, reply_mode: oldReplyMode, addresses: [] },
+      ];
+    }
+    if (raw.mode === "domains") {
+      return [
+        { type: "everyone", enabled: false, reply_mode: oldReplyMode },
+        { type: "domains", enabled: true, reply_mode: oldReplyMode, domains: raw.domains || [] },
+        { type: "addresses", enabled: false, reply_mode: oldReplyMode, addresses: [] },
+      ];
+    }
+    if (raw.mode === "addresses") {
+      return [
+        { type: "everyone", enabled: false, reply_mode: oldReplyMode },
+        { type: "domains", enabled: false, reply_mode: oldReplyMode, domains: [] },
+        { type: "addresses", enabled: true, reply_mode: oldReplyMode, addresses: raw.addresses || [] },
+      ];
     }
   } catch {}
-  return true;
+  return [
+    { type: "everyone", enabled: true, reply_mode: "draft" },
+    { type: "domains", enabled: false, reply_mode: "draft", domains: [] },
+    { type: "addresses", enabled: false, reply_mode: "draft", addresses: [] },
+  ];
+}
+
+/**
+ * Check if a single sender is allowed by tiered rules.
+ * Returns { allowed, replyMode } — most-specific tier wins.
+ * Evaluation order: addresses → domains → everyone.
+ */
+function isGmailSenderAllowed(sender: string): { allowed: boolean; replyMode: "draft" | "send" } {
+  const tiers = loadEmailRuleTiers();
+  const email = extractEmailAddress(sender);
+  const domain = email.split("@")[1];
+
+  const addressTier = tiers.find(t => t.type === "addresses");
+  if (addressTier?.enabled && addressTier.addresses?.length) {
+    if (addressTier.addresses.some(a => a.toLowerCase() === email)) {
+      return { allowed: true, replyMode: addressTier.reply_mode };
+    }
+  }
+
+  const domainTier = tiers.find(t => t.type === "domains");
+  if (domainTier?.enabled && domainTier.domains?.length) {
+    if (domainTier.domains.some(d => d.toLowerCase() === domain)) {
+      return { allowed: true, replyMode: domainTier.reply_mode };
+    }
+  }
+
+  const everyoneTier = tiers.find(t => t.type === "everyone");
+  if (everyoneTier?.enabled) {
+    return { allowed: true, replyMode: everyoneTier.reply_mode };
+  }
+
+  return { allowed: false, replyMode: "draft" };
+}
+
+/**
+ * Resolve the reply mode for a thread by checking ALL recipients.
+ * Returns "send" only if every recipient resolves to a "send" tier.
+ * If any recipient would be "draft" (or unmatched), returns "draft".
+ */
+function resolveThreadReplyMode(recipientEmails: string[]): "draft" | "send" {
+  if (recipientEmails.length === 0) return "draft";
+  for (const recipient of recipientEmails) {
+    const result = isGmailSenderAllowed(recipient);
+    if (!result.allowed || result.replyMode === "draft") {
+      return "draft";
+    }
+  }
+  return "send";
 }
 
 async function pollGmail(): Promise<void> {
@@ -1845,8 +1918,19 @@ async function pollGmail(): Promise<void> {
           continue;
         }
 
+        // Thread-origin check: if user/agent sent any message in this thread, always allow
+        const userParticipated = threadMsgs.some((msg: any) => {
+          const fromHeader = (msg.payload?.headers || []).find((h: any) => h.name.toLowerCase() === "from");
+          if (!fromHeader) return false;
+          const fromEmail = extractEmailAddress(fromHeader.value);
+          return fromEmail === ownEmail
+            || (ownEmail.includes("@gmail.com") && fromEmail === ownEmail.replace("@gmail.com", "@googlemail.com"))
+            || (ownEmail.includes("@googlemail.com") && fromEmail === ownEmail.replace("@googlemail.com", "@gmail.com"));
+        });
+
         // Check sender against email rules
-        if (!isGmailSenderAllowed(latestFrom)) {
+        const senderCheck = isGmailSenderAllowed(latestFrom);
+        if (!senderCheck.allowed && !userParticipated) {
           continue;
         }
 
@@ -1870,6 +1954,22 @@ async function pollGmail(): Promise<void> {
         const latestTo = lastHeaders.to || "";
         const latestCc = lastHeaders.cc || "";
         const allRecipients = [latestTo, latestCc].filter(Boolean).join(", ");
+
+        // Resolve reply mode: check all recipients, most restrictive wins
+        const recipientEmails: string[] = [];
+        for (const field of [latestTo, latestCc, latestFrom]) {
+          if (!field) continue;
+          // Split comma-separated recipients and extract emails
+          for (const part of field.split(",")) {
+            const email = extractEmailAddress(part.trim());
+            if (email && email !== ownEmail && !recipientEmails.includes(email)) {
+              recipientEmails.push(email);
+            }
+          }
+        }
+        const replyMode = userParticipated && !senderCheck.allowed
+          ? "draft" // Thread-origin override: user participated but sender not in any tier → draft
+          : resolveThreadReplyMode(recipientEmails);
 
         const threadMessages: EmailThreadContext["threadMessages"] = [];
         for (const msg of threadMsgs) {
@@ -1897,6 +1997,7 @@ async function pollGmail(): Promise<void> {
           messageIdHeader: lastHeaders["message-id"] || "",
           threadMessages,
           ownEmail,
+          replyMode,
         };
 
         // Hand off to the email adapter for triage + processing

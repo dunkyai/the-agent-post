@@ -1,4 +1,4 @@
-import { getDueJobs, getScheduledJob, markJobRun, deleteConversation, getOrCreateConversation, getSetting } from "./db";
+import { getDueJobs, getScheduledJob, markJobRun, updateScheduledJob, deleteConversation, getOrCreateConversation, getSetting } from "./db";
 import { processMessage } from "./ai";
 import { getNextRun } from "./cron";
 import { getPendingTasks, markStuckTasksFailed, deactivateOldTasks } from "./task";
@@ -145,10 +145,17 @@ async function executeJob(jobId: number, force = false): Promise<void> {
 
     await deliverResult(job, result);
 
-    const tz = getSetting("timezone") || "America/Los_Angeles";
-    const nextRun = getNextRun(job.schedule, new Date(), tz);
-    markJobRun(job.id, result, null, nextRun.toISOString());
-    console.log(`Job #${job.id} completed. Next run: ${nextRun.toISOString()}`);
+    if (job.run_once) {
+      // One-time job: mark as completed and disable
+      markJobRun(job.id, result, null, "");
+      updateScheduledJob(job.id, { enabled: 0, next_run: "" });
+      console.log(`Job #${job.id} completed (one-time). Auto-disabled.`);
+    } else {
+      const tz = getSetting("timezone") || "America/Los_Angeles";
+      const nextRun = getNextRun(job.schedule, new Date(), tz);
+      markJobRun(job.id, result, null, nextRun.toISOString());
+      console.log(`Job #${job.id} completed. Next run: ${nextRun.toISOString()}`);
+    }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error(`Job #${job.id} failed:`, message);

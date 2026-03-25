@@ -24,9 +24,14 @@
       <div class="card">
         <div class="integration-header">
           <h3><%= job.name %></h3>
-          <span class="status-badge status-<%= job.enabled ? 'connected' : 'disconnected' %>">
-            <%= job.enabled ? 'enabled' : 'disabled' %>
-          </span>
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <% if (job.run_once) { %>
+              <span class="status-badge" style="background: #FEF3C7; color: #92400E;"><%= job.run_once && !job.enabled && job.last_run ? 'completed' : 'one-time' %></span>
+            <% } %>
+            <span class="status-badge status-<%= job.enabled ? 'connected' : 'disconnected' %>">
+              <%= job.enabled ? 'enabled' : 'disabled' %>
+            </span>
+          </div>
         </div>
 
         <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
@@ -39,7 +44,7 @@
           </div>
           <div><strong>Created via:</strong> <%= job.target_source %></div>
           <div><strong>Created by:</strong> <%= job.created_by %></div>
-          <% if (job.next_run) { %>
+          <% if (job.next_run && job.next_run.trim()) { %>
             <div><strong>Next run:</strong> <span class="local-time" data-utc="<%= job.next_run %>"><%= job.next_run %></span></div>
           <% } %>
           <% if (job.last_run) { %>
@@ -109,8 +114,10 @@
         return '<div class="card">'
           + '<div class="integration-header">'
           + '<h3>' + escapeHtml(job.name) + '</h3>'
+          + '<div style="display: flex; gap: 6px; align-items: center;">'
+          + (job.run_once ? '<span class="status-badge" style="background: #FEF3C7; color: #92400E;">' + (job.run_once && !job.enabled && job.last_run ? 'completed' : 'one-time') + '</span>' : '')
           + '<span class="status-badge status-' + (job.enabled ? 'connected' : 'disconnected') + '">'
-          + (job.enabled ? 'enabled' : 'disabled') + '</span></div>'
+          + (job.enabled ? 'enabled' : 'disabled') + '</span></div></div>'
           + '<div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">'
           + '<div><strong>Schedule:</strong> ' + escapeHtml(job.schedule_description) + '</div>'
           + '<div><strong>Prompt:</strong> ' + escapeHtml(truncate(job.prompt, 120))
@@ -118,7 +125,7 @@
           + '</div>'
           + '<div><strong>Created via:</strong> ' + escapeHtml(job.target_source) + '</div>'
           + '<div><strong>Created by:</strong> ' + escapeHtml(job.created_by) + '</div>'
-          + (job.next_run ? '<div><strong>Next run:</strong> ' + escapeHtml(formatLocal(job.next_run, tz)) + '</div>' : '')
+          + (job.next_run && job.next_run.trim() ? '<div><strong>Next run:</strong> ' + escapeHtml(formatLocal(job.next_run, tz)) + '</div>' : '')
           + (job.last_run ? '<div><strong>Last run:</strong> ' + escapeHtml(formatLocal(job.last_run, tz)) + '</div>' : '')
           + (job.last_error ? '<div style="color: var(--danger);"><strong>Last error:</strong> ' + escapeHtml(job.last_error) + '</div>' : '')
           + (job.last_result ? '<div><strong>Last result:</strong> ' + escapeHtml(truncate(job.last_result, 120))

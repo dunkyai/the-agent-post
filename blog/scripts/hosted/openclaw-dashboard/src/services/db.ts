@@ -80,6 +80,7 @@ function initSchema(): void {
       target_source TEXT NOT NULL DEFAULT 'dashboard',
       target_external_id TEXT NOT NULL DEFAULT 'scheduler',
       enabled INTEGER NOT NULL DEFAULT 1,
+      run_once INTEGER NOT NULL DEFAULT 0,
       created_by TEXT NOT NULL DEFAULT 'user',
       last_run TEXT,
       next_run TEXT,
@@ -145,6 +146,7 @@ function initSchema(): void {
       all_recipients TEXT NOT NULL DEFAULT '',
       message_id_header TEXT NOT NULL DEFAULT '',
       clarification_count INTEGER NOT NULL DEFAULT 0,
+      reply_mode TEXT NOT NULL DEFAULT 'draft',
       task_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -152,6 +154,10 @@ function initSchema(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_email_thread_state_state ON email_thread_state(state);
   `);
+
+  // Migrations: add columns to existing tables
+  try { db.exec("ALTER TABLE scheduled_jobs ADD COLUMN run_once INTEGER NOT NULL DEFAULT 0"); } catch {}
+  try { db.exec("ALTER TABLE email_thread_state ADD COLUMN reply_mode TEXT NOT NULL DEFAULT 'draft'"); } catch {}
 }
 
 export function getGmailProcessedThread(threadId: string): { last_message_id: string } | undefined {
@@ -181,6 +187,7 @@ export interface EmailThreadStateRow {
   all_recipients: string;
   message_id_header: string;
   clarification_count: number;
+  reply_mode: string;
   task_id: string | null;
   created_at: string;
   updated_at: string;
@@ -368,6 +375,7 @@ export interface ScheduledJob {
   target_source: string;
   target_external_id: string;
   enabled: number;
+  run_once: number;
   created_by: string;
   last_run: string | null;
   next_run: string | null;
@@ -384,13 +392,14 @@ export function createScheduledJob(job: {
   target_source?: string;
   target_external_id?: string;
   enabled?: number;
+  run_once?: number;
   created_by?: string;
   next_run: string;
 }): number {
   const result = getDb()
     .prepare(
-      `INSERT INTO scheduled_jobs (name, schedule, prompt, target_source, target_external_id, enabled, created_by, next_run)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO scheduled_jobs (name, schedule, prompt, target_source, target_external_id, enabled, run_once, created_by, next_run)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       job.name,
@@ -399,6 +408,7 @@ export function createScheduledJob(job: {
       job.target_source || "dashboard",
       job.target_external_id || "scheduler",
       job.enabled ?? 1,
+      job.run_once ?? 0,
       job.created_by || "user",
       job.next_run
     );
