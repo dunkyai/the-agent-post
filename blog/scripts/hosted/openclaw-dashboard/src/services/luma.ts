@@ -75,6 +75,22 @@ function headers(): Record<string, string> {
   };
 }
 
+// --- Geo address helper ---
+// Luma requires all 9 fields in geo_address_json; nullable fields can be null.
+function buildGeoAddress(location: string): Record<string, string | null> {
+  return {
+    address: location,
+    city: null,
+    region: null,
+    country: null,
+    city_state: null,
+    full_address: location,
+    google_maps_place_id: null,
+    apple_maps_place_id: null,
+    description: null,
+  };
+}
+
 // --- API wrappers ---
 
 export async function lumaListEvents(params?: {
@@ -176,7 +192,9 @@ export async function lumaCreateEvent(input: {
     };
     if (input.description) body.description_md = input.description;
     if (input.location) {
-      body.geo_address_json = { type: "manual", address: input.location, description: input.location };
+      body.geo_address_json = buildGeoAddress(input.location);
+      body.geo_latitude = null;
+      body.geo_longitude = null;
     }
     if (input.meeting_url) body.meeting_url = input.meeting_url;
     if (input.visibility) body.visibility = input.visibility;
@@ -228,7 +246,9 @@ export async function lumaUpdateEvent(input: {
     if (input.timezone !== undefined) body.timezone = input.timezone;
     if (input.description !== undefined) body.description_md = input.description;
     if (input.location !== undefined) {
-      body.geo_address_json = input.location ? { address: input.location, full_address: input.location } : null;
+      body.geo_address_json = input.location ? buildGeoAddress(input.location) : null;
+      body.geo_latitude = null;
+      body.geo_longitude = null;
     }
     if (input.meeting_url !== undefined) body.meeting_url = input.meeting_url;
     if (input.visibility !== undefined) body.visibility = input.visibility;
