@@ -532,6 +532,8 @@ async function sendClarification(
   const account = accounts.find((a) => a.email === ctx.accountId);
   const canSend = account?.services.includes("gmail_send");
 
+  console.log(`[email-adapter] sendClarification: to=${ctx.latestSender}, threadId=${ctx.threadId || "(none)"}, inReplyTo=${ctx.messageIdHeader || "(none)"}, replyMode=${replyMode}`);
+
   if (replyMode === "send" && canSend) {
     const result = JSON.parse(
       await gmailSend(
@@ -764,6 +766,15 @@ async function sendEmailReply(
   const threadId = metadata.threadId;
   const inReplyTo = metadata.messageIdHeader;
 
+  console.log(`[email-adapter] sendEmailReply: to=${to}, subject=${subject}, threadId=${threadId || "(none)"}, inReplyTo=${inReplyTo || "(none)"}, replyMode=${replyMode}`);
+
+  if (!threadId) {
+    console.warn(`[email-adapter] Missing threadId — draft/reply will NOT be threaded`);
+  }
+  if (!inReplyTo) {
+    console.warn(`[email-adapter] Missing messageIdHeader (In-Reply-To) — threading may not work correctly`);
+  }
+
   // Build CC from allRecipients minus own email and to-address
   const ownEmail = accountId?.toLowerCase();
   const toEmail = extractEmail(to);
@@ -777,11 +788,13 @@ async function sendEmailReply(
       })
       .join(", ") || undefined;
 
+  let result: string;
   if (replyMode === "send" && canSend) {
-    await gmailSend(to, subject, body, accountId, undefined, cc, threadId, inReplyTo);
+    result = await gmailSend(to, subject, body, accountId, undefined, cc, threadId, inReplyTo);
   } else {
-    await gmailCreateDraft(to, subject, body, accountId, undefined, cc, threadId, inReplyTo);
+    result = await gmailCreateDraft(to, subject, body, accountId, undefined, cc, threadId, inReplyTo);
   }
+  console.log(`[email-adapter] sendEmailReply result: ${result}`);
 }
 
 // --- Helper: Extract email from "Name <email>" ---

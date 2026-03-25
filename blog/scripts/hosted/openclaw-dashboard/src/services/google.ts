@@ -299,6 +299,34 @@ export async function gmailReadMessage(messageId: string, accountId?: string): P
 }
 
 export async function gmailSend(to: string, subject: string, body: string, accountId?: string, from?: string, cc?: string, threadId?: string, inReplyTo?: string): Promise<string> {
+  // If we have a threadId but no In-Reply-To, try to fetch it from the thread
+  let resolvedInReplyTo = inReplyTo;
+  if (threadId && !resolvedInReplyTo) {
+    try {
+      const threadRes = await googleFetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=metadata&metadataHeaders=Message-ID`,
+        {},
+        accountId
+      );
+      if (threadRes.ok) {
+        const threadData: any = await threadRes.json();
+        const msgs = threadData.messages || [];
+        if (msgs.length > 0) {
+          const lastMsg = msgs[msgs.length - 1];
+          const msgIdHeader = (lastMsg.payload?.headers || []).find(
+            (h: any) => h.name.toLowerCase() === "message-id"
+          );
+          if (msgIdHeader?.value) {
+            resolvedInReplyTo = msgIdHeader.value;
+            console.log(`[gmail] Resolved In-Reply-To from thread: ${resolvedInReplyTo}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`[gmail] Failed to resolve In-Reply-To for thread ${threadId}:`, err);
+    }
+  }
+
   const emailHeaders = [
     `To: ${to}`,
     `Subject: ${subject}`,
@@ -306,9 +334,9 @@ export async function gmailSend(to: string, subject: string, body: string, accou
   ];
   if (from) emailHeaders.unshift(`From: ${from}`);
   if (cc) emailHeaders.push(`Cc: ${cc}`);
-  if (inReplyTo) {
-    emailHeaders.push(`In-Reply-To: ${inReplyTo}`);
-    emailHeaders.push(`References: ${inReplyTo}`);
+  if (resolvedInReplyTo) {
+    emailHeaders.push(`In-Reply-To: ${resolvedInReplyTo}`);
+    emailHeaders.push(`References: ${resolvedInReplyTo}`);
   }
 
   const email = [...emailHeaders, "", body].join("\r\n");
@@ -332,6 +360,34 @@ export async function gmailSend(to: string, subject: string, body: string, accou
 }
 
 export async function gmailCreateDraft(to: string, subject: string, body: string, accountId?: string, from?: string, cc?: string, threadId?: string, inReplyTo?: string): Promise<string> {
+  // If we have a threadId but no In-Reply-To, try to fetch it from the thread
+  let resolvedInReplyTo = inReplyTo;
+  if (threadId && !resolvedInReplyTo) {
+    try {
+      const threadRes = await googleFetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=metadata&metadataHeaders=Message-ID`,
+        {},
+        accountId
+      );
+      if (threadRes.ok) {
+        const threadData: any = await threadRes.json();
+        const msgs = threadData.messages || [];
+        if (msgs.length > 0) {
+          const lastMsg = msgs[msgs.length - 1];
+          const msgIdHeader = (lastMsg.payload?.headers || []).find(
+            (h: any) => h.name.toLowerCase() === "message-id"
+          );
+          if (msgIdHeader?.value) {
+            resolvedInReplyTo = msgIdHeader.value;
+            console.log(`[gmail] Resolved In-Reply-To from thread: ${resolvedInReplyTo}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`[gmail] Failed to resolve In-Reply-To for thread ${threadId}:`, err);
+    }
+  }
+
   const emailHeaders = [
     `To: ${to}`,
     `Subject: ${subject}`,
@@ -339,9 +395,9 @@ export async function gmailCreateDraft(to: string, subject: string, body: string
   ];
   if (from) emailHeaders.unshift(`From: ${from}`);
   if (cc) emailHeaders.push(`Cc: ${cc}`);
-  if (inReplyTo) {
-    emailHeaders.push(`In-Reply-To: ${inReplyTo}`);
-    emailHeaders.push(`References: ${inReplyTo}`);
+  if (resolvedInReplyTo) {
+    emailHeaders.push(`In-Reply-To: ${resolvedInReplyTo}`);
+    emailHeaders.push(`References: ${resolvedInReplyTo}`);
   }
 
   const email = [...emailHeaders, "", body].join("\r\n");
@@ -361,7 +417,7 @@ export async function gmailCreateDraft(to: string, subject: string, body: string
   }
 
   const result: any = await res.json();
-  return JSON.stringify({ success: true, draftId: result.id });
+  return JSON.stringify({ success: true, draftId: result.id, threadId: threadId || null });
 }
 
 export async function gmailAddLabel(messageId: string, labelName: string, accountId?: string): Promise<string> {
