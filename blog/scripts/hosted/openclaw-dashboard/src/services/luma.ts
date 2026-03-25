@@ -176,7 +176,7 @@ export async function lumaCreateEvent(input: {
     };
     if (input.description) body.description_md = input.description;
     if (input.location) {
-      body.geo_address_json = { address: input.location, full_address: input.location };
+      body.geo_address_json = { type: "manual", address: input.location, description: input.location };
     }
     if (input.meeting_url) body.meeting_url = input.meeting_url;
     if (input.visibility) body.visibility = input.visibility;
