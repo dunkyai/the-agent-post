@@ -97,7 +97,7 @@ export async function lumaListEvents(params?: {
 
     const data: any = await res.json();
     const events = (data.entries || []).map((e: any) => ({
-      id: e.event?.api_id,
+      id: e.event?.api_id || e.event?.id,
       name: e.event?.name,
       start_at: e.event?.start_at,
       end_at: e.event?.end_at,
@@ -138,7 +138,7 @@ export async function lumaGetEvent(eventId: string): Promise<string> {
     }));
 
     return JSON.stringify({
-      id: evt.api_id,
+      id: evt.api_id || evt.id,
       name: evt.name,
       description: evt.description,
       start_at: evt.start_at,
@@ -195,7 +195,7 @@ export async function lumaCreateEvent(input: {
     const evt = data.event || data;
     return JSON.stringify({
       success: true,
-      id: evt.api_id,
+      id: evt.api_id || evt.id,
       name: evt.name,
       start_at: evt.start_at,
       end_at: evt.end_at,
@@ -221,7 +221,7 @@ export async function lumaUpdateEvent(input: {
   if (!lumaConfig) return JSON.stringify({ error: "Luma is not connected" });
 
   try {
-    const body: any = { event_id: input.event_id };
+    const body: any = { id: input.event_id };
     if (input.name !== undefined) body.name = input.name;
     if (input.start_at !== undefined) body.start_at = input.start_at;
     if (input.end_at !== undefined) body.end_at = input.end_at;
@@ -250,7 +250,7 @@ export async function lumaUpdateEvent(input: {
     const evt = data.event || data;
     return JSON.stringify({
       success: true,
-      id: evt.api_id,
+      id: evt.api_id || evt.id,
       name: evt.name,
       start_at: evt.start_at,
       end_at: evt.end_at,
