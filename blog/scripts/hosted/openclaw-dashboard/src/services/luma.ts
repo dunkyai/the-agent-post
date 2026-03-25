@@ -221,7 +221,7 @@ export async function lumaUpdateEvent(input: {
   if (!lumaConfig) return JSON.stringify({ error: "Luma is not connected" });
 
   try {
-    const body: any = { id: input.event_id };
+    const body: any = { event_id: input.event_id };
     if (input.name !== undefined) body.name = input.name;
     if (input.start_at !== undefined) body.start_at = input.start_at;
     if (input.end_at !== undefined) body.end_at = input.end_at;
@@ -233,6 +233,7 @@ export async function lumaUpdateEvent(input: {
     if (input.meeting_url !== undefined) body.meeting_url = input.meeting_url;
     if (input.visibility !== undefined) body.visibility = input.visibility;
 
+    console.log(`[luma] Updating event ${input.event_id}:`, JSON.stringify(body));
     const res = await fetch(`${LUMA_API}/v1/event/update`, {
       method: "POST",
       headers: headers(),
@@ -240,7 +241,9 @@ export async function lumaUpdateEvent(input: {
     });
 
     if (!res.ok) {
-      return JSON.stringify({ error: `Luma API error (${res.status}): ${await res.text()}` });
+      const errBody = await res.text();
+      console.error(`[luma] Update failed (${res.status}):`, errBody);
+      return JSON.stringify({ error: `Luma API error (${res.status}): ${errBody}` });
     }
 
     const data: any = await res.json();
