@@ -72,7 +72,7 @@ export function getApiKey(provider: "anthropic" | "openai"): string {
 const SCHEDULING_TOOLS = [
   {
     name: "create_scheduled_job",
-    description: "Create a new scheduled job that runs on a cron schedule. Use this when the user asks to be reminded of something, schedule a recurring task, or set up periodic actions. IMPORTANT: Before creating a job, you MUST ask the user where they want the results delivered (e.g. Slack channel, Gmail, email). Do NOT default to dashboard — results shown in the dashboard chat are unreliable. Only create the job once the user has confirmed a delivery channel.",
+    description: "Create a new scheduled job. Use this when the user asks to be reminded of something, schedule a task, or set up periodic actions. IMPORTANT: Before creating a job, you MUST ask the user where they want the results delivered (e.g. Slack channel, Gmail, email). Do NOT default to dashboard — results shown in the dashboard chat are unreliable. Only create the job once the user has confirmed a delivery channel. For one-time tasks (e.g. 'post a tweet tomorrow at 9am', 'send an email on Friday'), set run_once to true — the job will auto-disable after running once. For recurring tasks (e.g. 'every Monday', 'daily at 9am'), leave run_once as false.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -81,6 +81,7 @@ const SCHEDULING_TOOLS = [
         prompt: { type: "string", description: "The prompt/instruction sent to the AI when the job fires" },
         target_source: { type: "string", enum: ["slack", "email"], description: "Where to deliver results. Must be one of: slack, email." },
         target_external_id: { type: "string", description: "The delivery target ID. For Slack: must be a real Slack channel ID (C...), DM ID (D...), or user ID (U...) — e.g. C01HCS46FPB or U07FQCAACN8. NEVER use placeholder values like 'scheduler' or 'dashboard'. If you don't know the ID, ask the user. For email: recipient email address." },
+        run_once: { type: "boolean", description: "If true, the job runs once at the scheduled time then auto-disables. Use for one-time tasks like 'post tomorrow at 9am'. Default: false (recurring)." },
       },
       required: ["name", "schedule", "prompt", "target_source", "target_external_id"],
     },
@@ -2112,12 +2113,14 @@ function executeSchedulingTool(toolName: string, input: any): string {
       }
       const jobTimezone = getSetting("timezone") || "America/Los_Angeles";
       const nextRun = getNextRun(input.schedule, new Date(), jobTimezone);
+      const runOnce = input.run_once ? 1 : 0;
       const id = createScheduledJob({
         name: input.name,
         schedule: input.schedule,
         prompt: input.prompt,
         target_source: input.target_source,
         target_external_id: input.target_external_id,
+        run_once: runOnce,
         created_by: "ai",
         next_run: nextRun.toISOString(),
       });
@@ -2126,6 +2129,7 @@ function executeSchedulingTool(toolName: string, input: any): string {
         job_id: id,
         name: input.name,
         schedule_description: describeCron(input.schedule),
+        run_once: !!runOnce,
         target: `${input.target_source}:${input.target_external_id}`,
         next_run: nextRun.toISOString(),
       });
