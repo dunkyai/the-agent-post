@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { getSetting, setSetting, getAllMemories, getAllScheduledJobs } from "../services/db";
+import { getSetting, setSetting, getAllMemories, getAllScheduledJobs, deleteMemory } from "../services/db";
 import { encrypt, decrypt } from "../services/encryption";
 
 const router = Router();
@@ -100,6 +100,23 @@ router.get("/settings/debug", (req: Request, res: Response) => {
     system_prompt: getSetting("system_prompt") || "",
   };
   res.json({ memories, context, scheduled_jobs: jobs });
+});
+
+// --- Memories management ---
+router.get("/memories", (req: Request, res: Response) => {
+  const memories = getAllMemories();
+  res.render("memories", {
+    memories,
+    flash: req.query.flash || null,
+  });
+});
+
+router.post("/memories/:id/delete", (req: Request, res: Response) => {
+  const id = parseInt(String(req.params.id), 10);
+  if (!isNaN(id)) {
+    deleteMemory(id);
+  }
+  res.redirect(303, "/memories?flash=Memory+deleted");
 });
 
 // Redirect old /agent routes to /settings
