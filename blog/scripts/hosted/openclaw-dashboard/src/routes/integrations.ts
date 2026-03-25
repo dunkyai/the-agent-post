@@ -624,6 +624,23 @@ router.post("/integrations/luma/disconnect", (req: Request, res: Response) => {
   res.redirect(303, "/integrations?flash=Luma+disconnected");
 });
 
+// Diagnostic: test Luma location update
+router.get("/integrations/luma/test-location", async (req: Request, res: Response) => {
+  const eventId = req.query.event_id as string;
+  const location = (req.query.location as string) || "123 Main St, San Francisco, CA";
+  if (!eventId) {
+    res.json({ error: "event_id query param required" });
+    return;
+  }
+  try {
+    const { lumaTestLocationUpdate } = require("../services/luma");
+    const result = await lumaTestLocationUpdate(eventId, location);
+    res.json(result);
+  } catch (err: unknown) {
+    res.json({ error: err instanceof Error ? err.message : "Test failed" });
+  }
+});
+
 router.post("/integrations/twitter/connect", (req: Request, res: Response) => {
   try {
     const url = buildTwitterOAuthUrl();
