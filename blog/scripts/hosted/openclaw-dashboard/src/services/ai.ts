@@ -2918,7 +2918,7 @@ export function buildSystemPrompt(extraContext?: string): string {
 
   // Inject user timezone
   const userTimezone = getSetting("timezone") || "America/Los_Angeles";
-  const tzContext = `The user's timezone is ${userTimezone}. Cron expressions in create_scheduled_job are interpreted in the user's local timezone, so use the user's local time directly. For example, if the user says "8:30 AM", use "30 8 * * *" — do NOT convert to UTC. Always confirm the scheduled time back to the user in their local timezone.`;
+  const tzContext = `The user's timezone is ${userTimezone}. ALWAYS convert any timestamps, dates, or times to the user's local timezone (${userTimezone}) before presenting them. This applies to ALL responses — event times from Luma/Calendar, email timestamps, scheduled job times, or any other time data from tools. Never show raw UTC or ISO timestamps to the user. Format times naturally (e.g. "Tuesday, March 25 at 3:00 PM PT"). Cron expressions in create_scheduled_job are interpreted in the user's local timezone, so use the user's local time directly — do NOT convert to UTC.`;
   systemPrompt = systemPrompt ? `${systemPrompt}\n\n${tzContext}` : tzContext;
 
   if (extraContext) {
