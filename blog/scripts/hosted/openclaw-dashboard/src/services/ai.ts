@@ -1178,7 +1178,7 @@ const LUMA_TOOLS = [
   },
   {
     name: "luma_update_event",
-    description: "Update an existing Luma event. Provide the event ID and any fields to change.",
+    description: "Update an existing Luma event. You MUST call this tool to make changes — never claim you updated an event without calling this tool. The tool will verify the update by re-fetching the event and returning its current state. Check the 'verified' response to confirm changes took effect.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -3100,7 +3100,7 @@ CRITICAL — READ THIS CAREFULLY: To post a tweet, you MUST call the twitter_pos
   // Inject Luma context
   if (isLumaRunning()) {
     const lumaUser = getLumaUserName();
-    const lumaContext = `You are connected to Luma (lu.ma) for event management${lumaUser ? ` as ${lumaUser}` : ""}. You can list upcoming events, get event details, create events, UPDATE existing events, view guest lists/RSVPs, add guests, and send invitations using the luma_* tools. Use luma_list_events to see upcoming events first. All times should be in ISO 8601 format with an IANA timezone. You CAN update events — use luma_update_event with the event ID and any fields to change (name, description, dates, location, meeting URL, visibility). Do NOT say you cannot update events. IMPORTANT: When creating events, always ask the user to confirm or provide the exact date/time, timezone, duration, whether it's virtual or in-person (and location if in-person), and a description before calling luma_create_event.`;
+    const lumaContext = `You are connected to Luma (lu.ma) for event management${lumaUser ? ` as ${lumaUser}` : ""}. You can list upcoming events, get event details, create events, UPDATE existing events, view guest lists/RSVPs, add guests, and send invitations using the luma_* tools. Use luma_list_events to see upcoming events first. All times should be in ISO 8601 format with an IANA timezone. You CAN update events — use luma_update_event with the event ID and any fields to change (name, description, dates, location, meeting URL, visibility). Do NOT say you cannot update events. CRITICAL: You MUST actually call the luma_update_event or luma_create_event tool to make changes. NEVER claim you updated or created an event without calling the tool — the user can see the Luma page and will know if you didn't actually make the change. After calling luma_update_event, check the verified response to confirm changes took effect and report the verified state to the user. IMPORTANT: When creating events, always ask the user to confirm or provide the exact date/time, timezone, duration, whether it's virtual or in-person (and location if in-person), and a description before calling luma_create_event.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${lumaContext}` : lumaContext;
   }
 

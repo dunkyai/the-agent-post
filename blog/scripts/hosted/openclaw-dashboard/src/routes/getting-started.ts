@@ -7,6 +7,7 @@ const router = Router();
 router.get("/getting-started", (req: Request, res: Response) => {
   const agentName = getSetting("agent_name") || "";
   const userName = getSetting("user_name") || "";
+  const linkedinUrl = getSetting("linkedin_url") || "";
   const contextCompany = getSetting("context_company") || "";
   const contextUser = getSetting("context_user") || "";
   const contextRules = getSetting("context_rules") || "";
@@ -19,6 +20,7 @@ router.get("/getting-started", (req: Request, res: Response) => {
   res.render("getting-started", {
     agentName,
     userName,
+    linkedinUrl,
     contextCompany,
     contextUser,
     contextRules,
@@ -59,6 +61,7 @@ router.post("/getting-started/research", async (req: Request, res: Response) => 
     const context = await generateContext(summary, agentName);
 
     // Step 3: Save to DB
+    setSetting("linkedin_url", linkedin_url.trim());
     if (context.context_company) setSetting("context_company", context.context_company);
     if (context.context_user) setSetting("context_user", context.context_user);
     if (context.context_rules) setSetting("context_rules", context.context_rules);

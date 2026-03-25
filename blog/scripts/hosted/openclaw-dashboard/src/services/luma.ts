@@ -266,10 +266,35 @@ export async function lumaUpdateEvent(input: {
       return JSON.stringify({ error: `Luma API error (${res.status}): ${errBody}` });
     }
 
+    // Re-fetch the event to verify the update actually took effect
+    const verifyRes = await fetch(`${LUMA_API}/v1/event/get?id=${encodeURIComponent(input.event_id)}`, {
+      headers: headers(),
+    });
+    if (verifyRes.ok) {
+      const verifyData: any = await verifyRes.json();
+      const verified = verifyData.event || verifyData;
+      return JSON.stringify({
+        success: true,
+        verified: true,
+        id: verified.api_id || verified.id,
+        name: verified.name,
+        description: verified.description ? verified.description.slice(0, 300) : null,
+        start_at: verified.start_at,
+        end_at: verified.end_at,
+        timezone: verified.timezone,
+        location: verified.geo_address_info?.address || verified.geo_address_info?.full_address || null,
+        meeting_url: verified.meeting_url,
+        visibility: verified.visibility,
+        url: verified.url,
+      });
+    }
+
+    // Verification fetch failed — fall back to update response
     const data: any = await res.json();
     const evt = data.event || data;
     return JSON.stringify({
       success: true,
+      verified: false,
       id: evt.api_id || evt.id,
       name: evt.name,
       start_at: evt.start_at,
