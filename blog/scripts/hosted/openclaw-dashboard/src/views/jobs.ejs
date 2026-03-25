@@ -49,6 +49,9 @@
         </div>
 
         <div style="display: flex; gap: 8px;">
+          <form method="POST" action="/jobs/<%= job.id %>/run" style="display:inline;">
+            <button type="submit" class="btn">Run Now</button>
+          </form>
           <form method="POST" action="/jobs/<%= job.id %>/toggle" style="display:inline;">
             <button type="submit" class="btn"><%= job.enabled ? 'Disable' : 'Enable' %></button>
           </form>
@@ -109,6 +112,8 @@
           + (job.last_result ? '<div><strong>Last result:</strong> <span style="white-space: pre-wrap; word-break: break-word;">' + escapeHtml(job.last_result) + '</span></div>' : '')
           + '</div>'
           + '<div style="display: flex; gap: 8px;">'
+          + '<form method="POST" action="/jobs/' + job.id + '/run" style="display:inline;">'
+          + '<button type="submit" class="btn">Run Now</button></form>'
           + '<form method="POST" action="/jobs/' + job.id + '/toggle" style="display:inline;">'
           + '<button type="submit" class="btn">' + (job.enabled ? 'Disable' : 'Enable') + '</button></form>'
           + '<form method="POST" action="/jobs/' + job.id + '/delete" style="display:inline;" onsubmit="return confirm(\'Delete this job?\')">'

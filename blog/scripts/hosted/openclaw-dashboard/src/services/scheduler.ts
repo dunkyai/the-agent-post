@@ -106,9 +106,17 @@ async function processTaskAsync(task: ReturnType<typeof getPendingTasks>[0]): Pr
   }
 }
 
-async function executeJob(jobId: number): Promise<void> {
+export async function runJobNow(jobId: number): Promise<void> {
   const job = getScheduledJob(jobId);
-  if (!job || !job.enabled) return;
+  if (!job) throw new Error("Job not found");
+  // Run even if disabled — user explicitly asked for it
+  console.log(`[scheduler] Manual run triggered for job #${jobId}: ${job.name}`);
+  await executeJob(jobId, true);
+}
+
+async function executeJob(jobId: number, force = false): Promise<void> {
+  const job = getScheduledJob(jobId);
+  if (!job || (!job.enabled && !force)) return;
 
   console.log(`Executing scheduled job #${job.id}: ${job.name}`);
 

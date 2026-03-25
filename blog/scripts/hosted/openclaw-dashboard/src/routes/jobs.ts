@@ -4,6 +4,7 @@ import {
   updateScheduledJob, deleteScheduledJob, getSetting,
 } from "../services/db";
 import { isValidCron, getNextRun, describeCron } from "../services/cron";
+import { runJobNow } from "../services/scheduler";
 
 const router = Router();
 
@@ -86,6 +87,19 @@ router.post("/jobs/:id/toggle", (req: Request, res: Response) => {
 
   updateScheduledJob(id, { enabled: newEnabled, next_run: nextRun || undefined });
   res.redirect(303, "/jobs?flash=Job+" + (newEnabled ? "enabled" : "disabled"));
+});
+
+router.post("/jobs/:id/run", async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id) || !getScheduledJob(id)) {
+    res.redirect(303, "/jobs?flash=Job+not+found");
+    return;
+  }
+  // Run async — don't block the request
+  runJobNow(id).catch((err: unknown) => {
+    console.error(`Manual job run #${id} failed:`, err instanceof Error ? err.message : err);
+  });
+  res.redirect(303, "/jobs?flash=Job+running+now…+refresh+in+a+moment+to+see+results");
 });
 
 router.post("/jobs/:id/delete", (req: Request, res: Response) => {
