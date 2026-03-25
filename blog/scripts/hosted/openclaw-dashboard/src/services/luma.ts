@@ -221,7 +221,7 @@ export async function lumaUpdateEvent(input: {
   if (!lumaConfig) return JSON.stringify({ error: "Luma is not connected" });
 
   try {
-    const body: any = { id: input.event_id };
+    const body: any = { event_api_id: input.event_id };
     if (input.name !== undefined) body.name = input.name;
     if (input.start_at !== undefined) body.start_at = input.start_at;
     if (input.end_at !== undefined) body.end_at = input.end_at;
