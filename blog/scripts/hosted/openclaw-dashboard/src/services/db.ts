@@ -527,10 +527,15 @@ export function getPendingTasks(): TaskRow[] {
     .all() as TaskRow[];
 }
 
-export function getRecentTasks(limit = 50): TaskRow[] {
+export function getRecentTasks(limit = 50, offset = 0): TaskRow[] {
   return getDb()
-    .prepare("SELECT * FROM tasks WHERE active = 1 ORDER BY created_at DESC LIMIT ?")
-    .all(limit) as TaskRow[];
+    .prepare("SELECT * FROM tasks WHERE active = 1 ORDER BY created_at DESC LIMIT ? OFFSET ?")
+    .all(limit, offset) as TaskRow[];
+}
+
+export function countActiveTasks(): number {
+  const row = getDb().prepare("SELECT COUNT(*) as cnt FROM tasks WHERE active = 1").get() as any;
+  return row?.cnt || 0;
 }
 
 export function appendExecutionLog(

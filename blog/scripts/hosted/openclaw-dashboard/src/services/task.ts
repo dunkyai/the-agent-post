@@ -10,6 +10,7 @@ import {
   updateTask as dbUpdateTask,
   getPendingTasks as dbGetPendingTasks,
   getRecentTasks as dbGetRecentTasks,
+  countActiveTasks as dbCountActiveTasks,
   appendExecutionLog as dbAppendLog,
   getExecutionLog as dbGetLog,
   deactivateOldTasks as dbDeactivate,
@@ -79,8 +80,12 @@ export function getPendingTasks(): Task[] {
   return dbGetPendingTasks().map(deserializeTask);
 }
 
-export function getRecentTasks(limit = 50): Task[] {
-  return dbGetRecentTasks(limit).map(deserializeTask);
+export function getRecentTasks(limit = 50, offset = 0): Task[] {
+  return dbGetRecentTasks(limit, offset).map(deserializeTask);
+}
+
+export function countActiveTasks(): number {
+  return dbCountActiveTasks();
 }
 
 export function deactivateOldTasks(days: number): number {
