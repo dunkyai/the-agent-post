@@ -3,6 +3,7 @@ import { getConfirmationRules } from "./db";
 import { getTaskExecutionLog, updateTaskStatus, getTaskById } from "./task";
 import { onTaskComplete as chatOnTaskComplete } from "../adapters/chat";
 import { onSlackTaskComplete } from "../adapters/slack";
+import { onEmailTaskComplete } from "../adapters/email";
 
 /**
  * Routes a completed/failed task's output to the appropriate channel.
@@ -18,8 +19,7 @@ export function routeTaskOutput(task: Task): void {
       onSlackTaskComplete(task);
       break;
     case "email":
-      // Phase 2: call gmail_create_draft()
-      console.log(`[router] Email routing not yet implemented for task ${task.task_id}`);
+      onEmailTaskComplete(task);
       break;
     default:
       console.log(`[router] Unknown channel "${channel}" for task ${task.task_id}`);

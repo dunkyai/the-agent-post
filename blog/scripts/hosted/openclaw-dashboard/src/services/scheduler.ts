@@ -5,6 +5,7 @@ import { getPendingTasks, markStuckTasksFailed, deactivateOldTasks } from "./tas
 import { processTask } from "./processor";
 import { routeTaskOutput } from "./router";
 import { updateChatStatus } from "../adapters/chat";
+import { cleanupStaleThreads } from "../adapters/email";
 
 let tickInterval: ReturnType<typeof setInterval> | null = null;
 let lastDeactivateCheck = 0;
@@ -83,6 +84,7 @@ async function tick(): Promise<void> {
       if (deactivated > 0) {
         console.log(`[scheduler] Deactivated ${deactivated} old task(s)`);
       }
+      cleanupStaleThreads();
     }
   } catch (err: unknown) {
     console.error("Scheduler tick error:", err instanceof Error ? err.message : err);
