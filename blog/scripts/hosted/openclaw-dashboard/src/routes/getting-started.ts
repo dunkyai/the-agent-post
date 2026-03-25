@@ -32,10 +32,11 @@ router.get("/getting-started", (req: Request, res: Response) => {
 });
 
 router.post("/getting-started", (req: Request, res: Response) => {
-  const { agent_name, user_name, context_company, context_user, context_rules, context_knowledge } = req.body;
+  const { agent_name, user_name, linkedin_url, context_company, context_user, context_rules, context_knowledge } = req.body;
 
   setSetting("agent_name", (agent_name || "").trim());
   setSetting("user_name", (user_name || "").trim());
+  setSetting("linkedin_url", (linkedin_url || "").trim());
   setSetting("context_company", (context_company || "").trim());
   setSetting("context_user", (context_user || "").trim());
   setSetting("context_rules", (context_rules || "").trim());

@@ -75,10 +75,81 @@ function headers(): Record<string, string> {
   };
 }
 
+// --- Diagnostics ---
+
+export async function lumaTestLocationUpdate(eventId: string, location: string): Promise<Record<string, any>> {
+  if (!lumaConfig) return { error: "Luma is not connected" };
+
+  const results: Record<string, any> = { event_id: eventId, location_input: location, steps: [] };
+
+  try {
+    // Step 1: Fetch current event state
+    const before = await fetch(`${LUMA_API}/v1/event/get?id=${encodeURIComponent(eventId)}`, { headers: headers() });
+    if (!before.ok) {
+      results.steps.push({ step: "fetch_before", status: before.status, body: await before.text() });
+      return results;
+    }
+    const beforeData: any = await before.json();
+    const beforeEvt = beforeData.event || beforeData;
+    results.steps.push({
+      step: "fetch_before",
+      status: 200,
+      geo_address_info: beforeEvt.geo_address_info || null,
+      geo_address_json: beforeEvt.geo_address_json || null,
+      geo_latitude: beforeEvt.geo_latitude || null,
+      geo_longitude: beforeEvt.geo_longitude || null,
+    });
+
+    // Step 2: Send update with geo_address_json (9-field format)
+    const geoJson = buildGeoAddress(location);
+    const updateBody = {
+      event_api_id: eventId,
+      geo_address_json: geoJson,
+      geo_latitude: null,
+      geo_longitude: null,
+    };
+    results.steps.push({ step: "update_request", body: updateBody });
+
+    const updateRes = await fetch(`${LUMA_API}/v1/event/update`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(updateBody),
+    });
+    const updateRaw = await updateRes.text();
+    results.steps.push({ step: "update_response", status: updateRes.status, body: updateRaw });
+
+    if (!updateRes.ok) return results;
+
+    // Step 3: Re-fetch to verify
+    const after = await fetch(`${LUMA_API}/v1/event/get?id=${encodeURIComponent(eventId)}`, { headers: headers() });
+    if (!after.ok) {
+      results.steps.push({ step: "fetch_after", status: after.status, body: await after.text() });
+      return results;
+    }
+    const afterData: any = await after.json();
+    const afterEvt = afterData.event || afterData;
+    results.steps.push({
+      step: "fetch_after",
+      status: 200,
+      geo_address_info: afterEvt.geo_address_info || null,
+      geo_address_json: afterEvt.geo_address_json || null,
+      geo_latitude: afterEvt.geo_latitude || null,
+      geo_longitude: afterEvt.geo_longitude || null,
+    });
+
+    results.location_set = !!(afterEvt.geo_address_info?.address || afterEvt.geo_address_info?.full_address);
+  } catch (err) {
+    results.error = err instanceof Error ? err.message : "Unknown error";
+  }
+
+  return results;
+}
+
 // --- Geo address helper ---
 // Luma requires all 9 fields in geo_address_json; nullable fields can be null.
 function buildGeoAddress(location: string): Record<string, string | null> {
   return {
+    type: "manual",
     address: location,
     city: null,
     region: null,

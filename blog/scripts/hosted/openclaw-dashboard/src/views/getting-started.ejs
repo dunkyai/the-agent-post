@@ -32,7 +32,7 @@
 
       <h3 class="gs-section">Auto-fill from LinkedIn</h3>
       <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px;">
-        <input type="url" id="linkedin_url" value="<%= linkedinUrl %>" placeholder="https://linkedin.com/in/yourname" style="flex: 1; font-size: 13px;">
+        <input type="url" id="linkedin_url" name="linkedin_url" value="<%= linkedinUrl %>" placeholder="https://linkedin.com/in/yourname" style="flex: 1; font-size: 13px;">
         <button type="button" id="research-btn" class="btn btn-sm" style="white-space: nowrap;">Research me</button>
       </div>
       <div id="research-status" style="display: none; font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;"></div>
@@ -66,6 +66,7 @@
   .gs-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .getting-started .form-group { margin-bottom: 8px; }
   .getting-started textarea, .getting-started input[type="text"], .getting-started input[type="url"] { font-size: 13px; }
+  .getting-started textarea { max-height: 80px; overflow-y: auto; resize: vertical; }
   .getting-started label { font-size: 12px; }
   .gs-chat-nudge { background: var(--bg-secondary, #f5f5f5); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; }
   .gs-nudge-text { font-size: 13px; margin-bottom: 8px; }
