@@ -7,11 +7,17 @@ import { routeTaskOutput } from "./router";
 import { updateChatStatus } from "../adapters/chat";
 
 let tickInterval: ReturnType<typeof setInterval> | null = null;
-let isProcessing = false;
 let lastDeactivateCheck = 0;
+
+// Track tasks currently being processed to avoid double-pickup
+const activeTasks = new Set<string>();
+const MAX_CONCURRENT_TASKS = 3;
 
 const TICK_INTERVAL_MS = 2_000; // 2 seconds
 const DEACTIVATE_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// Guard for cron jobs (still sequential)
+let isRunningCron = false;
 
 export function startScheduler(): void {
   if (tickInterval) return;
@@ -22,7 +28,7 @@ export function startScheduler(): void {
     console.log(`[scheduler] Marked ${stuck} stuck processing task(s) as failed on startup`);
   }
 
-  console.log(`Scheduler started (${TICK_INTERVAL_MS / 1000}s tick)`);
+  console.log(`Scheduler started (${TICK_INTERVAL_MS / 1000}s tick, max ${MAX_CONCURRENT_TASKS} concurrent tasks)`);
   tick();
   tickInterval = setInterval(() => tick(), TICK_INTERVAL_MS);
 }
@@ -40,30 +46,33 @@ export function isSchedulerRunning(): boolean {
 }
 
 async function tick(): Promise<void> {
-  if (isProcessing) return;
-  isProcessing = true;
-
   try {
-    // 1. Process pending tasks from the task queue
-    const pendingTasks = getPendingTasks();
-    for (const task of pendingTasks) {
-      console.log(`[scheduler] Processing task ${task.task_id} (${task.input.source_channel})`);
+    // 1. Process pending tasks — pick up new ones if we have capacity
+    const availableSlots = MAX_CONCURRENT_TASKS - activeTasks.size;
+    if (availableSlots > 0) {
+      const pendingTasks = getPendingTasks();
+      const newTasks = pendingTasks.filter(t => !activeTasks.has(t.task_id));
 
-      // Status callback for chat tasks
-      const onStatus = (status: string) => {
-        if (task.input.source_channel === "chat") {
-          updateChatStatus(task.task_id, status);
-        }
-      };
+      for (const task of newTasks.slice(0, availableSlots)) {
+        activeTasks.add(task.task_id);
+        console.log(`[scheduler] Processing task ${task.task_id} (${task.input.source_channel}) [${activeTasks.size}/${MAX_CONCURRENT_TASKS} active]`);
 
-      const completedTask = await processTask(task, onStatus);
-      routeTaskOutput(completedTask);
+        // Fire and forget — each task runs independently
+        processTaskAsync(task);
+      }
     }
 
-    // 2. Process due cron jobs (existing behavior)
-    const dueJobs = getDueJobs();
-    for (const job of dueJobs) {
-      await executeJob(job.id);
+    // 2. Process due cron jobs (sequential, guarded separately)
+    if (!isRunningCron) {
+      isRunningCron = true;
+      try {
+        const dueJobs = getDueJobs();
+        for (const job of dueJobs) {
+          await executeJob(job.id);
+        }
+      } finally {
+        isRunningCron = false;
+      }
     }
 
     // 3. Periodic cleanup: deactivate old tasks (once per day)
@@ -77,8 +86,23 @@ async function tick(): Promise<void> {
     }
   } catch (err: unknown) {
     console.error("Scheduler tick error:", err instanceof Error ? err.message : err);
+  }
+}
+
+async function processTaskAsync(task: ReturnType<typeof getPendingTasks>[0]): Promise<void> {
+  try {
+    const onStatus = (status: string) => {
+      if (task.input.source_channel === "chat") {
+        updateChatStatus(task.task_id, status);
+      }
+    };
+
+    const completedTask = await processTask(task, onStatus);
+    routeTaskOutput(completedTask);
+  } catch (err: unknown) {
+    console.error(`[scheduler] Task ${task.task_id} uncaught error:`, err instanceof Error ? err.message : err);
   } finally {
-    isProcessing = false;
+    activeTasks.delete(task.task_id);
   }
 }
 
