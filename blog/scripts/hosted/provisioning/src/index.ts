@@ -6,8 +6,10 @@ import healthRouter from "./routes/health";
 import oauthRouter from "./routes/oauth";
 import authRouter from "./routes/auth";
 import slackEventsRouter from "./routes/slack-events";
+import stripeWebhooksRouter from "./routes/stripe-webhooks";
 import { ensureBrowserService } from "./services/browser";
 import { cleanExpiredTokens } from "./services/store";
+import { enforceBillingActions } from "./services/billing";
 
 const app = express();
 app.disable("x-powered-by");
@@ -27,6 +29,9 @@ app.use((_req, res, next) => {
 
 // Slack events must be mounted before express.json() — needs raw body for signature verification
 app.use("/slack/events", slackEventsRouter);
+
+// Stripe webhooks must be mounted before express.json() — needs raw body for signature verification
+app.use("/stripe/webhooks", stripeWebhooksRouter);
 
 app.use(express.json());
 
@@ -54,6 +59,20 @@ app.listen(PORT, "0.0.0.0", async () => {
       console.error("Token cleanup error:", err);
     }
   }, 60 * 60 * 1000);
+
+  // Enforce billing actions every 12 hours (safety net for missed webhooks)
+  setInterval(async () => {
+    try {
+      await enforceBillingActions();
+    } catch (err) {
+      console.error("Billing enforcement error:", err);
+    }
+  }, 12 * 60 * 60 * 1000);
+
+  // Run billing enforcement once at startup (catch up on missed actions)
+  enforceBillingActions().catch(err => {
+    console.error("Startup billing enforcement error:", err);
+  });
 
   // Start browser service container if not already running
   try {

@@ -6,6 +6,7 @@ export interface Instance {
   status: "provisioning" | "running" | "suspended" | "deleted";
   stripeCustomerId: string;
   stripeSubscriptionId: string;
+  subscriptionStatus: "active" | "past_due" | "canceled" | "unpaid";
   gatewayToken: string;
   containerId: string | null;
   createdAt: string;
