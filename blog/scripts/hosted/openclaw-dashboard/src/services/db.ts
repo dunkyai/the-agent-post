@@ -21,6 +21,13 @@ export function getDb(): Database.Database {
   return db;
 }
 
+export function resetDb(): void {
+  if (db) {
+    db.close();
+    db = undefined as any;
+  }
+}
+
 function initSchema(): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS settings (
