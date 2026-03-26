@@ -7,6 +7,7 @@ const router = Router();
 router.get("/getting-started", (req: Request, res: Response) => {
   const agentName = getSetting("agent_name") || "";
   const userName = getSetting("user_name") || "";
+  const userEmail = getSetting("user_email") || "";
   const linkedinUrl = getSetting("linkedin_url") || "";
   const contextCompany = getSetting("context_company") || "";
   const contextUser = getSetting("context_user") || "";
@@ -20,6 +21,7 @@ router.get("/getting-started", (req: Request, res: Response) => {
   res.render("getting-started", {
     agentName,
     userName,
+    userEmail,
     linkedinUrl,
     contextCompany,
     contextUser,
@@ -32,10 +34,11 @@ router.get("/getting-started", (req: Request, res: Response) => {
 });
 
 router.post("/getting-started", (req: Request, res: Response) => {
-  const { agent_name, user_name, linkedin_url, context_company, context_user, context_rules, context_knowledge } = req.body;
+  const { agent_name, user_name, user_email, linkedin_url, context_company, context_user, context_rules, context_knowledge } = req.body;
 
   setSetting("agent_name", (agent_name || "").trim());
   setSetting("user_name", (user_name || "").trim());
+  setSetting("user_email", (user_email || "").trim());
   setSetting("linkedin_url", (linkedin_url || "").trim());
   setSetting("context_company", (context_company || "").trim());
   setSetting("context_user", (context_user || "").trim());
