@@ -158,7 +158,14 @@ export function onTaskComplete(task: Task): void {
   if (task.status === "completed") {
     state.result = { role: "assistant", content: task.output.result || "" };
   } else if (task.status === "failed") {
-    state.error = task.output.error || "Task failed";
+    const error = task.output.error || "Task failed";
+    if (error === "MESSAGE_LIMIT_REACHED") {
+      const limit = process.env.MESSAGE_LIMIT || "250";
+      state.result = { role: "assistant", content: `You've used all ${limit} messages for this month. Your limit resets on the 1st.\n\nVisit your **Settings** page to manage your plan.` };
+      state.done = true;
+      return;
+    }
+    state.error = error;
   } else {
     // Still in progress — update status
     return;

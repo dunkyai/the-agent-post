@@ -17,6 +17,7 @@ interface CreateInstancePayload {
   email: string;
   stripeCustomerId: string;
   stripeSubscriptionId: string;
+  plan?: "standard" | "pro";
 }
 
 async function provisioningFetch(

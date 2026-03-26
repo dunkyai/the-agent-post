@@ -426,6 +426,15 @@ export function getScheduledJob(id: number): ScheduledJob | undefined {
   return getDb().prepare("SELECT * FROM scheduled_jobs WHERE id = ?").get(id) as ScheduledJob | undefined;
 }
 
+export function getMonthlyTaskCount(): number {
+  const now = new Date();
+  const startOfMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01 00:00:00`;
+  const row = getDb().prepare(
+    "SELECT COUNT(*) as count FROM tasks WHERE status = 'completed' AND created_at >= ?"
+  ).get(startOfMonth) as { count: number };
+  return row.count;
+}
+
 export function getAllScheduledJobs(): ScheduledJob[] {
   return getDb()
     .prepare("SELECT * FROM scheduled_jobs ORDER BY created_at DESC")

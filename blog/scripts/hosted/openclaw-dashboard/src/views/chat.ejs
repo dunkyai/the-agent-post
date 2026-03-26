@@ -31,6 +31,7 @@
         <input type="text" id="chatInput" placeholder="Type a message..." autocomplete="off" required>
         <button type="submit" class="btn" id="chatSend">Send</button>
       </form>
+      <div id="usageIndicator" style="text-align: center; font-size: 11px; color: var(--text-secondary); padding: 4px 0 0;"></div>
     </div>
   </div>
 </div>
@@ -41,4 +42,16 @@
   };
 </script>
 <script src="/chat.js?v=<%= Date.now() %>"></script>
+<script>
+(function() {
+  fetch("/usage/api").then(function(r) { return r.json(); }).then(function(d) {
+    var el = document.getElementById("usageIndicator");
+    if (!el) return;
+    var pct = d.used / d.limit;
+    var color = pct >= 1 ? "#DC2626" : pct >= 0.8 ? "#D97706" : "var(--text-secondary)";
+    el.style.color = color;
+    el.textContent = d.used + " / " + d.limit + " messages this month";
+  }).catch(function() {});
+})();
+</script>
 <%- include('partials/foot') %>

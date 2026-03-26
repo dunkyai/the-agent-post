@@ -24,7 +24,6 @@ describe("Settings", () => {
       .post("/settings")
       .set("Cookie", cookie)
       .send({
-        provider: "anthropic",
         model: "claude-sonnet-4-6",
         temperature: "0.5",
         max_tokens: "8192",
@@ -37,55 +36,6 @@ describe("Settings", () => {
     expect(getSetting("temperature")).toBe("0.5");
     expect(getSetting("max_tokens")).toBe("8192");
     expect(getSetting("system_prompt")).toBe("You are a helpful assistant.");
-  });
-
-  it("POST /settings encrypts API key", async () => {
-    const app = getTestApp();
-    await app
-      .post("/settings")
-      .set("Cookie", cookie)
-      .send({
-        provider: "anthropic",
-        api_key: "sk-ant-test-key-12345",
-        temperature: "1",
-        max_tokens: "4096",
-      });
-
-    const stored = getSetting("anthropic_api_key");
-    expect(stored).toBeDefined();
-    // Should be encrypted (format: iv:tag:ciphertext, all hex)
-    expect(stored).not.toBe("sk-ant-test-key-12345");
-    expect(stored!.split(":")).toHaveLength(3);
-  });
-
-  it("POST /settings does not overwrite API key with masked value", async () => {
-    const app = getTestApp();
-
-    // Save a real key first
-    await app
-      .post("/settings")
-      .set("Cookie", cookie)
-      .send({
-        provider: "anthropic",
-        api_key: "sk-ant-real-key",
-        temperature: "1",
-        max_tokens: "4096",
-      });
-
-    const originalKey = getSetting("anthropic_api_key");
-
-    // Submit with masked key (as browser would)
-    await app
-      .post("/settings")
-      .set("Cookie", cookie)
-      .send({
-        provider: "anthropic",
-        api_key: "••••••••••••",
-        temperature: "1",
-        max_tokens: "4096",
-      });
-
-    expect(getSetting("anthropic_api_key")).toBe(originalKey);
   });
 
   it("GET /settings/debug returns JSON", async () => {

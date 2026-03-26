@@ -56,6 +56,8 @@ db.exec(`
 
 // Migrations
 try { db.exec("ALTER TABLE instances ADD COLUMN subscription_status TEXT NOT NULL DEFAULT 'active'"); } catch {}
+try { db.exec("ALTER TABLE instances ADD COLUMN plan TEXT NOT NULL DEFAULT 'standard'"); } catch {}
+try { db.exec("ALTER TABLE instances ADD COLUMN message_limit INTEGER NOT NULL DEFAULT 250"); } catch {}
 
 function rowToInstance(row: Record<string, unknown>): Instance {
   return {
@@ -69,6 +71,8 @@ function rowToInstance(row: Record<string, unknown>): Instance {
     subscriptionStatus: (row.subscription_status as Instance["subscriptionStatus"]) || "active",
     gatewayToken: row.gateway_token as string,
     containerId: (row.container_id as string) || null,
+    plan: (row.plan as Instance["plan"]) || "standard",
+    messageLimit: (row.message_limit as number) || 250,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -112,7 +116,7 @@ export function listInstances(): Instance[] {
   return rows.map(rowToInstance);
 }
 
-export function updateInstance(id: string, updates: Partial<Pick<Instance, "status" | "containerId" | "subscriptionStatus">>): Instance | null {
+export function updateInstance(id: string, updates: Partial<Pick<Instance, "status" | "containerId" | "subscriptionStatus" | "plan" | "messageLimit">>): Instance | null {
   const sets: string[] = ["updated_at = datetime('now')"];
   const values: unknown[] = [];
 
@@ -127,6 +131,14 @@ export function updateInstance(id: string, updates: Partial<Pick<Instance, "stat
   if (updates.subscriptionStatus !== undefined) {
     sets.push("subscription_status = ?");
     values.push(updates.subscriptionStatus);
+  }
+  if (updates.plan !== undefined) {
+    sets.push("plan = ?");
+    values.push(updates.plan);
+  }
+  if (updates.messageLimit !== undefined) {
+    sets.push("message_limit = ?");
+    values.push(updates.messageLimit);
   }
 
   values.push(id);

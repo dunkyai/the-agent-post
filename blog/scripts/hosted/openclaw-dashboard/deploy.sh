@@ -35,7 +35,7 @@ fi
 # --- Fetch instances from provisioning DB ---
 echo ""
 echo "Fetching instances from provisioning DB..."
-INSTANCES=$(ssh "$SERVER" "sqlite3 -separator '|' $PROVISIONING_DB \"SELECT id, port, gateway_token FROM instances WHERE status='running';\"")
+INSTANCES=$(ssh "$SERVER" "sqlite3 -separator '|' $PROVISIONING_DB \"SELECT id, port, gateway_token, COALESCE(plan, 'standard'), COALESCE(message_limit, 250) FROM instances WHERE status='running';\"")
 
 if [ -z "$INSTANCES" ]; then
   echo "ERROR: No running instances found in provisioning DB"
@@ -43,19 +43,19 @@ if [ -z "$INSTANCES" ]; then
 fi
 
 echo "Found instances:"
-while IFS='|' read -r ID PORT TOKEN; do
-  echo "  $ID -> port $PORT"
+while IFS='|' read -r ID PORT TOKEN PLAN MLIMIT; do
+  echo "  $ID -> port $PORT (plan=$PLAN, limit=$MLIMIT)"
 done <<< "$INSTANCES"
 echo ""
 
 # --- Filter based on target ---
 filter_instances() {
-  while IFS='|' read -r ID PORT TOKEN; do
+  while IFS='|' read -r ID PORT TOKEN PLAN MLIMIT; do
     case "$TARGET" in
-      all)      echo "$ID|$PORT|$TOKEN" ;;
-      staging)  [ "$ID" = "staging" ] && echo "$ID|$PORT|$TOKEN" || true ;;
-      prod)     [ "$ID" != "staging" ] && echo "$ID|$PORT|$TOKEN" || true ;;
-      *)        [ "$ID" = "$TARGET" ] && echo "$ID|$PORT|$TOKEN" || true ;;
+      all)      echo "$ID|$PORT|$TOKEN|$PLAN|$MLIMIT" ;;
+      staging)  [ "$ID" = "staging" ] && echo "$ID|$PORT|$TOKEN|$PLAN|$MLIMIT" || true ;;
+      prod)     [ "$ID" != "staging" ] && echo "$ID|$PORT|$TOKEN|$PLAN|$MLIMIT" || true ;;
+      *)        [ "$ID" = "$TARGET" ] && echo "$ID|$PORT|$TOKEN|$PLAN|$MLIMIT" || true ;;
     esac
   done <<< "$INSTANCES"
 }
@@ -85,7 +85,7 @@ fi
 
 # --- Deploy a single container ---
 deploy_instance() {
-  local ID=$1 PORT=$2 TOKEN=$3
+  local ID=$1 PORT=$2 TOKEN=$3 INST_PLAN=${4:-standard} INST_MLIMIT=${5:-250}
 
   echo "--- Deploying openclaw-$ID (port $PORT) ---"
 
@@ -129,6 +129,9 @@ deploy_instance() {
       -e TWITTER_CLIENT_SECRET="$TWITTER_CLIENT_SECRET" \\
       -e GROQ_API_KEY="$GROQ_API_KEY" \\
       -e PIXABAY_API_KEY="$PIXABAY_API_KEY" \\
+      -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \\
+      -e MESSAGE_LIMIT="$INST_MLIMIT" \\
+      -e PLAN="$INST_PLAN" \\
       $([ "$ID" = "cb1d6d97" ] && echo '-e SKIP_AUTH=true') \\
       $IMAGE
 EOF
@@ -153,8 +156,8 @@ EOF
 
 # --- Deploy all filtered instances ---
 FAILED=0
-while IFS='|' read -r ID PORT TOKEN; do
-  deploy_instance "$ID" "$PORT" "$TOKEN" || FAILED=$((FAILED + 1))
+while IFS='|' read -r ID PORT TOKEN PLAN MLIMIT; do
+  deploy_instance "$ID" "$PORT" "$TOKEN" "$PLAN" "$MLIMIT" || FAILED=$((FAILED + 1))
 done <<< "$FILTERED"
 
 # --- Summary ---

@@ -55,10 +55,24 @@ export async function POST(req: NextRequest) {
           break;
         }
 
+        // Detect plan from price ID
+        const proPriceId = process.env.STRIPE_PRO_PRICE_ID;
+        let plan: "standard" | "pro" = "standard";
+        if (proPriceId && subscriptionId) {
+          try {
+            const sub = await stripe.subscriptions.retrieve(subscriptionId);
+            const priceId = sub.items.data[0]?.price?.id;
+            if (priceId === proPriceId) plan = "pro";
+          } catch {
+            // Default to standard if lookup fails
+          }
+        }
+
         const instance = await createInstance({
           email,
           stripeCustomerId: customerId,
           stripeSubscriptionId: subscriptionId,
+          plan,
         });
 
         const dashboardUrl = `https://${instance.subdomain}.agents.theagentpost.co`;

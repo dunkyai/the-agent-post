@@ -2,86 +2,274 @@
 <div class="app">
   <%- include('partials/nav', { active: 'getting-started' }) %>
   <div class="main getting-started">
-    <h2>Getting Started</h2>
+    <div class="gs-header">
+      <h2>Getting Started</h2>
+      <p class="gs-subtitle">Set up your agent's identity and context so it can work on your behalf.</p>
+    </div>
     <%- include('partials/flash', { flash }) %>
 
     <% if (contextFilled < contextTotal) { %>
     <div class="gs-chat-nudge">
-      <div class="gs-nudge-text">
-        <strong>Tip:</strong> Head to <a href="/chat">Chat</a> and your agent will ask you questions to auto-fill these fields.
+      <div class="gs-nudge-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       </div>
-      <div class="gs-progress">
-        <div class="gs-progress-bar" style="width: <%= (contextFilled / contextTotal * 100) %>%;"></div>
+      <div class="gs-nudge-content">
+        <div class="gs-nudge-text">
+          <strong>Skip the forms.</strong> Head to <a href="/chat">Chat</a> and your agent will learn about you through conversation.
+        </div>
+        <div class="gs-progress">
+          <div class="gs-progress-bar" style="width: <%= (contextFilled / contextTotal * 100) %>%;"></div>
+        </div>
+        <div class="gs-progress-label"><%= contextFilled %> of <%= contextTotal %> fields completed</div>
       </div>
-      <div class="gs-progress-label"><%= contextFilled %>/<%= contextTotal %> context fields filled</div>
     </div>
     <% } %>
 
+    <div class="gs-tabs">
+      <button type="button" class="gs-tab active" data-tab="profile">Profile</button>
+      <button type="button" class="gs-tab" data-tab="context">Context</button>
+    </div>
+
     <form method="POST" action="/getting-started">
-      <h3 class="gs-section">Identity</h3>
-      <div class="gs-row">
-        <div class="form-group">
-          <label for="agent_name">Agent Name</label>
-          <input type="text" id="agent_name" name="agent_name" value="<%= agentName %>" placeholder="e.g. Archie, Nova, Pepper...">
+      <div class="gs-tab-panel active" data-panel="profile">
+        <div class="gs-card">
+          <div class="gs-card-header">
+            <h3>Identity</h3>
+            <p>Basic information about you and your agent.</p>
+          </div>
+          <div class="gs-card-body">
+            <div class="gs-row">
+              <div class="form-group">
+                <label for="agent_name">Agent Name</label>
+                <input type="text" id="agent_name" name="agent_name" value="<%= agentName %>" placeholder="e.g. Archie, Nova, Pepper...">
+              </div>
+              <div class="form-group">
+                <label for="user_name">Your Name</label>
+                <input type="text" id="user_name" name="user_name" value="<%= userName %>" placeholder="e.g. Elizabeth, Alex...">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="user_email">Your Email</label>
+              <input type="email" id="user_email" name="user_email" value="<%= userEmail %>" placeholder="e.g. you@example.com">
+              <span class="hint">Used for notifications when your agent needs clarification on an email</span>
+            </div>
+          </div>
         </div>
-        <div class="form-group">
-          <label for="user_name">Your Name</label>
-          <input type="text" id="user_name" name="user_name" value="<%= userName %>" placeholder="e.g. Elizabeth, Alex...">
-        </div>
-        <div class="form-group">
-          <label for="user_email">Your Email</label>
-          <input type="email" id="user_email" name="user_email" value="<%= userEmail %>" placeholder="e.g. you@example.com">
-          <small style="color: var(--text-secondary); font-size: 11px;">Used for notifications when your agent needs clarification on an email</small>
+
+        <div class="gs-card">
+          <div class="gs-card-header">
+            <h3>LinkedIn Auto-fill</h3>
+            <p>Paste your LinkedIn URL and we'll fill in the context fields for you.</p>
+          </div>
+          <div class="gs-card-body">
+            <div class="gs-linkedin-row">
+              <input type="url" id="linkedin_url" name="linkedin_url" value="<%= linkedinUrl %>" placeholder="https://linkedin.com/in/yourname">
+              <button type="button" id="research-btn" class="btn btn-sm">Research me</button>
+            </div>
+            <div id="research-status" class="gs-research-status"></div>
+          </div>
         </div>
       </div>
 
-      <h3 class="gs-section">Auto-fill from LinkedIn</h3>
-      <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px;">
-        <input type="url" id="linkedin_url" name="linkedin_url" value="<%= linkedinUrl %>" placeholder="https://linkedin.com/in/yourname" style="flex: 1; font-size: 13px;">
-        <button type="button" id="research-btn" class="btn btn-sm" style="white-space: nowrap;">Research me</button>
-      </div>
-      <div id="research-status" style="display: none; font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;"></div>
-
-      <h3 class="gs-section">Agent Context</h3>
-      <div class="form-group">
-        <label for="context_company">Company</label>
-        <textarea id="context_company" name="context_company" rows="2" placeholder="What does your company do?"><%= contextCompany %></textarea>
-      </div>
-      <div class="form-group">
-        <label for="context_user">About You</label>
-        <textarea id="context_user" name="context_user" rows="2" placeholder="Your role and responsibilities"><%= contextUser %></textarea>
-      </div>
-      <div class="gs-row">
-        <div class="form-group">
-          <label for="context_rules">Rules</label>
-          <textarea id="context_rules" name="context_rules" rows="2" placeholder="Tone, guidelines"><%= contextRules %></textarea>
+      <div class="gs-tab-panel" data-panel="context">
+        <div class="gs-card">
+          <div class="gs-card-header">
+            <h3>Company</h3>
+            <p>Tell your agent about your business.</p>
+          </div>
+          <div class="gs-card-body">
+            <div class="form-group">
+              <label for="context_company">Company Description</label>
+              <textarea id="context_company" name="context_company" rows="4" placeholder="What does your company do? What products or services do you offer?"><%= contextCompany %></textarea>
+            </div>
+          </div>
         </div>
-        <div class="form-group">
-          <label for="context_knowledge">Knowledge</label>
-          <textarea id="context_knowledge" name="context_knowledge" rows="2" placeholder="Key facts, numbers"><%= contextKnowledge %></textarea>
+
+        <div class="gs-card">
+          <div class="gs-card-header">
+            <h3>About You</h3>
+            <p>Help your agent understand your role and how to assist you.</p>
+          </div>
+          <div class="gs-card-body">
+            <div class="form-group">
+              <label for="context_user">Your Role</label>
+              <textarea id="context_user" name="context_user" rows="4" placeholder="Your role, responsibilities, and what you'd like your agent to help with"><%= contextUser %></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="gs-card">
+          <div class="gs-card-header">
+            <h3>Behavior</h3>
+            <p>Set rules and provide knowledge your agent should always follow.</p>
+          </div>
+          <div class="gs-card-body">
+            <div class="form-group">
+              <label for="context_rules">Rules</label>
+              <textarea id="context_rules" name="context_rules" rows="3" placeholder="Communication style, tone preferences, things to avoid"><%= contextRules %></textarea>
+            </div>
+            <div class="form-group">
+              <label for="context_knowledge">Knowledge</label>
+              <textarea id="context_knowledge" name="context_knowledge" rows="3" placeholder="Key facts, numbers, terminology your agent should know"><%= contextKnowledge %></textarea>
+            </div>
+          </div>
         </div>
       </div>
 
-      <button type="submit" class="btn" style="margin-top: 4px;">Save</button>
+      <div class="gs-actions">
+        <button type="submit" class="btn">Save Changes</button>
+      </div>
     </form>
   </div>
 </div>
 <style>
-  .gs-section { font-size: 11px; text-transform: uppercase; font-weight: 600; color: var(--text-secondary); letter-spacing: 0.5px; margin: 0 0 8px; }
-  .gs-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .getting-started .form-group { margin-bottom: 8px; }
-  .getting-started textarea, .getting-started input[type="text"], .getting-started input[type="url"] { font-size: 13px; }
-  .getting-started textarea { max-height: 80px; overflow-y: auto; resize: vertical; }
-  .getting-started label { font-size: 12px; }
-  .gs-chat-nudge { background: var(--bg-secondary, #f5f5f5); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; }
-  .gs-nudge-text { font-size: 13px; margin-bottom: 8px; }
-  .gs-nudge-text a { color: var(--accent); font-weight: 500; }
-  .gs-progress { height: 4px; background: var(--border, #e0e0e0); border-radius: 2px; overflow: hidden; }
-  .gs-progress-bar { height: 100%; background: var(--accent, #4f46e5); border-radius: 2px; transition: width 0.3s; }
-  .gs-progress-label { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+  .getting-started { max-width: 720px; }
+  .gs-header { margin-bottom: 20px; }
+  .gs-header h2 { margin-bottom: 4px; }
+  .gs-subtitle { color: var(--text-secondary); font-size: 14px; margin: 0; }
+
+  .gs-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--rule-light);
+    padding-bottom: 0;
+  }
+  .gs-tab {
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    margin-bottom: -1px;
+  }
+  .gs-tab:hover { color: var(--fg); }
+  .gs-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .gs-tab-panel { display: none; }
+  .gs-tab-panel.active { display: block; }
+
+  .gs-card {
+    background: #fff;
+    border: 1px solid var(--rule-light);
+    border-radius: 12px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .gs-card-header { padding: 20px 24px 0; }
+  .gs-card-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 4px;
+    color: var(--fg);
+  }
+  .gs-card-header p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+  .gs-card-body { padding: 16px 24px 20px; }
+
+  .gs-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  .getting-started .form-group { margin-bottom: 14px; }
+  .getting-started .form-group:last-child { margin-bottom: 0; }
+
+  .getting-started input[type="text"],
+  .getting-started input[type="email"],
+  .getting-started input[type="url"],
+  .getting-started textarea {
+    border-radius: 10px;
+    font-size: 14px;
+    padding: 10px 14px;
+    background: var(--bg);
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .getting-started textarea {
+    min-height: 72px;
+    max-height: 200px;
+    resize: vertical;
+  }
+
+  .gs-linkedin-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .gs-linkedin-row input { flex: 1; }
+  .gs-linkedin-row .btn { white-space: nowrap; flex-shrink: 0; }
+
+  .gs-research-status {
+    display: none;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: var(--bg);
+    border-radius: 8px;
+  }
+
+  .gs-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: 4px 0 0;
+  }
+
+  .gs-chat-nudge {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    background: var(--tag-bg);
+    border: 1px solid #E9D5FF;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+  }
+  .gs-nudge-icon {
+    color: var(--accent);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .gs-nudge-content { flex: 1; min-width: 0; }
+  .gs-nudge-text { font-size: 14px; margin-bottom: 10px; line-height: 1.5; }
+  .gs-nudge-text a { color: var(--accent); font-weight: 600; text-decoration: none; }
+  .gs-nudge-text a:hover { text-decoration: underline; }
+  .gs-progress { height: 6px; background: #E9D5FF; border-radius: 3px; overflow: hidden; }
+  .gs-progress-bar { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s ease; }
+  .gs-progress-label { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+
+  @media (max-width: 600px) {
+    .gs-row { grid-template-columns: 1fr; }
+    .gs-linkedin-row { flex-direction: column; }
+    .gs-linkedin-row .btn { width: 100%; }
+    .gs-card-header, .gs-card-body { padding-left: 16px; padding-right: 16px; }
+  }
 </style>
 <script>
 (function () {
+  // --- Tab switching ---
+  var tabs = document.querySelectorAll(".gs-tab");
+  var panels = document.querySelectorAll(".gs-tab-panel");
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      var target = tab.getAttribute("data-tab");
+      tabs.forEach(function (t) { t.classList.remove("active"); });
+      panels.forEach(function (p) { p.classList.remove("active"); });
+      tab.classList.add("active");
+      document.querySelector('[data-panel="' + target + '"]').classList.add("active");
+    });
+  });
+
+  // --- LinkedIn research ---
   var researchBtn = document.getElementById("research-btn");
   var statusDiv = document.getElementById("research-status");
 
@@ -95,6 +283,7 @@
     researchBtn.textContent = "Researching...";
     statusDiv.style.display = "block";
     statusDiv.style.color = "var(--text-secondary)";
+    statusDiv.style.background = "var(--bg)";
     statusDiv.textContent = "Researching your LinkedIn profile...";
 
     fetch("/getting-started/research", {
@@ -115,8 +304,14 @@
       if (data.context_user) document.getElementById("context_user").value = data.context_user;
       if (data.context_rules) document.getElementById("context_rules").value = data.context_rules;
 
+      // Switch to Context tab so user can see the filled fields
+      tabs.forEach(function (t) { t.classList.remove("active"); });
+      panels.forEach(function (p) { p.classList.remove("active"); });
+      document.querySelector('[data-tab="context"]').classList.add("active");
+      document.querySelector('[data-panel="context"]').classList.add("active");
+
       statusDiv.style.color = "var(--success)";
-      statusDiv.textContent = "Done! Review the fields above and hit Save.";
+      statusDiv.textContent = "Done! Review the Context tab and hit Save.";
     })
     .catch(function () {
       researchBtn.disabled = false;

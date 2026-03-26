@@ -1,7 +1,7 @@
 import {
   getSetting, setSetting, getIntegration, getOrCreateConversation, addMessage, getMessages,
   getConversationsByType, createScheduledJob, getAllScheduledJobs, getScheduledJob,
-  deleteScheduledJob, addMemory, getAllMemories, deleteMemory, getMemory, findDuplicateMemory,
+  deleteScheduledJob, addMemory, getAllMemories, deleteMemory, getMemory, findDuplicateMemory, getMonthlyTaskCount,
 } from "./db";
 import { decrypt } from "./encryption";
 import { getNextRun, isValidCron, describeCron } from "./cron";
@@ -59,12 +59,12 @@ export function getProvider(model: string): "anthropic" | "openai" {
 }
 
 export function getApiKey(provider: "anthropic" | "openai"): string {
-  const key = provider === "anthropic" ? "anthropic_api_key" : "openai_api_key";
-  const encrypted = getSetting(key);
-  if (!encrypted) {
-    throw new Error(`No ${provider} API key configured. Go to Settings to add one.`);
+  const envKey = provider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY";
+  const key = process.env[envKey];
+  if (!key) {
+    throw new Error(`No ${provider} API key configured. Contact support.`);
   }
-  return decrypt(encrypted);
+  return key;
 }
 
 // --- Timezone conversion helper ---
@@ -2469,15 +2469,7 @@ export async function callAnthropic(
 
     if (!res.ok) {
       const body = await res.text();
-      if (body.includes("credit balance is too low") || body.includes("billing") || res.status === 402) {
-        setSetting("credit_warning", "Your Anthropic API credit balance is too low. Please add credits at console.anthropic.com to continue using your agent.");
-      }
       throw new Error(`Anthropic API error (${res.status}): ${body}`);
-    }
-
-    // Clear credit warning on successful API call
-    if (getSetting("credit_warning")) {
-      setSetting("credit_warning", "");
     }
 
     const data: any = await res.json();
@@ -2786,15 +2778,7 @@ export async function callOpenAI(
 
     if (!res.ok) {
       const body = await res.text();
-      if (body.includes("insufficient_quota") || body.includes("billing") || res.status === 402 || res.status === 429) {
-        setSetting("credit_warning", "Your OpenAI API credit balance is too low. Please add credits at platform.openai.com to continue using your agent.");
-      }
       throw new Error(`OpenAI API error (${res.status}): ${body}`);
-    }
-
-    // Clear credit warning on successful API call
-    if (getSetting("credit_warning")) {
-      setSetting("credit_warning", "");
     }
 
     const data: any = await res.json();
@@ -3398,6 +3382,13 @@ export async function processMessage(
 
   const provider = getProvider(model);
   const apiKey = getApiKey(provider);
+
+  // Check monthly usage limit
+  const messageLimit = parseInt(process.env.MESSAGE_LIMIT || "250", 10);
+  const usedThisMonth = getMonthlyTaskCount();
+  if (usedThisMonth >= messageLimit) {
+    throw new Error("MESSAGE_LIMIT_REACHED");
+  }
 
   const conversationId = getOrCreateConversation(source, externalId);
   addMessage(conversationId, "user", text);

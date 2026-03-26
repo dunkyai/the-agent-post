@@ -2,7 +2,6 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import path from "path";
 import { requireAuth } from "./middleware/auth";
-import { getSetting } from "./services/db";
 
 // Routes
 import loginRouter from "./routes/login";
@@ -15,6 +14,7 @@ import webhookRouter from "./routes/webhook";
 import jobsRouter from "./routes/jobs";
 import tasksRouter from "./routes/tasks";
 import bugReportRouter from "./routes/bug-report";
+import usageRouter from "./routes/usage";
 
 const app = express();
 app.disable("x-powered-by");
@@ -51,12 +51,6 @@ app.use(express.static(path.join(__dirname, "public")));
 // Auth middleware (skips /login, /health, /webhook/*)
 app.use(requireAuth);
 
-// Credit warning — available in all templates via res.locals
-app.use((_req, res, next) => {
-  res.locals.creditWarning = getSetting("credit_warning") || "";
-  next();
-});
-
 // Routes
 app.use(loginRouter);
 app.use(gettingStartedRouter);
@@ -68,6 +62,7 @@ app.use(webhookRouter);
 app.use(jobsRouter);
 app.use(tasksRouter);
 app.use(bugReportRouter);
+app.use(usageRouter);
 
 // Root redirect
 app.get("/", (_req, res) => {
