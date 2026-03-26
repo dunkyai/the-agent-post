@@ -14,6 +14,9 @@ interface SlackConfig {
 
 let slackConfig: SlackConfig | null = null;
 
+// Single source of truth for Slack output formatting — used by both @mention responses and scheduled jobs
+export const SLACK_OUTPUT_RULES = "Be BRIEF — 3 lines maximum. No preamble, no filler, no restating the question. Lead with the answer. Only elaborate if the user asks for more detail.";
+
 // Event deduplication
 const recentEventIds = new Set<string>();
 const EVENT_DEDUP_TTL = 5 * 60 * 1000; // 5 minutes
@@ -353,7 +356,7 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
         if (event.thread_ts) {
           threadContext = await fetchThreadContext(channelId, event.thread_ts, slackConfig.bot_user_id);
         }
-        let slackContext = "You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. Be BRIEF. This is Slack, not email — keep replies short (1-3 sentences when possible). No preamble, no filler, no restating the question. Lead with the answer. Only elaborate if the user asks for more detail. Always follow the user's formatting and style preferences (e.g. if they ask for no emojis, stop using emojis). IMPORTANT: You CAN handle audio files and voice clips in Slack. When a user shares audio, the system automatically transcribes it before you see the message — the transcribed text appears as [Audio transcription: ...] at the start of the message. You do NOT need to access files directly; transcription is handled for you. If asked whether you can process audio, say YES.";
+        let slackContext = `You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. ${SLACK_OUTPUT_RULES} Always follow the user's formatting and style preferences (e.g. if they ask for no emojis, stop using emojis). IMPORTANT: You CAN handle audio files and voice clips in Slack. When a user shares audio, the system automatically transcribes it before you see the message — the transcribed text appears as [Audio transcription: ...] at the start of the message. You do NOT need to access files directly; transcription is handled for you. If asked whether you can process audio, say YES.`;
         if (threadContext) {
           slackContext += `\n\n[Thread context — all messages in this thread prior to your current request]\n${threadContext}\n[End of thread context]`;
         }
@@ -380,7 +383,7 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
     }
 
     // Create task — scheduler picks it up within ~2s, router delivers reply
-    let slackContext = "You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. Be BRIEF. This is Slack, not email — keep replies short (1-3 sentences when possible). No preamble, no filler, no restating the question. Lead with the answer. Only elaborate if the user asks for more detail. Always follow the user's formatting and style preferences (e.g. if they ask for no emojis, stop using emojis). IMPORTANT: You CAN handle audio files and voice clips in Slack. When a user shares audio, the system automatically transcribes it before you see the message — the transcribed text appears as [Audio transcription: ...] at the start of the message. You do NOT need to access files directly; transcription is handled for you. If asked whether you can process audio, say YES.";
+    let slackContext = `You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. ${SLACK_OUTPUT_RULES} Always follow the user's formatting and style preferences (e.g. if they ask for no emojis, stop using emojis). IMPORTANT: You CAN handle audio files and voice clips in Slack. When a user shares audio, the system automatically transcribes it before you see the message — the transcribed text appears as [Audio transcription: ...] at the start of the message. You do NOT need to access files directly; transcription is handled for you. If asked whether you can process audio, say YES.`;
     if (threadContext) {
       slackContext += `\n\n[Thread context — all messages in this thread prior to your current request]\n${threadContext}\n[End of thread context]`;
     }
@@ -470,6 +473,40 @@ async function fetchThreadContext(channelId: string, threadTs: string, botUserId
     return lines.join("\n");
   } catch (err) {
     console.error("[slack] Failed to fetch thread context:", err instanceof Error ? err.message : err);
+    return "";
+  }
+}
+
+/**
+ * Fetch recent messages from a Slack channel for context.
+ * Used by scheduled jobs to understand recent activity in their target channel.
+ */
+export async function fetchChannelHistory(channelId: string, limit = 25): Promise<string> {
+  if (!slackConfig) return "";
+  try {
+    const res = await fetch(
+      `https://slack.com/api/conversations.history?channel=${channelId}&limit=${limit}`,
+      { headers: { Authorization: `Bearer ${slackConfig.bot_token}` } }
+    );
+    const data: any = await res.json();
+    if (!data.ok || !data.messages?.length) return "";
+
+    // conversations.history returns newest-first — reverse for chronological order
+    const messages = [...data.messages].reverse();
+
+    const lines: string[] = [];
+    for (const msg of messages) {
+      if (msg.bot_id || msg.user === slackConfig.bot_user_id) continue;
+      if (!msg.text?.trim()) continue;
+      const userName = await resolveUserName(msg.user || "unknown");
+      lines.push(`${userName}: ${msg.text.trim()}`);
+    }
+
+    if (lines.length === 0) return "";
+    console.log(`[slack] Fetched ${lines.length} channel messages as context for ${channelId}`);
+    return lines.join("\n");
+  } catch (err) {
+    console.error("[slack] Failed to fetch channel history:", err instanceof Error ? err.message : err);
     return "";
   }
 }
