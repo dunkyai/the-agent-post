@@ -54,6 +54,9 @@ db.exec(`
   );
 `);
 
+// Migrations
+try { db.exec("ALTER TABLE instances ADD COLUMN subscription_status TEXT NOT NULL DEFAULT 'active'"); } catch {}
+
 function rowToInstance(row: Record<string, unknown>): Instance {
   return {
     id: row.id as string,
@@ -63,6 +66,7 @@ function rowToInstance(row: Record<string, unknown>): Instance {
     status: row.status as Instance["status"],
     stripeCustomerId: row.stripe_customer_id as string,
     stripeSubscriptionId: row.stripe_subscription_id as string,
+    subscriptionStatus: (row.subscription_status as Instance["subscriptionStatus"]) || "active",
     gatewayToken: row.gateway_token as string,
     containerId: (row.container_id as string) || null,
     createdAt: row.created_at as string,
@@ -108,7 +112,7 @@ export function listInstances(): Instance[] {
   return rows.map(rowToInstance);
 }
 
-export function updateInstance(id: string, updates: Partial<Pick<Instance, "status" | "containerId">>): Instance | null {
+export function updateInstance(id: string, updates: Partial<Pick<Instance, "status" | "containerId" | "subscriptionStatus">>): Instance | null {
   const sets: string[] = ["updated_at = datetime('now')"];
   const values: unknown[] = [];
 
@@ -120,11 +124,22 @@ export function updateInstance(id: string, updates: Partial<Pick<Instance, "stat
     sets.push("container_id = ?");
     values.push(updates.containerId);
   }
+  if (updates.subscriptionStatus !== undefined) {
+    sets.push("subscription_status = ?");
+    values.push(updates.subscriptionStatus);
+  }
 
   values.push(id);
   db.prepare(`UPDATE instances SET ${sets.join(", ")} WHERE id = ?`).run(...values);
 
   return getInstance(id);
+}
+
+export function getBillingSuspendable(): Instance[] {
+  const rows = db.prepare(
+    "SELECT * FROM instances WHERE status = 'running' AND subscription_status != 'active'"
+  ).all() as Record<string, unknown>[];
+  return rows.map(rowToInstance);
 }
 
 export function deleteInstance(id: string): void {

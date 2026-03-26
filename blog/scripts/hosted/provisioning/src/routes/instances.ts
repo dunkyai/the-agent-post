@@ -38,6 +38,7 @@ router.post("/", async (req, res) => {
       status: "provisioning",
       stripeCustomerId,
       stripeSubscriptionId,
+      subscriptionStatus: "active",
       gatewayToken,
       containerId: null,
     });
