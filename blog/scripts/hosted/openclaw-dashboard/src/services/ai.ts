@@ -40,7 +40,7 @@ import {
 } from "./luma";
 import {
   isTwitterRunning, getTwitterUsername,
-  twitterGetMe, twitterPostTweet, twitterPostThread, twitterGetRecentTweets, twitterDeleteTweet,
+  twitterGetMe, twitterPostTweet, twitterPostThread, twitterGetRecentTweets, twitterDeleteTweet, twitterLookupTweet, twitterRetweet, twitterUndoRetweet,
 } from "./twitter";
 import {
   isBeehiivRunning, getBeehiivPublicationName,
@@ -1374,6 +1374,39 @@ const TWITTER_TOOLS = [
       required: ["tweet_id"],
     },
   },
+  {
+    name: "twitter_lookup_tweet",
+    description: "Look up a tweet by its ID or URL. Returns the tweet text, author, timestamp, and engagement metrics. Use this to verify a tweet before retweeting it.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        tweet_id_or_url: { type: "string", description: "A tweet ID (numeric) or full URL (e.g. https://x.com/user/status/123)" },
+      },
+      required: ["tweet_id_or_url"],
+    },
+  },
+  {
+    name: "twitter_retweet",
+    description: "Retweet (repost) a tweet. Accepts a tweet ID or URL. Returns confirmation with tweet details after retweeting.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        tweet_id_or_url: { type: "string", description: "A tweet ID (numeric) or full URL (e.g. https://x.com/user/status/123)" },
+      },
+      required: ["tweet_id_or_url"],
+    },
+  },
+  {
+    name: "twitter_undo_retweet",
+    description: "Undo a retweet (un-repost). Accepts a tweet ID or URL.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        tweet_id_or_url: { type: "string", description: "A tweet ID (numeric) or full URL (e.g. https://x.com/user/status/123)" },
+      },
+      required: ["tweet_id_or_url"],
+    },
+  },
 ];
 
 async function executeTwitterTool(toolName: string, input: any): Promise<string> {
@@ -1389,6 +1422,12 @@ async function executeTwitterTool(toolName: string, input: any): Promise<string>
         return await twitterGetRecentTweets(input.max_results);
       case "twitter_delete_tweet":
         return await twitterDeleteTweet(input.tweet_id);
+      case "twitter_lookup_tweet":
+        return await twitterLookupTweet(input.tweet_id_or_url);
+      case "twitter_retweet":
+        return await twitterRetweet(input.tweet_id_or_url);
+      case "twitter_undo_retweet":
+        return await twitterUndoRetweet(input.tweet_id_or_url);
       default:
         return JSON.stringify({ error: `Unknown Twitter tool: ${toolName}` });
     }
@@ -2312,6 +2351,9 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   twitter_post_thread: "Posting thread to X...",
   twitter_get_recent_tweets: "Checking recent tweets...",
   twitter_delete_tweet: "Deleting a tweet...",
+  twitter_lookup_tweet: "Looking up tweet...",
+  twitter_retweet: "Retweeting...",
+  twitter_undo_retweet: "Undoing retweet...",
   create_scheduled_job: "Creating a scheduled job...",
   list_scheduled_jobs: "Listing scheduled jobs...",
   delete_scheduled_job: "Deleting a scheduled job...",
@@ -2459,7 +2501,7 @@ export async function callAnthropic(
       const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
       const bufferToolNames = ["buffer_list_channels", "buffer_create_post", "buffer_list_posts", "buffer_delete_post"];
       const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
-      const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet"];
+      const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet"];
       const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
@@ -2697,7 +2739,7 @@ export async function callOpenAI(
   const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
   const bufferToolNames = ["buffer_list_profiles", "buffer_create_post", "buffer_get_pending", "buffer_get_sent"];
   const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
-  const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet"];
+  const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet"];
   const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
 
   const MAX_TOOL_ROUNDS = 50;
@@ -3164,6 +3206,16 @@ TWITTER WORKFLOW — ALWAYS follow these steps when the user asks you to tweet:
    - Thread (multiple tweets) → call twitter_post_thread ONCE with ALL tweets as an array
    NEVER call twitter_post_tweet multiple times to create a thread. The twitter_post_thread tool handles threading automatically by chaining replies.
    For scheduling, use create_scheduled_job with the finalized tweet text in the prompt.
+
+RETWEETS: You can retweet (repost) other users' tweets. All retweet tools accept either a tweet ID or a full URL (e.g. https://x.com/user/status/123).
+
+RETWEET WORKFLOW:
+1. LOOKUP: When the user asks to retweet something, first call twitter_lookup_tweet to fetch the tweet details (text, author, metrics).
+2. CONFIRM: Show the user what they're about to retweet — the author, tweet text, and engagement stats. Ask "Retweet this?" and wait for confirmation.
+3. RETWEET: After confirmation, call twitter_retweet. The response includes a post-retweet confirmation with the tweet details and updated metrics.
+4. REPORT: Tell the user the retweet is confirmed, with a link to the original tweet.
+
+To undo a retweet, use twitter_undo_retweet (no confirmation needed for undoing).
 
 IMPORTANT: Each tweet has a 280-character limit. Always count characters. When creating threads, break content into logical tweet-sized pieces. Never call twitter_post_tweet or twitter_post_thread without the user's explicit approval first.
 
