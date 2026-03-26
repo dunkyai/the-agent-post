@@ -33,10 +33,6 @@
     <form method="POST" action="/getting-started">
       <div class="gs-tab-panel active" data-panel="profile">
         <div class="gs-card">
-          <div class="gs-card-header">
-            <h3>Identity</h3>
-            <p>Basic information about you and your agent.</p>
-          </div>
           <div class="gs-card-body">
             <div class="gs-row">
               <div class="form-group">
@@ -53,15 +49,8 @@
               <input type="email" id="user_email" name="user_email" value="<%= userEmail %>" placeholder="e.g. you@example.com">
               <span class="hint">Used for notifications when your agent needs clarification on an email</span>
             </div>
-          </div>
-        </div>
-
-        <div class="gs-card">
-          <div class="gs-card-header">
-            <h3>LinkedIn Auto-fill</h3>
-            <p>Paste your LinkedIn URL and we'll fill in the context fields for you.</p>
-          </div>
-          <div class="gs-card-body">
+            <div class="gs-divider"></div>
+            <label class="gs-field-label">LinkedIn Auto-fill</label>
             <div class="gs-linkedin-row">
               <input type="url" id="linkedin_url" name="linkedin_url" value="<%= linkedinUrl %>" placeholder="https://linkedin.com/in/yourname">
               <button type="button" id="research-btn" class="btn btn-sm">Research me</button>
@@ -73,44 +62,24 @@
 
       <div class="gs-tab-panel" data-panel="context">
         <div class="gs-card">
-          <div class="gs-card-header">
-            <h3>Company</h3>
-            <p>Tell your agent about your business.</p>
-          </div>
           <div class="gs-card-body">
             <div class="form-group">
-              <label for="context_company">Company Description</label>
-              <textarea id="context_company" name="context_company" rows="4" placeholder="What does your company do? What products or services do you offer?"><%= contextCompany %></textarea>
-            </div>
-          </div>
-        </div>
-
-        <div class="gs-card">
-          <div class="gs-card-header">
-            <h3>About You</h3>
-            <p>Help your agent understand your role and how to assist you.</p>
-          </div>
-          <div class="gs-card-body">
-            <div class="form-group">
-              <label for="context_user">Your Role</label>
-              <textarea id="context_user" name="context_user" rows="4" placeholder="Your role, responsibilities, and what you'd like your agent to help with"><%= contextUser %></textarea>
-            </div>
-          </div>
-        </div>
-
-        <div class="gs-card">
-          <div class="gs-card-header">
-            <h3>Behavior</h3>
-            <p>Set rules and provide knowledge your agent should always follow.</p>
-          </div>
-          <div class="gs-card-body">
-            <div class="form-group">
-              <label for="context_rules">Rules</label>
-              <textarea id="context_rules" name="context_rules" rows="3" placeholder="Communication style, tone preferences, things to avoid"><%= contextRules %></textarea>
+              <label for="context_company">Company</label>
+              <textarea id="context_company" name="context_company" rows="3" placeholder="What does your company do? What products or services do you offer?"><%= contextCompany %></textarea>
             </div>
             <div class="form-group">
-              <label for="context_knowledge">Knowledge</label>
-              <textarea id="context_knowledge" name="context_knowledge" rows="3" placeholder="Key facts, numbers, terminology your agent should know"><%= contextKnowledge %></textarea>
+              <label for="context_user">About You</label>
+              <textarea id="context_user" name="context_user" rows="3" placeholder="Your role, responsibilities, and what you'd like your agent to help with"><%= contextUser %></textarea>
+            </div>
+            <div class="gs-row">
+              <div class="form-group">
+                <label for="context_rules">Rules</label>
+                <textarea id="context_rules" name="context_rules" rows="3" placeholder="Communication style, tone preferences, things to avoid"><%= contextRules %></textarea>
+              </div>
+              <div class="form-group">
+                <label for="context_knowledge">Knowledge</label>
+                <textarea id="context_knowledge" name="context_knowledge" rows="3" placeholder="Key facts, numbers, terminology your agent should know"><%= contextKnowledge %></textarea>
+              </div>
             </div>
           </div>
         </div>
@@ -124,14 +93,14 @@
 </div>
 <style>
   .getting-started { max-width: 720px; }
-  .gs-header { margin-bottom: 20px; }
+  .gs-header { margin-bottom: 16px; }
   .gs-header h2 { margin-bottom: 4px; }
   .gs-subtitle { color: var(--text-secondary); font-size: 14px; margin: 0; }
 
   .gs-tabs {
     display: flex;
     gap: 4px;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
     border-bottom: 1px solid var(--rule-light);
     padding-bottom: 0;
   }
@@ -160,26 +129,25 @@
     background: #fff;
     border: 1px solid var(--rule-light);
     border-radius: 12px;
-    margin-bottom: 20px;
-    overflow: hidden;
+    margin-bottom: 16px;
   }
-  .gs-card-header { padding: 20px 24px 0; }
-  .gs-card-header h3 {
-    font-size: 16px;
-    font-weight: 600;
-    margin: 0 0 4px;
-    color: var(--fg);
+  .gs-card-body { padding: 18px 22px; }
+
+  .gs-divider {
+    border-top: 1px solid var(--rule-light);
+    margin: 14px 0;
   }
-  .gs-card-header p {
+  .gs-field-label {
     font-size: 13px;
+    font-weight: 500;
     color: var(--text-secondary);
-    margin: 0;
+    margin-bottom: 8px;
+    display: block;
   }
-  .gs-card-body { padding: 16px 24px 20px; }
 
-  .gs-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .gs-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 
-  .getting-started .form-group { margin-bottom: 14px; }
+  .getting-started .form-group { margin-bottom: 12px; }
   .getting-started .form-group:last-child { margin-bottom: 0; }
 
   .getting-started input[type="text"],
@@ -230,8 +198,8 @@
     background: var(--tag-bg);
     border: 1px solid #E9D5FF;
     border-radius: 12px;
-    padding: 16px 20px;
-    margin-bottom: 20px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
   }
   .gs-nudge-icon {
     color: var(--accent);
