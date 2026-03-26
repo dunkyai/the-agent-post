@@ -67,6 +67,22 @@ async function handleStripeEvent(event: StripeWebhookEvent): Promise<void> {
 
       console.log(`[stripe] Subscription ${subscriptionId} → ${status} (instance ${instance.id})`);
 
+      // Detect plan change based on price ID
+      const proPriceId = process.env.STRIPE_PRO_PRICE_ID;
+      const standardPriceId = process.env.STRIPE_PRICE_ID;
+      const items = obj.items as { data?: Array<{ price?: { id?: string } }> } | undefined;
+      const currentPriceId = items?.data?.[0]?.price?.id;
+
+      if (currentPriceId && proPriceId && currentPriceId === proPriceId) {
+        console.log(`[stripe] Instance ${instance.id} upgraded to Pro`);
+        store.updateInstance(instance.id, { plan: "pro", messageLimit: 1000 });
+      } else if (currentPriceId && standardPriceId && currentPriceId === standardPriceId) {
+        if (instance.plan !== "standard") {
+          console.log(`[stripe] Instance ${instance.id} downgraded to Standard`);
+          store.updateInstance(instance.id, { plan: "standard", messageLimit: 250 });
+        }
+      }
+
       if (status === "active" || status === "trialing") {
         store.updateInstance(instance.id, { subscriptionStatus: "active" });
         // Resume if it was suspended for billing

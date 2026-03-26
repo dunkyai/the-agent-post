@@ -52,7 +52,13 @@ export async function onSlackTaskComplete(task: Task): Promise<void> {
     if (task.status === "completed" && task.output.result) {
       await sendSlackMessage(channelId, task.output.result, threadTs);
     } else if (task.status === "failed") {
-      await sendSlackMessage(channelId, "Sorry, I ran into an error processing that.", threadTs);
+      const error = task.output.error || "";
+      if (error === "MESSAGE_LIMIT_REACHED") {
+        const limit = process.env.MESSAGE_LIMIT || "250";
+        await sendSlackMessage(channelId, `I've used all ${limit} messages for this month. The limit resets on the 1st. Ask my admin to upgrade the plan for more messages.`, threadTs);
+      } else {
+        await sendSlackMessage(channelId, "Sorry, I ran into an error processing that.", threadTs);
+      }
     }
     console.log(`[slack-adapter] Task ${task.task_id} delivered to ${channelId}:${threadTs || "top"}`);
   } catch (err: unknown) {

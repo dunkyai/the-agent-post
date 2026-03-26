@@ -17,6 +17,7 @@ import {
   getOrCreateConversation,
   addMessage,
   getMessages,
+  getMonthlyTaskCount,
 } from "./db";
 
 export type StatusCallback = (status: string) => void;
@@ -47,6 +48,13 @@ export async function processTask(
 
     const provider = getProvider(model);
     const apiKey = getApiKey(provider);
+
+    // Check monthly usage limit
+    const messageLimit = parseInt(process.env.MESSAGE_LIMIT || "250", 10);
+    const usedThisMonth = getMonthlyTaskCount();
+    if (usedThisMonth >= messageLimit) {
+      throw new Error("MESSAGE_LIMIT_REACHED");
+    }
 
     // Get or create conversation for this task
     const source = task.input.source_channel;

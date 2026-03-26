@@ -1,27 +1,9 @@
 import { Router, Request, Response } from "express";
 import { getSetting, setSetting, getAllMemories, getAllScheduledJobs, deleteMemory } from "../services/db";
-import { encrypt, decrypt } from "../services/encryption";
 
 const router = Router();
 
-function getProvider(model: string): string {
-  if (model.startsWith("claude")) return "anthropic";
-  return "openai";
-}
-
-function hasValidKey(settingName: string): boolean {
-  try {
-    const raw = getSetting(settingName);
-    if (!raw) return false;
-    return !!decrypt(raw).trim();
-  } catch {
-    return false;
-  }
-}
-
 router.get("/settings", (req: Request, res: Response) => {
-  const hasAnthropicKey = hasValidKey("anthropic_api_key");
-  const hasOpenaiKey = hasValidKey("openai_api_key");
   const model = getSetting("model") || "claude-sonnet-4-20250514";
   const systemPrompt = getSetting("system_prompt") || "";
   const temperature = getSetting("temperature") || "0.7";
@@ -30,10 +12,7 @@ router.get("/settings", (req: Request, res: Response) => {
   const timezone = getSetting("timezone") || "America/Los_Angeles";
 
   res.render("settings", {
-    hasAnthropicKey,
-    hasOpenaiKey,
     model,
-    provider: getProvider(model),
     systemPrompt,
     temperature,
     maxTokens,
@@ -44,17 +23,7 @@ router.get("/settings", (req: Request, res: Response) => {
 });
 
 router.post("/settings", (req: Request, res: Response) => {
-  const { provider, api_key, model, system_prompt, temperature, max_tokens, session_expiry_days, timezone } = req.body;
-
-  if (!provider) {
-    res.redirect(303, "/settings?flash=Invalid+submission");
-    return;
-  }
-
-  if (api_key && api_key.trim() && !api_key.startsWith("••••")) {
-    const keyName = provider === "anthropic" ? "anthropic_api_key" : "openai_api_key";
-    setSetting(keyName, encrypt(api_key.trim()));
-  }
+  const { model, system_prompt, temperature, max_tokens, session_expiry_days, timezone } = req.body;
 
   if (model) {
     setSetting("model", model);

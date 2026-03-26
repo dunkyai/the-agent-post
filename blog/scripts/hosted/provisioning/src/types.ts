@@ -9,6 +9,8 @@ export interface Instance {
   subscriptionStatus: "active" | "past_due" | "canceled" | "unpaid";
   gatewayToken: string;
   containerId: string | null;
+  plan: "standard" | "pro";
+  messageLimit: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -17,4 +19,5 @@ export interface CreateInstanceRequest {
   email: string;
   stripeCustomerId: string;
   stripeSubscriptionId: string;
+  plan?: "standard" | "pro";
 }

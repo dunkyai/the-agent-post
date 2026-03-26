@@ -16,13 +16,16 @@ const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN || "";
 // POST /instances — create a new instance
 router.post("/", async (req, res) => {
   try {
-    const { email, stripeCustomerId, stripeSubscriptionId } =
+    const { email, stripeCustomerId, stripeSubscriptionId, plan } =
       req.body as CreateInstanceRequest;
 
     if (!email || !stripeCustomerId || !stripeSubscriptionId) {
       res.status(400).json({ error: "Missing required fields" });
       return;
     }
+
+    const instancePlan = plan === "pro" ? "pro" : "standard";
+    const messageLimit = instancePlan === "pro" ? 1000 : 250;
 
     const id = uuidv4().slice(0, 8);
     const subdomain = id;
@@ -41,6 +44,8 @@ router.post("/", async (req, res) => {
       subscriptionStatus: "active",
       gatewayToken,
       containerId: null,
+      plan: instancePlan,
+      messageLimit,
     });
 
     // Create Docker container
@@ -313,6 +318,78 @@ router.post("/:id/magic-link", async (req, res) => {
   } catch (err) {
     console.error("Magic link error:", err);
     res.status(500).json({ error: "Failed to send magic link" });
+  }
+});
+
+// GET /instances/:id/plan — get plan info for this instance
+router.get("/:id/plan", (req, res) => {
+  try {
+    const instance = store.getInstance(req.params.id);
+    if (!instance) {
+      res.status(404).json({ error: "Instance not found" });
+      return;
+    }
+
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (token !== instance.gatewayToken) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    res.json({ plan: instance.plan, message_limit: instance.messageLimit });
+  } catch (err) {
+    console.error("Failed to get plan:", err);
+    res.status(500).json({ error: "Failed to get plan" });
+  }
+});
+
+// GET /instances/:id/upgrade-url — create Stripe billing portal session
+router.get("/:id/upgrade-url", async (req, res) => {
+  try {
+    const instance = store.getInstance(req.params.id);
+    if (!instance) {
+      res.status(404).json({ error: "Instance not found" });
+      return;
+    }
+
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (token !== instance.gatewayToken) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeKey) {
+      res.status(500).json({ error: "Stripe not configured" });
+      return;
+    }
+
+    const returnUrl = `https://${instance.subdomain}.agents.theagentpost.co/settings`;
+
+    const response = await fetch("https://api.stripe.com/v1/billing_portal/sessions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${stripeKey}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        customer: instance.stripeCustomerId,
+        return_url: returnUrl,
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.error("[stripe] Billing portal error:", err);
+      res.status(500).json({ error: "Failed to create billing portal session" });
+      return;
+    }
+
+    const session = await response.json() as { url: string };
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error("Failed to create upgrade URL:", err);
+    res.status(500).json({ error: "Failed to create upgrade URL" });
   }
 });
 
