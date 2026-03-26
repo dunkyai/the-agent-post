@@ -272,17 +272,26 @@ export async function gmailReadMessage(messageId: string, accountId?: string): P
     headers[h.name.toLowerCase()] = h.value;
   }
 
-  // Extract body text
+  // Extract body text and attachment metadata
   let body = "";
-  function extractText(part: any): void {
+  const attachments: { filename: string; mimeType: string; size: number; attachmentId: string }[] = [];
+  function extractParts(part: any): void {
     if (part.mimeType === "text/plain" && part.body?.data) {
       body += Buffer.from(part.body.data, "base64url").toString("utf-8");
     }
+    if (part.filename && part.body?.attachmentId) {
+      attachments.push({
+        filename: part.filename,
+        mimeType: part.mimeType || "application/octet-stream",
+        size: part.body.size || 0,
+        attachmentId: part.body.attachmentId,
+      });
+    }
     if (part.parts) {
-      for (const p of part.parts) extractText(p);
+      for (const p of part.parts) extractParts(p);
     }
   }
-  if (msg.payload) extractText(msg.payload);
+  if (msg.payload) extractParts(msg.payload);
 
   return JSON.stringify({
     id: msg.id,
@@ -295,6 +304,78 @@ export async function gmailReadMessage(messageId: string, accountId?: string): P
     date: headers.date || "",
     body: body.slice(0, 10000),
     labelIds: msg.labelIds || [],
+    attachments,
+  });
+}
+
+export async function gmailGetAttachment(messageId: string, attachmentId: string, accountId?: string): Promise<string> {
+  const res = await googleFetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${attachmentId}`,
+    {},
+    accountId
+  );
+  if (!res.ok) return JSON.stringify({ error: `Failed to get attachment (${res.status})` });
+
+  const data: any = await res.json();
+  // Gmail returns base64url-encoded data
+  const rawBytes = Buffer.from(data.data, "base64url");
+
+  // For text-based formats, decode and return as text
+  // First check by reading the message to get the attachment's mimeType
+  const msgRes = await googleFetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=metadata`,
+    {},
+    accountId
+  );
+
+  let mimeType = "application/octet-stream";
+  let filename = "attachment";
+  if (msgRes.ok) {
+    const msg: any = await msgRes.json();
+    function findAttachment(part: any): void {
+      if (part.body?.attachmentId === attachmentId) {
+        mimeType = part.mimeType || mimeType;
+        filename = part.filename || filename;
+      }
+      if (part.parts) {
+        for (const p of part.parts) findAttachment(p);
+      }
+    }
+    if (msg.payload) findAttachment(msg.payload);
+  }
+
+  const textTypes = [
+    "text/plain", "text/csv", "text/html", "text/markdown",
+    "application/json", "application/xml", "text/xml",
+    "application/csv", "text/tab-separated-values",
+  ];
+
+  if (textTypes.some(t => mimeType.startsWith(t))) {
+    const text = rawBytes.toString("utf-8");
+    return JSON.stringify({
+      filename,
+      mimeType,
+      size: rawBytes.length,
+      content: text.slice(0, 50000),
+      truncated: text.length > 50000,
+    });
+  }
+
+  // For binary formats, return base64 (capped at 5MB)
+  if (rawBytes.length > 5 * 1024 * 1024) {
+    return JSON.stringify({
+      filename,
+      mimeType,
+      size: rawBytes.length,
+      error: "Attachment too large to return (>5MB). Try using a more specific tool if available.",
+    });
+  }
+
+  return JSON.stringify({
+    filename,
+    mimeType,
+    size: rawBytes.length,
+    content_base64: rawBytes.toString("base64"),
   });
 }
 
@@ -1940,6 +2021,22 @@ async function pollGmail(): Promise<void> {
       return text;
     }
 
+    // Helper to extract attachment metadata from email parts
+    function extractAttachments(part: any): Array<{ filename: string; mimeType: string; size: number }> {
+      const attachments: Array<{ filename: string; mimeType: string; size: number }> = [];
+      if (part.filename && part.body?.attachmentId) {
+        attachments.push({
+          filename: part.filename,
+          mimeType: part.mimeType || "application/octet-stream",
+          size: part.body.size || 0,
+        });
+      }
+      if (part.parts) {
+        for (const p of part.parts) attachments.push(...extractAttachments(p));
+      }
+      return attachments;
+    }
+
     for (const threadId of threadIds) {
       try {
         // Fetch the full thread
@@ -2035,11 +2132,13 @@ async function pollGmail(): Promise<void> {
           }
           let msgBody = msg.payload ? extractTextFromPart(msg.payload) : "";
           msgBody = sanitizeEmailContent(msgBody);
+          const msgAttachments = msg.payload ? extractAttachments(msg.payload) : [];
           threadMessages.push({
             from: msgHeaders.from || "",
             body: msgBody,
             timestamp: msgHeaders.date || "",
             messageId: msg.id,
+            ...(msgAttachments.length > 0 ? { attachments: msgAttachments } : {}),
           });
         }
 
