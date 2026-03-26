@@ -28,6 +28,11 @@
           <label for="user_name">Your Name</label>
           <input type="text" id="user_name" name="user_name" value="<%= userName %>" placeholder="e.g. Elizabeth, Alex...">
         </div>
+        <div class="form-group">
+          <label for="user_email">Your Email</label>
+          <input type="email" id="user_email" name="user_email" value="<%= userEmail %>" placeholder="e.g. you@example.com">
+          <small style="color: var(--text-secondary); font-size: 11px;">Used for notifications when your agent needs clarification on an email</small>
+        </div>
       </div>
 
       <h3 class="gs-section">Auto-fill from LinkedIn</h3>

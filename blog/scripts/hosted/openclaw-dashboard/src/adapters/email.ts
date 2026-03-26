@@ -81,22 +81,23 @@ function buildTriageSystemPrompt(): string {
 CRITICAL: ${agentName} is an AI assistant that receives emails on behalf of its owner.${userNameContext} Not all emails sent to this address are requests. People email each other — the assistant may just be CC'd, forwarded a thread for awareness, or the request in the email may be directed at a different person not associated with this account. You must determine whether the sender is asking the assistant or its owner to take action.
 
 CLASSIFICATION RULES:
-- "request": The sender is CLEARLY and DIRECTLY asking ${agentName}${userName ? ` or ${userName}` : ""} to take an action. Strong signals:
+- "request": The sender is asking ${agentName}${userName ? ` or ${userName}` : ""} to take an action, make a decision, or reply. Classify as "request" in these cases:
   * The email is addressed TO the assistant or its owner (not just CC'd)
   * The sender uses the assistant's name, the owner's name, or refers to them directly
   * The email is a direct reply to a previous message FROM the assistant or owner
   * The request language is clearly directed at the recipient (e.g. "Can you draft...", "Please schedule...")
   * The email only has the assistant/owner as the recipient (no other humans TO'd)
-- "not_a_request": The email is informational only — newsletters, FYI messages, automated notifications, confirmations, receipts, marketing, social media notifications, calendar invites with no action needed. Also: messages that are responses/acknowledgments like "Thanks!", "Got it", "Looks good", or simple agreements. Also: emails where the request is clearly directed at a DIFFERENT person who is not the assistant or its owner (e.g. "Hey John, can you send me the report?" when the assistant is CC'd).
-- "unclear": The email contains what COULD be a request, but it's ambiguous whether the sender is asking the assistant/owner or someone else. This includes:
-  * Forwarded emails where the sender's intent is not stated
-  * Group emails where the request could be for anyone
-  * Emails where the assistant is CC'd on a thread between humans
-  * Any email where you're not confident the request is FOR the assistant or its owner
-  IMPORTANT: When in doubt, ALWAYS classify as "unclear". It's better to ask for clarification than to act on a request that wasn't meant for the assistant.
+  * IMPORTANT: When someone REPLIES to an inquiry sent BY the owner/assistant — even if they are providing information — and their reply asks a question, requests a decision, or expects a response (e.g. "Which option interests you?", "When works for you?", "Let me know if you'd like to proceed"), that IS a request because the owner needs to respond.
+- "not_a_request": The email requires NO response at all. This means:
+  * Newsletters, marketing, automated notifications, receipts, system alerts
+  * Pure acknowledgments with no question: "Thanks!", "Got it", "Looks good"
+  * Emails where the request is clearly directed at a DIFFERENT person (e.g. "Hey John, can you send me the report?" when the assistant is CC'd)
+  * Calendar invites that need no response
+  IMPORTANT: If the sender asks ANY question directed at the owner or expects a reply, do NOT classify as "not_a_request". When in doubt between "not_a_request" and "request", lean toward "request" — it's better to draft an unnecessary response than to ignore an email that needed a reply.
+- "unclear": The email might need a response but you genuinely cannot determine what the owner would want to say. This should be rare — most emails either clearly need a reply or clearly don't.
 - "needs_info": This IS clearly a request for the assistant/owner, but critical details are missing. For example: "Post this to Slack" but which channel? "Create a doc" but what content?
 
-CONFIDENCE THRESHOLD: Only classify as "request" when confidence is 0.8 or higher. If your confidence that this is directed at the assistant is below 0.8, classify as "unclear" instead.
+CONFIDENCE THRESHOLD: Only classify as "request" when confidence is 0.7 or higher. If your confidence is below 0.7, classify as "unclear" instead.
 
 DELIVERY CHANNEL DETECTION:
 - Default delivery is always "email" (reply in the email thread)
@@ -365,8 +366,8 @@ function parseTriageResponse(response: string): TriageResult {
   const confidence = typeof parsed.confidence === "number" ? parsed.confidence : 0.5;
 
   // Enforce confidence threshold: downgrade low-confidence "request" to "unclear"
-  if (classification === "request" && confidence < 0.8) {
-    console.log(`[email-adapter] Downgrading "request" to "unclear" (confidence ${confidence} < 0.8)`);
+  if (classification === "request" && confidence < 0.7) {
+    console.log(`[email-adapter] Downgrading "request" to "unclear" (confidence ${confidence} < 0.7)`);
     classification = "unclear";
   }
 
@@ -511,70 +512,57 @@ function buildStructuredRequest(
   };
 }
 
-// --- Clarification Email ---
+// --- Clarification Email (sent to user, not to external sender) ---
 
 async function sendClarification(
   ctx: EmailThreadContext,
   question: string,
-  replyMode: "draft" | "send"
+  _replyMode: "draft" | "send"
 ): Promise<void> {
-  const replySubject = ctx.subject.startsWith("Re:") ? ctx.subject : `Re: ${ctx.subject}`;
-  const ownEmail = ctx.ownEmail.toLowerCase();
-
-  // Reply-all: to = latest sender, cc = everyone else minus own
-  const allAddrs = ctx.allRecipients
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const ccList = allAddrs
-    .filter((addr) => {
-      const email = extractEmail(addr);
-      return email !== ownEmail && email !== extractEmail(ctx.latestSender);
-    })
-    .join(", ") || undefined;
+  const userEmail = getSetting("user_email");
+  if (!userEmail) {
+    console.warn(`[email-adapter] No user_email setting — cannot send clarification notification`);
+    return;
+  }
 
   const accounts = getGoogleAccounts();
   const account = accounts.find((a) => a.email === ctx.accountId);
   const canSend = account?.services.includes("gmail_send");
 
-  console.log(`[email-adapter] sendClarification: to=${ctx.latestSender}, threadId=${ctx.threadId || "(none)"}, inReplyTo=${ctx.messageIdHeader || "(none)"}, replyMode=${replyMode}`);
+  if (!canSend) {
+    console.warn(`[email-adapter] Gmail send not enabled — cannot send clarification to user`);
+    return;
+  }
 
-  if (replyMode === "send" && canSend) {
-    const result = JSON.parse(
-      await gmailSend(
-        ctx.latestSender,
-        replySubject,
-        question,
-        ctx.accountId,
-        undefined,
-        ccList,
-        ctx.threadId,
-        ctx.messageIdHeader
-      )
-    );
-    if (result.error) {
-      console.error(`[email-adapter] Failed to send clarification: ${result.error}`);
-    } else {
-      console.log(`[email-adapter] Sent clarification to ${ctx.latestSender}`);
-    }
+  const agentName = getSetting("agent_name") || "Your AI assistant";
+  const subject = `[${agentName}] Clarification needed: ${ctx.subject}`;
+  const body = `Hi,
+
+${agentName} received an email and needs your guidance on how to handle it.
+
+From: ${ctx.latestSender}
+Subject: ${ctx.subject}
+Thread participants: ${ctx.allRecipients}
+
+${agentName}'s question:
+${question}
+
+You can reply to the original email thread to provide instructions, or let ${agentName} know via chat.`;
+
+  console.log(`[email-adapter] sendClarification: sending notification to user ${userEmail} about thread ${ctx.threadId}`);
+
+  const result = JSON.parse(
+    await gmailSend(
+      userEmail,
+      subject,
+      body,
+      ctx.accountId
+    )
+  );
+  if (result.error) {
+    console.error(`[email-adapter] Failed to send clarification to user: ${result.error}`);
   } else {
-    const result = JSON.parse(
-      await gmailCreateDraft(
-        ctx.latestSender,
-        replySubject,
-        question,
-        ctx.accountId,
-        undefined,
-        ccList,
-        ctx.threadId,
-        ctx.messageIdHeader
-      )
-    );
-    if (result.error) {
-      console.error(`[email-adapter] Failed to create clarification draft: ${result.error}`);
-    } else {
-      console.log(`[email-adapter] Created clarification draft for ${ctx.latestSender}`);
-    }
+    console.log(`[email-adapter] Clarification notification sent to ${userEmail}`);
   }
 }
 
