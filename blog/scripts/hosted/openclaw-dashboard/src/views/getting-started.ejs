@@ -25,60 +25,85 @@
     </div>
     <% } %>
 
+    <div class="gs-tabs">
+      <button type="button" class="gs-tab active" data-tab="profile">Profile</button>
+      <button type="button" class="gs-tab" data-tab="context">Context</button>
+    </div>
+
     <form method="POST" action="/getting-started">
-      <div class="gs-card">
-        <div class="gs-card-header">
-          <h3>Identity</h3>
-          <p>Basic information about you and your agent.</p>
-        </div>
-        <div class="gs-card-body">
-          <div class="gs-row">
-            <div class="form-group">
-              <label for="agent_name">Agent Name</label>
-              <input type="text" id="agent_name" name="agent_name" value="<%= agentName %>" placeholder="e.g. Archie, Nova, Pepper...">
+      <div class="gs-tab-panel active" data-panel="profile">
+        <div class="gs-card">
+          <div class="gs-card-header">
+            <h3>Identity</h3>
+            <p>Basic information about you and your agent.</p>
+          </div>
+          <div class="gs-card-body">
+            <div class="gs-row">
+              <div class="form-group">
+                <label for="agent_name">Agent Name</label>
+                <input type="text" id="agent_name" name="agent_name" value="<%= agentName %>" placeholder="e.g. Archie, Nova, Pepper...">
+              </div>
+              <div class="form-group">
+                <label for="user_name">Your Name</label>
+                <input type="text" id="user_name" name="user_name" value="<%= userName %>" placeholder="e.g. Elizabeth, Alex...">
+              </div>
             </div>
             <div class="form-group">
-              <label for="user_name">Your Name</label>
-              <input type="text" id="user_name" name="user_name" value="<%= userName %>" placeholder="e.g. Elizabeth, Alex...">
+              <label for="user_email">Your Email</label>
+              <input type="email" id="user_email" name="user_email" value="<%= userEmail %>" placeholder="e.g. you@example.com">
+              <span class="hint">Used for notifications when your agent needs clarification on an email</span>
             </div>
           </div>
-          <div class="form-group">
-            <label for="user_email">Your Email</label>
-            <input type="email" id="user_email" name="user_email" value="<%= userEmail %>" placeholder="e.g. you@example.com">
-            <span class="hint">Used for notifications when your agent needs clarification on an email</span>
+        </div>
+
+        <div class="gs-card">
+          <div class="gs-card-header">
+            <h3>LinkedIn Auto-fill</h3>
+            <p>Paste your LinkedIn URL and we'll fill in the context fields for you.</p>
+          </div>
+          <div class="gs-card-body">
+            <div class="gs-linkedin-row">
+              <input type="url" id="linkedin_url" name="linkedin_url" value="<%= linkedinUrl %>" placeholder="https://linkedin.com/in/yourname">
+              <button type="button" id="research-btn" class="btn btn-sm">Research me</button>
+            </div>
+            <div id="research-status" class="gs-research-status"></div>
           </div>
         </div>
       </div>
 
-      <div class="gs-card">
-        <div class="gs-card-header">
-          <h3>LinkedIn Auto-fill</h3>
-          <p>Paste your LinkedIn URL and we'll fill in the context fields for you.</p>
-        </div>
-        <div class="gs-card-body">
-          <div class="gs-linkedin-row">
-            <input type="url" id="linkedin_url" name="linkedin_url" value="<%= linkedinUrl %>" placeholder="https://linkedin.com/in/yourname">
-            <button type="button" id="research-btn" class="btn btn-sm">Research me</button>
+      <div class="gs-tab-panel" data-panel="context">
+        <div class="gs-card">
+          <div class="gs-card-header">
+            <h3>Company</h3>
+            <p>Tell your agent about your business.</p>
           </div>
-          <div id="research-status" class="gs-research-status"></div>
+          <div class="gs-card-body">
+            <div class="form-group">
+              <label for="context_company">Company Description</label>
+              <textarea id="context_company" name="context_company" rows="4" placeholder="What does your company do? What products or services do you offer?"><%= contextCompany %></textarea>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div class="gs-card">
-        <div class="gs-card-header">
-          <h3>Agent Context</h3>
-          <p>Give your agent the context it needs to represent you well.</p>
+        <div class="gs-card">
+          <div class="gs-card-header">
+            <h3>About You</h3>
+            <p>Help your agent understand your role and how to assist you.</p>
+          </div>
+          <div class="gs-card-body">
+            <div class="form-group">
+              <label for="context_user">Your Role</label>
+              <textarea id="context_user" name="context_user" rows="4" placeholder="Your role, responsibilities, and what you'd like your agent to help with"><%= contextUser %></textarea>
+            </div>
+          </div>
         </div>
-        <div class="gs-card-body">
-          <div class="form-group">
-            <label for="context_company">Company</label>
-            <textarea id="context_company" name="context_company" rows="3" placeholder="What does your company do? What products or services do you offer?"><%= contextCompany %></textarea>
+
+        <div class="gs-card">
+          <div class="gs-card-header">
+            <h3>Behavior</h3>
+            <p>Set rules and provide knowledge your agent should always follow.</p>
           </div>
-          <div class="form-group">
-            <label for="context_user">About You</label>
-            <textarea id="context_user" name="context_user" rows="3" placeholder="Your role, responsibilities, and what you'd like your agent to help with"><%= contextUser %></textarea>
-          </div>
-          <div class="gs-row">
+          <div class="gs-card-body">
             <div class="form-group">
               <label for="context_rules">Rules</label>
               <textarea id="context_rules" name="context_rules" rows="3" placeholder="Communication style, tone preferences, things to avoid"><%= contextRules %></textarea>
@@ -99,9 +124,37 @@
 </div>
 <style>
   .getting-started { max-width: 720px; }
-  .gs-header { margin-bottom: 24px; }
+  .gs-header { margin-bottom: 20px; }
   .gs-header h2 { margin-bottom: 4px; }
   .gs-subtitle { color: var(--text-secondary); font-size: 14px; margin: 0; }
+
+  .gs-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--rule-light);
+    padding-bottom: 0;
+  }
+  .gs-tab {
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    margin-bottom: -1px;
+  }
+  .gs-tab:hover { color: var(--fg); }
+  .gs-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .gs-tab-panel { display: none; }
+  .gs-tab-panel.active { display: block; }
 
   .gs-card {
     background: #fff;
@@ -110,9 +163,7 @@
     margin-bottom: 20px;
     overflow: hidden;
   }
-  .gs-card-header {
-    padding: 20px 24px 0;
-  }
+  .gs-card-header { padding: 20px 24px 0; }
   .gs-card-header h3 {
     font-size: 16px;
     font-weight: 600;
@@ -124,9 +175,7 @@
     color: var(--text-secondary);
     margin: 0;
   }
-  .gs-card-body {
-    padding: 16px 24px 20px;
-  }
+  .gs-card-body { padding: 16px 24px 20px; }
 
   .gs-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
@@ -146,7 +195,7 @@
   }
   .getting-started textarea {
     min-height: 72px;
-    max-height: 160px;
+    max-height: 200px;
     resize: vertical;
   }
 
@@ -182,7 +231,7 @@
     border: 1px solid #E9D5FF;
     border-radius: 12px;
     padding: 16px 20px;
-    margin-bottom: 24px;
+    margin-bottom: 20px;
   }
   .gs-nudge-icon {
     color: var(--accent);
@@ -206,6 +255,21 @@
 </style>
 <script>
 (function () {
+  // --- Tab switching ---
+  var tabs = document.querySelectorAll(".gs-tab");
+  var panels = document.querySelectorAll(".gs-tab-panel");
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      var target = tab.getAttribute("data-tab");
+      tabs.forEach(function (t) { t.classList.remove("active"); });
+      panels.forEach(function (p) { p.classList.remove("active"); });
+      tab.classList.add("active");
+      document.querySelector('[data-panel="' + target + '"]').classList.add("active");
+    });
+  });
+
+  // --- LinkedIn research ---
   var researchBtn = document.getElementById("research-btn");
   var statusDiv = document.getElementById("research-status");
 
@@ -240,8 +304,14 @@
       if (data.context_user) document.getElementById("context_user").value = data.context_user;
       if (data.context_rules) document.getElementById("context_rules").value = data.context_rules;
 
+      // Switch to Context tab so user can see the filled fields
+      tabs.forEach(function (t) { t.classList.remove("active"); });
+      panels.forEach(function (p) { p.classList.remove("active"); });
+      document.querySelector('[data-tab="context"]').classList.add("active");
+      document.querySelector('[data-panel="context"]').classList.add("active");
+
       statusDiv.style.color = "var(--success)";
-      statusDiv.textContent = "Done! Review the fields above and hit Save.";
+      statusDiv.textContent = "Done! Review the Context tab and hit Save.";
     })
     .catch(function () {
       researchBtn.disabled = false;
