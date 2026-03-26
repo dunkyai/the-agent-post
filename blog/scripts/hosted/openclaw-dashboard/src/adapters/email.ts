@@ -57,6 +57,7 @@ export interface EmailThreadContext {
     body: string;
     timestamp: string;
     messageId: string;
+    attachments?: Array<{ filename: string; mimeType: string; size: number }>;
   }>;
   ownEmail: string;
   replyMode: "draft" | "send";
@@ -456,9 +457,12 @@ function buildThreadContext(ctx: EmailThreadContext): string {
       if (body.length > MAX_MESSAGE_BODY_LENGTH) {
         body = body.slice(0, MAX_MESSAGE_BODY_LENGTH) + "\n[... truncated ...]";
       }
+      const attachmentInfo = msg.attachments?.length
+        ? `\nAttachments: ${msg.attachments.map(a => `${a.filename} (${a.mimeType}, ${Math.round(a.size / 1024)}KB)`).join(", ")}`
+        : "";
       return `--- Message ${i + 1} of ${reversed.length}${i === 0 ? " (latest)" : ""} ---
 From: ${msg.from}
-Date: ${msg.timestamp}
+Date: ${msg.timestamp}${attachmentInfo}
 
 ${body}`;
     })

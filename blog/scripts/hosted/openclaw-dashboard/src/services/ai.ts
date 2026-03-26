@@ -7,7 +7,7 @@ import { decrypt } from "./encryption";
 import { getNextRun, isValidCron, describeCron } from "./cron";
 import {
   isGoogleRunning, getConnectedServices, getGoogleAccounts,
-  gmailSearch, gmailReadMessage, gmailSend, gmailCreateDraft, gmailAddLabel, gmailGetSendAsAliases,
+  gmailSearch, gmailReadMessage, gmailGetAttachment, gmailSend, gmailCreateDraft, gmailAddLabel, gmailGetSendAsAliases,
   calendarListEvents, calendarCreateEvent, calendarUpdateEvent,
   driveSearch, driveReadFile, extractDriveFileId,
   contactsSearch,
@@ -1590,7 +1590,7 @@ const GOOGLE_GMAIL_TOOLS = [
   },
   {
     name: "gmail_read_message",
-    description: "Read the full content of a Gmail message by ID. Use after gmail_search.",
+    description: "Read the full content of a Gmail message by ID. Returns message body, headers, and a list of attachments with their IDs. Use gmail_get_attachment to download attachment content.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -1598,6 +1598,19 @@ const GOOGLE_GMAIL_TOOLS = [
         account: { type: "string", description: "Google account email to use (optional)" },
       },
       required: ["message_id"],
+    },
+  },
+  {
+    name: "gmail_get_attachment",
+    description: "Download an email attachment by its attachment ID. Returns text content for text-based files (CSV, JSON, TXT, HTML) or base64 for binary files (PDF, images, etc). Get the attachment_id from gmail_read_message results.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        message_id: { type: "string", description: "The Gmail message ID containing the attachment" },
+        attachment_id: { type: "string", description: "The attachment ID from gmail_read_message" },
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
+      required: ["message_id", "attachment_id"],
     },
   },
   {
@@ -2055,6 +2068,8 @@ async function executeGoogleTool(toolName: string, input: any): Promise<string> 
         return await gmailSearch(input.query, input.max_results, acct);
       case "gmail_read_message":
         return await gmailReadMessage(input.message_id, acct);
+      case "gmail_get_attachment":
+        return await gmailGetAttachment(input.message_id, input.attachment_id, acct);
       case "gmail_send":
       case "gmail_create_draft": {
         const ruleCheck = checkGmailRecipientRules(input.to, input.cc);
@@ -2290,6 +2305,7 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   check_lobstermail: "Checking your inbox...",
   gmail_search: "Searching Gmail...",
   gmail_read_message: "Reading an email...",
+  gmail_get_attachment: "Downloading attachment...",
   gmail_send: "Sending an email...",
   gmail_create_draft: "Drafting an email...",
   gmail_label: "Labeling email...",
@@ -2487,7 +2503,7 @@ export async function callAnthropic(
       const codeTools = ["run_command", "read_file", "write_file"];
       const pdfTools = ["pdf_get_fields", "pdf_fill_form", "pdf_read_text"];
       const googleToolNames = [
-        "gmail_search", "gmail_read_message", "gmail_send", "gmail_create_draft", "gmail_label", "gmail_list_aliases",
+        "gmail_search", "gmail_read_message", "gmail_get_attachment", "gmail_send", "gmail_create_draft", "gmail_label", "gmail_list_aliases",
         "calendar_list_events", "calendar_create_event", "calendar_update_event",
         "drive_search", "drive_read_file", "drive_open_url",
         "contacts_search",
@@ -2725,7 +2741,7 @@ export async function callOpenAI(
   const codeTools = ["run_command", "read_file", "write_file"];
   const pdfTools = ["pdf_get_fields", "pdf_fill_form", "pdf_read_text"];
   const googleToolNames = [
-    "gmail_search", "gmail_read_message", "gmail_send", "gmail_create_draft", "gmail_label", "gmail_list_aliases",
+    "gmail_search", "gmail_read_message", "gmail_get_attachment", "gmail_send", "gmail_create_draft", "gmail_label", "gmail_list_aliases",
     "calendar_list_events", "calendar_create_event", "calendar_update_event",
     "drive_search", "drive_read_file", "drive_open_url",
     "contacts_search",
