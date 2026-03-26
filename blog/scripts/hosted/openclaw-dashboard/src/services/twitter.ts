@@ -146,6 +146,18 @@ async function authHeaders(): Promise<Record<string, string>> {
   };
 }
 
+// --- Helpers ---
+
+function extractTweetId(input: string): string | null {
+  if (!input) return null;
+  const trimmed = input.trim();
+  // Pure numeric ID
+  if (/^\d+$/.test(trimmed)) return trimmed;
+  // URL: https://x.com/user/status/123 or https://twitter.com/user/status/123
+  const match = trimmed.match(/(?:x\.com|twitter\.com)\/\w+\/status\/(\d+)/);
+  return match ? match[1] : null;
+}
+
 // --- API wrappers ---
 
 export async function twitterGetMe(): Promise<string> {
@@ -290,6 +302,116 @@ export async function twitterGetRecentTweets(maxResults: number = 10): Promise<s
     return JSON.stringify({ tweets, count: tweets.length });
   } catch (err) {
     return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to get recent tweets" });
+  }
+}
+
+export async function twitterLookupTweet(tweetIdOrUrl: string): Promise<string> {
+  if (!twitterConfig) return JSON.stringify({ error: "Twitter is not connected" });
+
+  try {
+    const id = extractTweetId(tweetIdOrUrl);
+    if (!id) {
+      return JSON.stringify({ error: "Invalid tweet ID or URL. Provide a numeric tweet ID or a full x.com/twitter.com URL." });
+    }
+
+    const res = await fetch(
+      `${TWITTER_API}/tweets/${id}?tweet.fields=created_at,public_metrics,author_id&expansions=author_id&user.fields=username,name`,
+      { headers: await authHeaders() }
+    );
+
+    if (!res.ok) {
+      return JSON.stringify({ error: `Twitter API error (${res.status}): ${await res.text()}` });
+    }
+
+    const data: any = await res.json();
+    const tweet = data.data;
+    const author = data.includes?.users?.[0];
+
+    return JSON.stringify({
+      id: tweet.id,
+      text: tweet.text,
+      author: author ? { username: author.username, name: author.name } : { id: tweet.author_id },
+      created_at: tweet.created_at,
+      metrics: tweet.public_metrics,
+      url: `https://x.com/${author?.username || "i"}/status/${tweet.id}`,
+    });
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to look up tweet" });
+  }
+}
+
+export async function twitterRetweet(tweetIdOrUrl: string): Promise<string> {
+  if (!twitterConfig) return JSON.stringify({ error: "Twitter is not connected" });
+
+  try {
+    const tweetId = extractTweetId(tweetIdOrUrl);
+    if (!tweetId) {
+      return JSON.stringify({ error: "Invalid tweet ID or URL. Provide a numeric tweet ID or a full x.com/twitter.com URL." });
+    }
+
+    const res = await fetch(`${TWITTER_API}/users/${twitterConfig.user_id}/retweets`, {
+      method: "POST",
+      headers: await authHeaders(),
+      body: JSON.stringify({ tweet_id: tweetId }),
+    });
+
+    if (!res.ok) {
+      return JSON.stringify({ error: `Twitter API error (${res.status}): ${await res.text()}` });
+    }
+
+    const data: any = await res.json();
+
+    // Confirm retweet by looking up the tweet details
+    let confirmation: any = { retweeted: data.data?.retweeted ?? true };
+    try {
+      const lookupRes = await fetch(
+        `${TWITTER_API}/tweets/${tweetId}?tweet.fields=public_metrics,author_id&expansions=author_id&user.fields=username,name`,
+        { headers: await authHeaders() }
+      );
+      if (lookupRes.ok) {
+        const lookupData: any = await lookupRes.json();
+        const tweet = lookupData.data;
+        const author = lookupData.includes?.users?.[0];
+        confirmation = {
+          retweeted: true,
+          tweet_id: tweet.id,
+          tweet_text: tweet.text,
+          author: author ? `@${author.username} (${author.name})` : tweet.author_id,
+          tweet_url: `https://x.com/${author?.username || "i"}/status/${tweet.id}`,
+          current_retweet_count: tweet.public_metrics?.retweet_count,
+        };
+      }
+    } catch {
+      // Confirmation lookup failed — still report success
+    }
+
+    return JSON.stringify({ success: true, ...confirmation });
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to retweet" });
+  }
+}
+
+export async function twitterUndoRetweet(tweetIdOrUrl: string): Promise<string> {
+  if (!twitterConfig) return JSON.stringify({ error: "Twitter is not connected" });
+
+  try {
+    const tweetId = extractTweetId(tweetIdOrUrl);
+    if (!tweetId) {
+      return JSON.stringify({ error: "Invalid tweet ID or URL. Provide a numeric tweet ID or a full x.com/twitter.com URL." });
+    }
+
+    const res = await fetch(`${TWITTER_API}/users/${twitterConfig.user_id}/retweets/${encodeURIComponent(tweetId)}`, {
+      method: "DELETE",
+      headers: await authHeaders(),
+    });
+
+    if (!res.ok) {
+      return JSON.stringify({ error: `Twitter API error (${res.status}): ${await res.text()}` });
+    }
+
+    return JSON.stringify({ success: true, undone: true });
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to undo retweet" });
   }
 }
 
