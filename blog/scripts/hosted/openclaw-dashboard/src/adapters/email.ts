@@ -8,6 +8,7 @@ import {
   upsertEmailThreadState,
   getStaleAwaitingReplyThreads,
   markGmailThreadProcessed,
+  getExecutionLog,
   type EmailThreadStateRow,
 } from "../services/db";
 import {
@@ -662,6 +663,19 @@ export async function onEmailTaskComplete(task: Task): Promise<void> {
 
     const result = task.output.result || "";
     const channel = delivery?.channel || "email";
+
+    // Check if the AI already sent an email or created a draft during task execution.
+    // If so, skip adapter-level delivery to avoid duplicate emails.
+    const execLog = getExecutionLog(task.task_id);
+    const aiHandledEmail = execLog.some(
+      (entry) => entry.tool === "gmail_create_draft" || entry.tool === "gmail_send"
+    );
+    if (aiHandledEmail) {
+      console.log(`[email-adapter] AI already handled email delivery for task ${task.task_id} — skipping adapter delivery`);
+      upsertEmailThreadState(threadId, accountId, { state: "delivered" });
+      if (latestMessageId) markGmailThreadProcessed(threadId, latestMessageId, accountId);
+      return;
+    }
 
     if (channel === "slack") {
       // Deliver to Slack
