@@ -36,14 +36,42 @@ router.get("/getting-started", (req: Request, res: Response) => {
 router.post("/getting-started", (req: Request, res: Response) => {
   const { agent_name, user_name, user_email, linkedin_url, context_company, context_user, context_rules, context_knowledge } = req.body;
 
+  const trimmedLinkedin = (linkedin_url || "").trim();
+  const trimmedCompany = (context_company || "").trim();
+  const trimmedUser = (context_user || "").trim();
+  const trimmedRules = (context_rules || "").trim();
+
   setSetting("agent_name", (agent_name || "").trim());
   setSetting("user_name", (user_name || "").trim());
   setSetting("user_email", (user_email || "").trim());
-  setSetting("linkedin_url", (linkedin_url || "").trim());
-  setSetting("context_company", (context_company || "").trim());
-  setSetting("context_user", (context_user || "").trim());
-  setSetting("context_rules", (context_rules || "").trim());
+  setSetting("linkedin_url", trimmedLinkedin);
+  setSetting("context_company", trimmedCompany);
+  setSetting("context_user", trimmedUser);
+  setSetting("context_rules", trimmedRules);
   setSetting("context_knowledge", (context_knowledge || "").trim());
+
+  // If LinkedIn URL is present and context fields are mostly empty, research in background
+  const prevLinkedin = getSetting("linkedin_researched_url") || "";
+  const contextEmpty = [trimmedCompany, trimmedUser, trimmedRules].filter(f => f.length >= 20).length < 2;
+  if (trimmedLinkedin && trimmedLinkedin !== prevLinkedin && contextEmpty) {
+    // Fire and forget — runs after response is sent
+    (async () => {
+      try {
+        console.log(`[getting-started] Background LinkedIn research: ${trimmedLinkedin}`);
+        const summary = await researchUser(trimmedLinkedin);
+        const agentName = getSetting("agent_name") || "";
+        const context = await generateContext(summary, agentName);
+
+        if (context.context_company) setSetting("context_company", context.context_company);
+        if (context.context_user) setSetting("context_user", context.context_user);
+        if (context.context_rules) setSetting("context_rules", context.context_rules);
+        setSetting("linkedin_researched_url", trimmedLinkedin);
+        console.log(`[getting-started] LinkedIn research complete for ${trimmedLinkedin}`);
+      } catch (err: unknown) {
+        console.error("[getting-started] Background LinkedIn research failed:", err instanceof Error ? err.message : err);
+      }
+    })();
+  }
 
   res.redirect(303, "/getting-started?flash=Saved");
 });
