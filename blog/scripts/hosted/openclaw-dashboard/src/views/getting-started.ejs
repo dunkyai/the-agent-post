@@ -50,12 +50,11 @@
               <span class="hint">Used for notifications when your agent needs clarification on an email</span>
             </div>
             <div class="gs-divider"></div>
-            <label class="gs-field-label">LinkedIn Auto-fill</label>
-            <div class="gs-linkedin-row">
+            <div class="form-group">
+              <label for="linkedin_url">LinkedIn URL</label>
               <input type="url" id="linkedin_url" name="linkedin_url" value="<%= linkedinUrl %>" placeholder="https://linkedin.com/in/yourname">
-              <button type="button" id="research-btn" class="btn btn-sm">Research me</button>
+              <span class="hint">We'll research your profile to auto-fill context fields when you save</span>
             </div>
-            <div id="research-status" class="gs-research-status"></div>
           </div>
         </div>
       </div>
@@ -167,24 +166,6 @@
     resize: vertical;
   }
 
-  .gs-linkedin-row {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-  }
-  .gs-linkedin-row input { flex: 1; }
-  .gs-linkedin-row .btn { white-space: nowrap; flex-shrink: 0; }
-
-  .gs-research-status {
-    display: none;
-    font-size: 13px;
-    color: var(--text-secondary);
-    margin-top: 10px;
-    padding: 8px 12px;
-    background: var(--bg);
-    border-radius: 8px;
-  }
-
   .gs-actions {
     display: flex;
     justify-content: flex-end;
@@ -223,10 +204,8 @@
 </style>
 <script>
 (function () {
-  // --- Tab switching ---
   var tabs = document.querySelectorAll(".gs-tab");
   var panels = document.querySelectorAll(".gs-tab-panel");
-
   tabs.forEach(function (tab) {
     tab.addEventListener("click", function () {
       var target = tab.getAttribute("data-tab");
@@ -234,58 +213,6 @@
       panels.forEach(function (p) { p.classList.remove("active"); });
       tab.classList.add("active");
       document.querySelector('[data-panel="' + target + '"]').classList.add("active");
-    });
-  });
-
-  // --- LinkedIn research ---
-  var researchBtn = document.getElementById("research-btn");
-  var statusDiv = document.getElementById("research-status");
-
-  if (!researchBtn) return;
-
-  researchBtn.addEventListener("click", function () {
-    var url = document.getElementById("linkedin_url").value.trim();
-    if (!url) { alert("Enter a LinkedIn URL first."); return; }
-
-    researchBtn.disabled = true;
-    researchBtn.textContent = "Researching...";
-    statusDiv.style.display = "block";
-    statusDiv.style.color = "var(--text-secondary)";
-    statusDiv.style.background = "var(--bg)";
-    statusDiv.textContent = "Researching your LinkedIn profile...";
-
-    fetch("/getting-started/research", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ linkedin_url: url })
-    })
-    .then(function (res) { return res.json(); })
-    .then(function (data) {
-      researchBtn.disabled = false;
-      researchBtn.textContent = "Research me";
-      if (data.error) {
-        statusDiv.style.color = "var(--danger)";
-        statusDiv.textContent = "Error: " + data.error;
-        return;
-      }
-      if (data.context_company) document.getElementById("context_company").value = data.context_company;
-      if (data.context_user) document.getElementById("context_user").value = data.context_user;
-      if (data.context_rules) document.getElementById("context_rules").value = data.context_rules;
-
-      // Switch to Context tab so user can see the filled fields
-      tabs.forEach(function (t) { t.classList.remove("active"); });
-      panels.forEach(function (p) { p.classList.remove("active"); });
-      document.querySelector('[data-tab="context"]').classList.add("active");
-      document.querySelector('[data-panel="context"]').classList.add("active");
-
-      statusDiv.style.color = "var(--success)";
-      statusDiv.textContent = "Done! Review the Context tab and hit Save.";
-    })
-    .catch(function () {
-      researchBtn.disabled = false;
-      researchBtn.textContent = "Research me";
-      statusDiv.style.color = "var(--danger)";
-      statusDiv.textContent = "Research failed. Check your API key in Settings.";
     });
   });
 })();
