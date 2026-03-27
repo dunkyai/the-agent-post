@@ -13,6 +13,7 @@ import {
   contactsSearch,
   docsCreate, docsRead, docsAppend, docsInsert, docsSuggestEdit, docsFormatText, docsParagraphStyle, docsCreateList, docsInsertImage, docsReplaceText,
   sheetsCreate, sheetsRead, sheetsWrite, sheetsAppend, sheetsListSheets,
+  isGmailSenderAllowed,
 } from "./google";
 import { sendSlackMessage, isSlackRunning, getChannelMembers } from "./slack";
 import { sendEmailMessage, isEmailRunning, checkInbox } from "./email";
@@ -2074,7 +2075,9 @@ async function executeGoogleTool(toolName: string, input: any): Promise<string> 
       case "gmail_create_draft": {
         const ruleCheck = checkGmailRecipientRules(input.to, input.cc);
         if (ruleCheck) return ruleCheck;
-        if (toolName === "gmail_send") {
+        // Reply mode is determined by the recipient's tier setting, not the AI's tool choice
+        const { replyMode } = isGmailSenderAllowed(input.to || "");
+        if (replyMode === "send") {
           return await gmailSend(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
         }
         return await gmailCreateDraft(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
