@@ -97,7 +97,7 @@ export async function processTask(
 
     // Call the appropriate provider
     const caller = provider === "anthropic" ? callAnthropic : callOpenAI;
-    const response = await caller(
+    let response = await caller(
       model,
       apiKey,
       systemPrompt,
@@ -107,6 +107,28 @@ export async function processTask(
       onStatus,
       onToolCallLog
     );
+
+    // Hallucination guard: if the user asked for an action but the AI made zero tool calls,
+    // retry once with an explicit correction. Rules-based — not AI judgement.
+    const actionPattern = /\b(send|draft|create|schedule|book|add|delete|remove|update|set up|cancel|retweet|post)\b/i;
+    if (toolCallsCount === 0 && actionPattern.test(task.input.raw_input || "")) {
+      console.log(`[processor] Hallucination guard: task ${taskId} had 0 tool calls for action request, retrying`);
+      const now = new Date().toISOString();
+      history.push(
+        { role: "assistant" as const, content: response.content || "", created_at: now },
+        { role: "user" as const, content: "You did not actually perform the action — you must call the appropriate tool. Do not fabricate results. Call the tool now.", created_at: now }
+      );
+      response = await caller(
+        model,
+        apiKey,
+        systemPrompt,
+        history,
+        temperature,
+        maxTokens,
+        onStatus,
+        onToolCallLog
+      );
+    }
 
     // Save assistant response to conversation
     if (response.content && response.content.trim()) {
