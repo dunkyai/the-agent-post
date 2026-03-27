@@ -125,7 +125,7 @@ const SCHEDULING_TOOLS = [
         schedule: { type: "string", description: "A 5-field cron expression. Fields: minute hour day-of-month month day-of-week. Examples: '0 9 * * 1' (every Monday 9am), '*/30 * * * *' (every 30 min), '0 0 * * *' (daily midnight). IMPORTANT: For a specific date, use '*' for day-of-week — e.g. '30 9 28 3 *' (March 28 at 9:30am). Never combine a specific day-of-month with a specific day-of-week — the date may not fall on that weekday, causing the job to fail." },
         prompt: { type: "string", description: "The prompt/instruction sent to the AI when the job fires" },
         target_source: { type: "string", enum: ["slack", "email"], description: "Where to deliver results. Must be one of: slack, email." },
-        target_external_id: { type: "string", description: "The delivery target ID. For Slack: must be a real Slack channel ID (C...), DM ID (D...), or user ID (U...) — e.g. C01HCS46FPB or U07FQCAACN8. NEVER use placeholder values like 'scheduler' or 'dashboard'. If you don't know the ID, ask the user. For email: recipient email address." },
+        target_external_id: { type: "string", description: "The delivery target ID. For Slack: use the channel ID (C...) to post in a channel, or the user ID (U...) to send a DM. Prefer user IDs over DM channel IDs (D...) — user IDs are more reliable. NEVER use placeholder values like 'scheduler' or 'dashboard'. If you don't know the ID, ask the user. For email: recipient email address." },
         run_once: { type: "boolean", description: "Default: true (one-time). Set to false ONLY when the user explicitly asks for a recurring schedule (e.g. 'every Monday', 'daily', 'weekly'). If the user says a specific day like 'Friday' or 'tomorrow', that means once — not every Friday." },
       },
       required: ["name", "schedule", "prompt", "target_source", "target_external_id"],
@@ -2334,7 +2334,7 @@ function executeMemoryTool(toolName: string, input: any): string {
   }
 }
 
-function executeSchedulingTool(toolName: string, input: any): string {
+function executeSchedulingTool(toolName: string, input: any, sourceContext?: SourceContext): string {
   switch (toolName) {
     case "create_scheduled_job": {
       if (!isValidCron(input.schedule)) {
@@ -2350,6 +2350,14 @@ function executeSchedulingTool(toolName: string, input: any): string {
       if (input.target_source === "slack" && !/^[CDGU][A-Z0-9]+$/.test(input.target_external_id)) {
         return JSON.stringify({ error: `Invalid Slack channel/user ID "${input.target_external_id}". Slack IDs start with C (channel), D (DM), G (group), or U (user) followed by uppercase letters and numbers (e.g. C01HCS46FPB or U07FQCAACN8). Ask the user for their Slack channel or user ID.` });
       }
+      // Rules-based: if created from a Slack thread, deliver back to that thread
+      let targetExternalId = input.target_external_id;
+      if (input.target_source === "slack" && sourceContext?.channelId) {
+        targetExternalId = sourceContext.threadTs
+          ? `${sourceContext.channelId}:${sourceContext.threadTs}`
+          : sourceContext.channelId;
+        console.log(`[scheduler] Overriding job target to originating Slack thread: ${targetExternalId}`);
+      }
       const jobTimezone = getSetting("timezone") || "America/Los_Angeles";
       const nextRun = getNextRun(input.schedule, new Date(), jobTimezone);
       const runOnce = input.run_once === false ? 0 : 1;
@@ -2358,20 +2366,25 @@ function executeSchedulingTool(toolName: string, input: any): string {
         schedule: input.schedule,
         prompt: input.prompt,
         target_source: input.target_source,
-        target_external_id: input.target_external_id,
+        target_external_id: targetExternalId,
         run_once: runOnce,
         created_by: "ai",
         next_run: nextRun.toISOString(),
       });
-      return JSON.stringify({
+      const result: Record<string, unknown> = {
         success: true,
         job_id: id,
         name: input.name,
         schedule_description: describeCron(input.schedule),
         run_once: !!runOnce,
-        target: `${input.target_source}:${input.target_external_id}`,
+        target: `${input.target_source}:${targetExternalId}`,
         next_run: nextRun.toISOString(),
-      });
+      };
+      // Tell the AI where results will go so it doesn't say "I'll DM you"
+      if (input.target_source === "slack" && sourceContext?.channelId) {
+        result.delivery_note = "Results will be automatically posted back to this Slack thread when the job runs. Do NOT tell the user you will DM them.";
+      }
+      return JSON.stringify(result);
     }
     case "list_scheduled_jobs": {
       const jobs = getAllScheduledJobs();
@@ -2529,6 +2542,11 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
 
 export type ToolCallCallback = (toolName: string, input: Record<string, unknown>, output: string, durationMs: number) => void;
 
+export interface SourceContext {
+  channelId?: string;
+  threadTs?: string;
+}
+
 export async function callAnthropic(
   model: string,
   apiKey: string,
@@ -2537,7 +2555,8 @@ export async function callAnthropic(
   temperature: number,
   maxTokens: number,
   onStatus?: StatusCallback,
-  onToolCall?: ToolCallCallback
+  onToolCall?: ToolCallCallback,
+  sourceContext?: SourceContext
 ): Promise<AIResponse> {
   const tools: any[] = [
     { type: "web_search_20250305", name: "web_search" },
@@ -2724,7 +2743,7 @@ export async function callAnthropic(
         } else if (oneToolNames.includes(toolBlock.name)) {
           result = await executeOneTool(toolBlock.name, toolBlock.input);
         } else {
-          result = executeSchedulingTool(toolBlock.name, toolBlock.input);
+          result = executeSchedulingTool(toolBlock.name, toolBlock.input, sourceContext);
         }
         const toolDurationMs = Date.now() - toolStartTime;
         console.log(`Tool result: ${toolBlock.name}`, typeof result === "string" ? result.slice(0, 300) : "[multipart content]");
@@ -2822,7 +2841,8 @@ export async function callOpenAI(
   temperature: number,
   maxTokens: number,
   onStatus?: StatusCallback,
-  onToolCall?: ToolCallCallback
+  onToolCall?: ToolCallCallback,
+  sourceContext?: SourceContext
 ): Promise<AIResponse> {
   // Build tools list (same as Anthropic minus server-side web_search)
   const customTools: any[] = [
@@ -3018,7 +3038,7 @@ export async function callOpenAI(
         } else if (oneToolNames.includes(toolName)) {
           result = await executeOneTool(toolName, toolInput);
         } else {
-          result = executeSchedulingTool(toolName, toolInput);
+          result = executeSchedulingTool(toolName, toolInput, sourceContext);
         }
         const toolDurationMs = Date.now() - toolStartTime;
 

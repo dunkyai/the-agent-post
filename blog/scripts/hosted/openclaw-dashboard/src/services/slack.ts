@@ -679,12 +679,28 @@ export async function getChannelMembers(channelId: string): Promise<string> {
 
 export async function sendSlackMessage(channelOrExternalId: string, text: string, threadTs?: string): Promise<void> {
   if (!slackConfig) throw new Error("Slack is not connected");
-  const channelId = channelOrExternalId.split(":")[0];
+  let channelId = channelOrExternalId.split(":")[0];
+
+  // For user IDs (U...), open a DM channel first
+  if (/^U[A-Z0-9]+$/.test(channelId)) {
+    const openRes = await fetch("https://slack.com/api/conversations.open", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${slackConfig.bot_token}`,
+      },
+      body: JSON.stringify({ users: channelId }),
+    });
+    const openData: any = await openRes.json();
+    if (openData.ok && openData.channel?.id) {
+      channelId = openData.channel.id;
+    }
+  }
 
   const payload: any = { channel: channelId, text };
   if (threadTs) payload.thread_ts = threadTs;
 
-  const res = await fetch("https://slack.com/api/chat.postMessage", {
+  let res = await fetch("https://slack.com/api/chat.postMessage", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -697,7 +713,34 @@ export async function sendSlackMessage(channelOrExternalId: string, text: string
     throw new Error(`Slack API error (${res.status})`);
   }
 
-  const data: any = await res.json();
+  let data: any = await res.json();
+
+  // If DM channel not found, try opening it via conversations.open and retry
+  if (!data.ok && data.error === "channel_not_found" && /^D[A-Z0-9]+$/.test(channelId)) {
+    console.log(`[slack] channel_not_found for ${channelId}, trying conversations.open fallback`);
+    const openRes = await fetch("https://slack.com/api/conversations.open", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${slackConfig.bot_token}`,
+      },
+      body: JSON.stringify({ channel: channelId }),
+    });
+    const openData: any = await openRes.json();
+    if (openData.ok && openData.channel?.id) {
+      payload.channel = openData.channel.id;
+      res = await fetch("https://slack.com/api/chat.postMessage", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${slackConfig.bot_token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      data = await res.json();
+    }
+  }
+
   if (!data.ok) {
     throw new Error(`Slack API error: ${data.error}`);
   }
