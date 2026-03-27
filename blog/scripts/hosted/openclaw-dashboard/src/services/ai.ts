@@ -42,6 +42,7 @@ import {
 import {
   isTwitterRunning, getTwitterUsername,
   twitterGetMe, twitterPostTweet, twitterPostThread, twitterGetRecentTweets, twitterDeleteTweet, twitterLookupTweet, twitterRetweet, twitterUndoRetweet,
+  twitterLookupUser, twitterGetUserTweets,
 } from "./twitter";
 import {
   isBeehiivRunning, getBeehiivPublicationName,
@@ -1408,6 +1409,29 @@ const TWITTER_TOOLS = [
       required: ["tweet_id_or_url"],
     },
   },
+  {
+    name: "twitter_lookup_user",
+    description: "Look up any X/Twitter user by username. Returns their profile info, bio, follower/following counts, and tweet count.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        username: { type: "string", description: "The X/Twitter username (with or without @)" },
+      },
+      required: ["username"],
+    },
+  },
+  {
+    name: "twitter_get_user_tweets",
+    description: "Get recent tweets from any X/Twitter user by username. Returns tweet text, URLs, timestamps, and engagement metrics.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        username: { type: "string", description: "The X/Twitter username (with or without @)" },
+        max_results: { type: "number", description: "Number of tweets to fetch (5-100, default 5)" },
+      },
+      required: ["username"],
+    },
+  },
 ];
 
 async function executeTwitterTool(toolName: string, input: any): Promise<string> {
@@ -1429,6 +1453,10 @@ async function executeTwitterTool(toolName: string, input: any): Promise<string>
         return await twitterRetweet(input.tweet_id_or_url);
       case "twitter_undo_retweet":
         return await twitterUndoRetweet(input.tweet_id_or_url);
+      case "twitter_lookup_user":
+        return await twitterLookupUser(input.username);
+      case "twitter_get_user_tweets":
+        return await twitterGetUserTweets(input.username, input.max_results);
       default:
         return JSON.stringify({ error: `Unknown Twitter tool: ${toolName}` });
     }
@@ -2394,6 +2422,8 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   twitter_lookup_tweet: "Looking up tweet...",
   twitter_retweet: "Retweeting...",
   twitter_undo_retweet: "Undoing retweet...",
+  twitter_lookup_user: "Looking up Twitter user...",
+  twitter_get_user_tweets: "Fetching user's tweets...",
   create_scheduled_job: "Creating a scheduled job...",
   list_scheduled_jobs: "Listing scheduled jobs...",
   delete_scheduled_job: "Deleting a scheduled job...",
@@ -2536,7 +2566,7 @@ export async function callAnthropic(
       const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
       const bufferToolNames = ["buffer_list_channels", "buffer_create_post", "buffer_list_posts", "buffer_delete_post"];
       const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
-      const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet"];
+      const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet", "twitter_lookup_user", "twitter_get_user_tweets"];
       const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
@@ -2774,7 +2804,7 @@ export async function callOpenAI(
   const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
   const bufferToolNames = ["buffer_list_profiles", "buffer_create_post", "buffer_get_pending", "buffer_get_sent"];
   const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
-  const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet"];
+  const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet", "twitter_lookup_user", "twitter_get_user_tweets"];
   const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
 
   // Extract last user message for rules-based dispatch (e.g. gmail send vs draft)
