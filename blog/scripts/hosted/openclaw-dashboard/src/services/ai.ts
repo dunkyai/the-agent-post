@@ -2078,9 +2078,15 @@ async function executeGoogleTool(toolName: string, input: any): Promise<string> 
         // Reply mode is determined by the recipient's tier setting, not the AI's tool choice
         const { replyMode } = isGmailSenderAllowed(input.to || "");
         if (replyMode === "send") {
-          return await gmailSend(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
+          const sendResult = await gmailSend(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
+          const parsed = JSON.parse(sendResult);
+          if (parsed.success) parsed.action = "sent";
+          return JSON.stringify(parsed);
         }
-        return await gmailCreateDraft(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
+        const draftResult = await gmailCreateDraft(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
+        const parsed = JSON.parse(draftResult);
+        if (parsed.success) parsed.action = "drafted";
+        return JSON.stringify(parsed);
       }
       case "gmail_label":
         return await gmailAddLabel(input.message_id, input.label_name, acct);
