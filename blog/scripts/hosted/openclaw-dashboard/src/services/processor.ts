@@ -154,7 +154,7 @@ export async function processTask(
     // Hallucination guard: if the user asked for an action but the AI made zero tool calls,
     // retry once with clean context (no history). Rules-based — conversation history may be
     // contaminated with previous hallucinated responses that teach the AI to skip tools.
-    const actionPattern = /\b(send|draft|create|schedule|book|add|delete|remove|update|set up|cancel|retweet|post)\b/i;
+    const actionPattern = /\b(send|draft|create|schedule|book|add|delete|remove|update|set up|cancel|retweet|post|change|edit|modify|write|move|rename|insert|append|replace)\b/i;
     if (toolCallsCount === 0 && actionPattern.test(task.input.raw_input || "")) {
       console.log(`[processor] Hallucination guard: task ${taskId} had 0 tool calls — retrying with clean context`);
       toolCallsCount = 0;
