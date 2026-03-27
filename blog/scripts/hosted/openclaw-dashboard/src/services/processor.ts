@@ -155,6 +155,7 @@ export async function processTask(
     // that's a hallucination. Rules-based — check the OUTPUT for success claims, not the input
     // for action keywords. Legitimate 0-tool responses (follow-up questions, conversation) pass through.
     const claimsAction = /\b(I've sent|I've drafted|I've created|I've searched|I've saved|I've uploaded|I've updated|I've deleted|I've added|I've removed|I've scheduled|I've posted|I've modified|I've edited|I've found|I've checked|I've confirmed|successfully sent|successfully created|successfully saved|successfully drafted|successfully posted|successfully updated|Email Sent|Event Created|Draft Created|File Saved)\b/i;
+    let hallucinationCaught = false;
     if (toolCallsCount === 0 && claimsAction.test(response.content || "")) {
       console.log(`[processor] Hallucination guard: task ${taskId} claims action with 0 tool calls — retrying with clean context`);
       toolCallsCount = 0;
@@ -174,11 +175,13 @@ export async function processTask(
       if (toolCallsCount === 0 && claimsAction.test(response.content || "")) {
         console.log(`[processor] Hallucination guard: task ${taskId} retry still hallucinating — rejecting`);
         response = { role: "assistant", content: "I wasn't able to complete that action. Please try again — if the issue persists, try rephrasing your request." };
+        hallucinationCaught = true;
       }
     }
 
-    // Save assistant response to conversation
-    if (response.content && response.content.trim()) {
+    // Save assistant response to conversation — but NOT rejected hallucinations,
+    // which would contaminate future requests in the same conversation
+    if (!hallucinationCaught && response.content && response.content.trim()) {
       addMessage(conversationId, "assistant", response.content);
     }
 

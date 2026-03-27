@@ -1,6 +1,6 @@
 import type { Task } from "../types/task";
 import { createTask } from "../services/task";
-import { getOrCreateConversation, getSetting, addMessage } from "../services/db";
+import { getOrCreateConversation, getSetting, addMessage, getDb } from "../services/db";
 
 // --- In-memory pending state (same pattern as old chat.ts) ---
 
@@ -15,7 +15,32 @@ interface PendingState {
 const pending = new Map<string, PendingState>();
 const cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-const CHAT_EXTERNAL_ID = "dashboard";
+const CHAT_CONVERSATION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+/**
+ * Get or create a chat conversation, starting fresh if the last message
+ * was more than 10 minutes ago. Prevents conversation history contamination.
+ */
+function getChatConversation(): string {
+  const existing = getDb()
+    .prepare("SELECT id, updated_at FROM conversations WHERE integration_type = 'dashboard' AND external_id = 'dashboard'")
+    .get() as { id: string; updated_at: string } | undefined;
+
+  if (existing) {
+    const lastActivity = new Date(existing.updated_at + "Z").getTime();
+    const now = Date.now();
+    if (now - lastActivity > CHAT_CONVERSATION_TIMEOUT_MS) {
+      // Stale conversation — archive it by changing its external_id, then create fresh
+      const archivedId = `dashboard-${existing.id.slice(0, 8)}`;
+      getDb()
+        .prepare("UPDATE conversations SET external_id = ? WHERE id = ?")
+        .run(archivedId, existing.id);
+      console.log(`[chat-adapter] Archived stale conversation ${existing.id.slice(0, 8)} (inactive ${Math.round((now - lastActivity) / 60000)}min)`);
+    }
+  }
+
+  return getOrCreateConversation("dashboard", "dashboard");
+}
 
 // Track onboarding state per session (resets on reboot)
 const onboardingOffered = new Set<string>();
@@ -54,7 +79,7 @@ export function submitChatMessage(sessionId: string, message: string): { taskId:
   const oldTimer = cleanupTimers.get(sessionId);
   if (oldTimer) clearTimeout(oldTimer);
 
-  const conversationId = getOrCreateConversation("dashboard", CHAT_EXTERNAL_ID);
+  const conversationId = getChatConversation();
 
   // --- Onboarding gate ---
   if (isContextSparse() && !onboardingSkipped.has(sessionId)) {
