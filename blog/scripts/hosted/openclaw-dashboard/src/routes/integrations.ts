@@ -11,7 +11,7 @@ import { startBuffer, stopBuffer, testBufferConnection, bufferListChannels, isBu
 import { startLuma, stopLuma, testLumaConnection } from "../services/luma";
 import { buildTwitterOAuthUrl, stopTwitter } from "../services/twitter";
 import { startBeehiiv, stopBeehiiv, testBeehiivConnection } from "../services/beehiiv";
-import { isOneRunning, startOne, stopOne, getOneConnections, createLinkToken, fetchConnections } from "../services/one";
+import { isOneRunning, startOne, stopOne, getOneConnections, getAuthKitData, fetchConnections } from "../services/one";
 
 const router = Router();
 
@@ -820,28 +820,53 @@ function parseTemplateRows(body: any): { name: string; id: string }[] {
   return templates;
 }
 
-// --- One (withone.ai) ---
+// --- One (withone.ai / Pica) ---
+
+// CORS preflight for AuthKit iframe (authkit.picaos.com calls our endpoint)
+router.options("/integrations/one/link-token", (req: Request, res: Response) => {
+  res.setHeader("Access-Control-Allow-Origin", "https://authkit.picaos.com");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Max-Age", "86400");
+  res.status(204).end();
+});
 
 router.post("/integrations/one/link-token", async (req: Request, res: Response) => {
+  // Allow AuthKit iframe at authkit.picaos.com to call this endpoint
+  res.setHeader("Access-Control-Allow-Origin", "https://authkit.picaos.com");
+
   try {
-    const result = await createLinkToken();
-    const parsed = JSON.parse(result);
-    if (parsed.error) {
-      res.status(400).json({ error: parsed.error });
+    const result = await getAuthKitData();
+    if (result.error) {
+      res.status(400).json({ error: result.error });
     } else {
-      res.json(parsed);
+      res.json(result);
     }
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to create link token";
+    const message = err instanceof Error ? err.message : "Failed to get AuthKit data";
     res.status(500).json({ error: message });
   }
 });
 
 router.post("/integrations/one/connection", async (req: Request, res: Response) => {
   try {
-    // After AuthKit completes, refresh connections from One's vault
+    // After AuthKit LINK_SUCCESS, refresh connections from Pica
     const connections = await fetchConnections();
     if (connections.length === 0) {
+      // If vault fetch returned nothing, try using the connection data sent from frontend
+      const connData = req.body;
+      if (connData && connData.key && connData.platform) {
+        const single = [{
+          connection_key: connData.key,
+          platform: connData.platform,
+          display_name: connData.name || connData.platform,
+        }];
+        const config = encrypt(JSON.stringify({ connections: single }));
+        upsertIntegration("one", config, "connected");
+        startOne({ connections: single });
+        res.redirect(303, "/integrations?flash=Connected:+" + encodeURIComponent(connData.platform));
+        return;
+      }
       res.redirect(303, "/integrations?flash=No+connections+found");
       return;
     }
