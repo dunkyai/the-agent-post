@@ -160,6 +160,11 @@ function initSchema(): void {
       PRIMARY KEY (thread_id, account_id)
     );
     CREATE INDEX IF NOT EXISTS idx_email_thread_state_state ON email_thread_state(state);
+
+    CREATE TABLE IF NOT EXISTS slack_nudged_threads (
+      external_id TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // Migrations: add columns to existing tables
