@@ -1929,7 +1929,7 @@ function loadEmailRuleTiers(): EmailRuleTier[] {
  * Returns { allowed, replyMode } — most-specific tier wins.
  * Evaluation order: addresses → domains → everyone.
  */
-function isGmailSenderAllowed(sender: string): { allowed: boolean; replyMode: "draft" | "send" } {
+export function isGmailSenderAllowed(sender: string): { allowed: boolean; replyMode: "draft" | "send" } {
   const tiers = loadEmailRuleTiers();
   const email = extractEmailAddress(sender);
   const domain = email.split("@")[1];
