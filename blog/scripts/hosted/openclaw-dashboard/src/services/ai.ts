@@ -2056,7 +2056,7 @@ function checkGmailRecipientRules(to?: string, cc?: string): string | null {
   return null;
 }
 
-async function executeGoogleTool(toolName: string, input: any): Promise<string> {
+async function executeGoogleTool(toolName: string, input: any, userRawInput?: string): Promise<string> {
   if (!isGoogleRunning()) {
     return JSON.stringify({ error: "Google is not connected. Ask the user to connect Google in the integrations page." });
   }
@@ -2071,26 +2071,36 @@ async function executeGoogleTool(toolName: string, input: any): Promise<string> 
         return await gmailReadMessage(input.message_id, acct);
       case "gmail_get_attachment":
         return await gmailGetAttachment(input.message_id, input.attachment_id, acct);
-      case "gmail_send": {
-        const ruleCheck = checkGmailRecipientRules(input.to, input.cc);
-        if (ruleCheck) return ruleCheck;
-        // "send" mode allows sending; "draft" mode blocks it
-        const { replyMode } = isGmailSenderAllowed(input.to || "");
-        if (replyMode !== "send") {
-          return JSON.stringify({ success: false, error: "Your email settings only allow drafting for this recipient. To send directly, update the reply mode on the Integrations page." });
-        }
-        const sendResult = await gmailSend(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
-        const parsed = JSON.parse(sendResult);
-        if (parsed.success) parsed.action = "sent";
-        return JSON.stringify(parsed);
-      }
+      case "gmail_send":
       case "gmail_create_draft": {
         const ruleCheck = checkGmailRecipientRules(input.to, input.cc);
         if (ruleCheck) return ruleCheck;
-        // Drafting is always allowed regardless of reply mode
+        // Rules-based: detect user intent from raw input, then apply setting
+        // User said "draft" → always draft (regardless of setting)
+        // User didn't say "draft" → check reply_mode setting to decide
+        const userWantsDraft = /\bdraft\b/i.test(userRawInput || "");
+        const { replyMode } = isGmailSenderAllowed(input.to || "");
+        if (userWantsDraft) {
+          // User explicitly asked to draft — always honor it
+          const draftResult = await gmailCreateDraft(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
+          const parsed = JSON.parse(draftResult);
+          if (parsed.success) parsed.action = "drafted";
+          return JSON.stringify(parsed);
+        }
+        if (replyMode === "send") {
+          // Setting allows send, user didn't ask to draft → send
+          const sendResult = await gmailSend(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
+          const parsed = JSON.parse(sendResult);
+          if (parsed.success) parsed.action = "sent";
+          return JSON.stringify(parsed);
+        }
+        // Setting is draft-only, user wanted to send → draft + explain
         const draftResult = await gmailCreateDraft(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
         const parsed = JSON.parse(draftResult);
-        if (parsed.success) parsed.action = "drafted";
+        if (parsed.success) {
+          parsed.action = "drafted";
+          parsed.note = "Your email settings only allow drafting for this recipient. To send directly, update the reply mode on the Integrations page.";
+        }
         return JSON.stringify(parsed);
       }
       case "gmail_label":
@@ -2454,6 +2464,9 @@ export async function callAnthropic(
     content: m.content,
   }));
 
+  // Extract last user message for rules-based dispatch (e.g. gmail send vs draft)
+  const lastUserMsg = [...messages].reverse().find(m => m.role === "user")?.content || "";
+
   const MAX_TOOL_ROUNDS = 50;
   const toolCallLog: string[] = []; // track tool+input fingerprints for loop detection
   const MAX_REPEAT_CALLS = 2; // allow same tool+input at most twice
@@ -2565,7 +2578,7 @@ export async function callAnthropic(
         } else if (messagingToolNames.includes(toolBlock.name)) {
           result = await executeMessagingTool(toolBlock.name, toolBlock.input);
         } else if (googleToolNames.includes(toolBlock.name)) {
-          result = await executeGoogleTool(toolBlock.name, toolBlock.input);
+          result = await executeGoogleTool(toolBlock.name, toolBlock.input, lastUserMsg);
         } else if (supabaseToolNames.includes(toolBlock.name)) {
           result = await executeSupabaseTool(toolBlock.name, toolBlock.input);
         } else if (airtableToolNames.includes(toolBlock.name)) {
@@ -2764,6 +2777,9 @@ export async function callOpenAI(
   const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet"];
   const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
 
+  // Extract last user message for rules-based dispatch (e.g. gmail send vs draft)
+  const lastUserMsg = [...messages].reverse().find(m => m.role === "user")?.content || "";
+
   const MAX_TOOL_ROUNDS = 50;
   const toolCallLog: string[] = [];
   const MAX_REPEAT_CALLS = 2;
@@ -2852,7 +2868,7 @@ export async function callOpenAI(
         } else if (messagingToolNames.includes(toolName)) {
           result = await executeMessagingTool(toolName, toolInput);
         } else if (googleToolNames.includes(toolName)) {
-          result = await executeGoogleTool(toolName, toolInput);
+          result = await executeGoogleTool(toolName, toolInput, lastUserMsg);
         } else if (supabaseToolNames.includes(toolName)) {
           result = await executeSupabaseTool(toolName, toolInput);
         } else if (airtableToolNames.includes(toolName)) {
