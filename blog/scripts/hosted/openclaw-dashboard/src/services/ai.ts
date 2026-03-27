@@ -46,6 +46,11 @@ import {
   isBeehiivRunning, getBeehiivPublicationName,
   beehiivListTemplates, beehiivCreateDraft, beehiivListPosts, beehiivGetPost,
 } from "./beehiiv";
+import {
+  isOneRunning, getOneConnections, getOneConnectionPlatforms, getConnectionKeyForPlatform,
+  listConnections as oneListConnections, searchActions as oneSearchActions,
+  getActionKnowledge as oneGetActionKnowledge, executeAction as oneExecuteAction,
+} from "./one";
 
 interface AIResponse {
   role: string;
@@ -1517,6 +1522,78 @@ async function executeBeehiivTool(toolName: string, input: any): Promise<string>
   }
 }
 
+// --- One (withone.ai) Meta-Tools ---
+
+const ONE_TOOLS = [
+  {
+    name: "one_list_connections",
+    description: "List all platforms the user has connected through One. Use this first to see what third-party services are available (e.g. HubSpot, Salesforce, Shopify, Zendesk, etc.).",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "one_search_actions",
+    description: "Search for available actions on a connected platform. Use this after one_list_connections to discover what you can do with a specific platform (e.g. 'create contact' on HubSpot, 'list orders' on Shopify).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        platform: { type: "string", description: "The platform name (e.g. 'hubspot', 'salesforce', 'shopify')" },
+        query: { type: "string", description: "What you want to do (e.g. 'create contact', 'list deals', 'search orders')" },
+      },
+      required: ["platform", "query"],
+    },
+  },
+  {
+    name: "one_get_action_knowledge",
+    description: "Get detailed information about a specific action — required parameters, expected request body, and endpoint details. Call this before executing an action to understand exactly what data is needed.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action_id: { type: "string", description: "The action ID from one_search_actions results" },
+      },
+      required: ["action_id"],
+    },
+  },
+  {
+    name: "one_execute_action",
+    description: "Execute an action on a connected platform. Use one_get_action_knowledge first to understand the required parameters and request format.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        platform: { type: "string", description: "The platform name (must match a connected platform)" },
+        action_id: { type: "string", description: "The action ID from one_search_actions" },
+        method: { type: "string", enum: ["GET", "POST", "PUT", "PATCH", "DELETE"], description: "HTTP method for the action" },
+        path: { type: "string", description: "API path for the action (from action knowledge)" },
+        body: { type: "object", description: "Request body (for POST/PUT/PATCH)" },
+      },
+      required: ["platform", "action_id", "method", "path"],
+    },
+  },
+];
+
+async function executeOneTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "one_list_connections":
+        return await oneListConnections();
+      case "one_search_actions":
+        return await oneSearchActions(input.platform, input.query);
+      case "one_get_action_knowledge":
+        return await oneGetActionKnowledge(input.action_id);
+      case "one_execute_action": {
+        const connectionKey = getConnectionKeyForPlatform(input.platform);
+        if (!connectionKey) {
+          return JSON.stringify({ error: `Platform "${input.platform}" is not connected. Use one_list_connections to see available platforms.` });
+        }
+        return await oneExecuteAction(input.method, input.path, connectionKey, input.action_id, input.body);
+      }
+      default:
+        return JSON.stringify({ error: `Unknown One tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "One operation failed" });
+  }
+}
+
 // --- Public Google Doc Tool (no OAuth needed) ---
 
 const PUBLIC_GDOC_TOOLS = [
@@ -2373,6 +2450,10 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   create_scheduled_job: "Creating a scheduled job...",
   list_scheduled_jobs: "Listing scheduled jobs...",
   delete_scheduled_job: "Deleting a scheduled job...",
+  one_list_connections: "Checking connected platforms...",
+  one_search_actions: (input) => `Searching ${input?.platform || "platform"} actions...`,
+  one_get_action_knowledge: "Reading action details...",
+  one_execute_action: (input) => `Running ${input?.platform || "platform"} action...`,
 };
 
 // --- Anthropic API with tool use loop ---
@@ -2415,6 +2496,7 @@ export async function callAnthropic(
   if (isLumaRunning()) tools.push(...LUMA_TOOLS);
   if (isTwitterRunning()) tools.push(...TWITTER_TOOLS);
   if (isBeehiivRunning()) tools.push(...BEEHIIV_TOOLS);
+  if (isOneRunning()) tools.push(...ONE_TOOLS);
 
   // Conditionally add Google tools based on connected services
   const googleServices = getConnectedServices();
@@ -2511,6 +2593,7 @@ export async function callAnthropic(
       const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
       const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet"];
       const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
+      const oneToolNames = ["one_list_connections", "one_search_actions", "one_get_action_knowledge", "one_execute_action"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
 
@@ -2566,6 +2649,8 @@ export async function callAnthropic(
           result = await executeTwitterTool(toolBlock.name, toolBlock.input);
         } else if (beehiivToolNames.includes(toolBlock.name)) {
           result = await executeBeehiivTool(toolBlock.name, toolBlock.input);
+        } else if (oneToolNames.includes(toolBlock.name)) {
+          result = await executeOneTool(toolBlock.name, toolBlock.input);
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input);
         }
@@ -2691,6 +2776,7 @@ export async function callOpenAI(
   if (isLumaRunning()) customTools.push(...LUMA_TOOLS);
   if (isTwitterRunning()) customTools.push(...TWITTER_TOOLS);
   if (isBeehiivRunning()) customTools.push(...BEEHIIV_TOOLS);
+  if (isOneRunning()) customTools.push(...ONE_TOOLS);
   const googleServices = getConnectedServices();
   if (googleServices) {
     if (googleServices.includes("gmail")) {
@@ -2749,6 +2835,7 @@ export async function callOpenAI(
   const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
   const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet"];
   const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
+  const oneToolNames = ["one_list_connections", "one_search_actions", "one_get_action_knowledge", "one_execute_action"];
 
   const MAX_TOOL_ROUNDS = 50;
   const toolCallLog: string[] = [];
@@ -2853,6 +2940,8 @@ export async function callOpenAI(
           result = await executeTwitterTool(toolName, toolInput);
         } else if (beehiivToolNames.includes(toolName)) {
           result = await executeBeehiivTool(toolName, toolInput);
+        } else if (oneToolNames.includes(toolName)) {
+          result = await executeOneTool(toolName, toolInput);
         } else {
           result = executeSchedulingTool(toolName, toolInput);
         }
@@ -3237,6 +3326,13 @@ CRITICAL — READ THIS CAREFULLY: To post a tweet, you MUST call the twitter_pos
     const pubName = getBeehiivPublicationName();
     const beehiivContext = `You are connected to Beehiiv for newsletter management${pubName ? ` (publication: ${pubName})` : ""}. You can create draft newsletters, list posts, and view post details using the beehiiv_* tools. When asked to create a newsletter, use beehiiv_list_templates first to show available design templates, then beehiiv_create_draft with the chosen template. Drafts are created in Beehiiv for review — they are NOT published automatically. Write newsletter content as well-formatted HTML. Always confirm the content with the user before creating the draft.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${beehiivContext}` : beehiivContext;
+  }
+
+  // Inject One (withone.ai) context
+  if (isOneRunning()) {
+    const platforms = getOneConnectionPlatforms();
+    const oneContext = `You have access to additional third-party integrations through One. Connected platforms: ${platforms.join(", ")}. Use the one_* tools to interact with these platforms. Workflow: (1) one_list_connections to see what's available, (2) one_search_actions to find actions on a platform, (3) one_get_action_knowledge to understand required parameters, (4) one_execute_action to perform the action. These are general-purpose integrations — use your native tools (gmail_*, calendar_*, slack_*, etc.) for services you have direct integrations with, and one_* tools for everything else.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${oneContext}` : oneContext;
   }
 
   // Inject long-term memories (skip for scheduled jobs to prevent memory contamination)
