@@ -11,6 +11,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@picahq/authkit": "^1.0.10",
+    "@picahq/authkit-token": "^1.0.4",
     "better-sqlite3": "^11.7.0",
     "cookie-parser": "^1.4.7",
     "ejs": "^3.1.10",

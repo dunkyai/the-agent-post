@@ -1,8 +1,10 @@
-// One (withone.ai) — Hybrid integration layer
+// One (withone.ai / Pica) — Hybrid integration layer
 // Provides 250+ platform connections through a single API.
 // Native integrations take priority; One handles the long tail.
 
-const ONE_API = "https://api.withone.ai";
+import { AuthKitToken } from "@picahq/authkit-token";
+
+const PICA_API = "https://api.picaos.com";
 
 interface OneConnection {
   connection_key: string;
@@ -58,53 +60,34 @@ function truncate(text: string, maxLen = 10000): string {
 
 // --- API Functions ---
 
-export async function createLinkToken(): Promise<string> {
+export async function getAuthKitData(): Promise<any> {
   try {
-    const res = await fetch(`${ONE_API}/v1/authkit/token`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-one-secret": getSecret(),
-      },
-      body: JSON.stringify({
-        identity: getIdentity(),
-        identityType: "user",
-      }),
+    const authkit = new AuthKitToken(getSecret());
+    const result = await authkit.create({
+      identity: getIdentity(),
+      identityType: "user",
     });
-
-    if (!res.ok) {
-      const body = await res.text();
-      return JSON.stringify({ error: `Failed to create link token (${res.status}): ${body}` });
-    }
-
-    const data: any = await res.json();
-    return JSON.stringify({ token: data.token || data.linkToken });
+    return result;
   } catch (err) {
-    return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to create link token" });
+    return { error: err instanceof Error ? err.message : "Failed to get AuthKit data" };
   }
 }
 
 export async function fetchConnections(): Promise<OneConnection[]> {
   try {
-    const res = await fetch(
-      `${ONE_API}/v1/vault/connections?identity=${encodeURIComponent(getIdentity())}&identityType=user`,
-      {
-        headers: { "x-one-secret": getSecret() },
-      }
-    );
+    // Use AuthKitToken to get connections (calls POST /v1/authkit)
+    const authkit = new AuthKitToken(getSecret());
+    const result = await authkit.create({
+      identity: getIdentity(),
+      identityType: "user",
+    });
 
-    if (!res.ok) {
-      console.error(`[one] Failed to fetch connections (${res.status})`);
-      return [];
-    }
-
-    const data: any = await res.json();
     const connections: OneConnection[] = [];
-    for (const conn of data.connections || data || []) {
+    for (const conn of result?.rows || []) {
       connections.push({
-        connection_key: conn.connectionKey || conn.connection_key || conn.key,
+        connection_key: conn.key || conn.connectionKey || conn.connection_key,
         platform: conn.platform || conn.provider || "unknown",
-        display_name: conn.displayName || conn.display_name || conn.platform || conn.provider,
+        display_name: conn.name || conn.displayName || conn.platform || conn.provider,
       });
     }
     return connections;
@@ -126,9 +109,9 @@ export async function listConnections(): Promise<string> {
 
 export async function searchActions(platform: string, query: string): Promise<string> {
   try {
-    const url = `${ONE_API}/v1/available-actions/search/${encodeURIComponent(platform)}?query=${encodeURIComponent(query)}&executeAgent=true`;
+    const url = `${PICA_API}/v1/available-actions/search/${encodeURIComponent(platform)}?query=${encodeURIComponent(query)}&executeAgent=true`;
     const res = await fetch(url, {
-      headers: { "x-one-secret": getSecret() },
+      headers: { "X-Pica-Secret": getSecret() },
     });
 
     if (!res.ok) {
@@ -145,8 +128,8 @@ export async function searchActions(platform: string, query: string): Promise<st
 
 export async function getActionKnowledge(actionId: string): Promise<string> {
   try {
-    const res = await fetch(`${ONE_API}/v1/knowledge?_id=${encodeURIComponent(actionId)}`, {
-      headers: { "x-one-secret": getSecret() },
+    const res = await fetch(`${PICA_API}/v1/knowledge?_id=${encodeURIComponent(actionId)}`, {
+      headers: { "X-Pica-Secret": getSecret() },
     });
 
     if (!res.ok) {
@@ -169,12 +152,12 @@ export async function executeAction(
   body?: any
 ): Promise<string> {
   try {
-    const url = `${ONE_API}/v1/passthrough/${path.replace(/^\//, "")}`;
+    const url = `${PICA_API}/v1/passthrough/${path.replace(/^\//, "")}`;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      "x-one-secret": getSecret(),
-      "x-one-connection-key": connectionKey,
-      "x-one-action-id": actionId,
+      "X-Pica-Secret": getSecret(),
+      "x-pica-connection-key": connectionKey,
+      "x-pica-action-id": actionId,
     };
 
     const fetchOpts: RequestInit = { method: method.toUpperCase(), headers };

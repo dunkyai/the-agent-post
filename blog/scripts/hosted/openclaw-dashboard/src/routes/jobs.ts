@@ -133,15 +133,21 @@ router.post("/jobs/:id", (req: Request, res: Response) => {
   try {
     const tz = getSetting("timezone") || "America/Los_Angeles";
     const nextRun = getNextRun(schedule.trim(), new Date(), tz);
-    updateScheduledJob(id, {
+    const updates: Record<string, any> = {
       name: name.trim(),
       schedule: schedule.trim(),
       prompt: prompt.trim(),
       target_source: target_source?.trim() || "dashboard",
       target_external_id: target_external_id?.trim() || "scheduler",
       next_run: nextRun.toISOString(),
-    });
-    res.redirect(303, "/jobs?flash=Job+updated");
+    };
+    // "Save & Enable" button submits enabled=1
+    if (req.body.enabled !== undefined) {
+      updates.enabled = req.body.enabled === "1" ? 1 : 0;
+    }
+    updateScheduledJob(id, updates);
+    const flash = req.body.enabled === "1" ? "Job+updated+and+enabled" : "Job+updated";
+    res.redirect(303, "/jobs?flash=" + flash);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     res.redirect(303, "/jobs?flash=" + encodeURIComponent(message));
