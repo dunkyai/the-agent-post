@@ -2071,18 +2071,23 @@ async function executeGoogleTool(toolName: string, input: any): Promise<string> 
         return await gmailReadMessage(input.message_id, acct);
       case "gmail_get_attachment":
         return await gmailGetAttachment(input.message_id, input.attachment_id, acct);
-      case "gmail_send":
+      case "gmail_send": {
+        const ruleCheck = checkGmailRecipientRules(input.to, input.cc);
+        if (ruleCheck) return ruleCheck;
+        // "send" mode allows sending; "draft" mode blocks it
+        const { replyMode } = isGmailSenderAllowed(input.to || "");
+        if (replyMode !== "send") {
+          return JSON.stringify({ success: false, error: "Your email settings only allow drafting for this recipient. To send directly, update the reply mode on the Integrations page." });
+        }
+        const sendResult = await gmailSend(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
+        const parsed = JSON.parse(sendResult);
+        if (parsed.success) parsed.action = "sent";
+        return JSON.stringify(parsed);
+      }
       case "gmail_create_draft": {
         const ruleCheck = checkGmailRecipientRules(input.to, input.cc);
         if (ruleCheck) return ruleCheck;
-        // Reply mode is determined by the recipient's tier setting, not the AI's tool choice
-        const { replyMode } = isGmailSenderAllowed(input.to || "");
-        if (replyMode === "send") {
-          const sendResult = await gmailSend(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
-          const parsed = JSON.parse(sendResult);
-          if (parsed.success) parsed.action = "sent";
-          return JSON.stringify(parsed);
-        }
+        // Drafting is always allowed regardless of reply mode
         const draftResult = await gmailCreateDraft(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
         const parsed = JSON.parse(draftResult);
         if (parsed.success) parsed.action = "drafted";
