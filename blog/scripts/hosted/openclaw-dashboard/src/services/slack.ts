@@ -21,8 +21,13 @@ export const SLACK_OUTPUT_RULES = "Be BRIEF — 3 lines maximum. No preamble, no
 const recentEventIds = new Set<string>();
 const EVENT_DEDUP_TTL = 5 * 60 * 1000; // 5 minutes
 
-// Track threads where we've already sent the "is this for me?" nudge (resets on reboot)
-const nudgedThreads = new Set<string>();
+// Track threads where we've already sent the "is this for me?" nudge (persisted in DB)
+function hasNudgedThread(externalId: string): boolean {
+  return !!getDb().prepare("SELECT 1 FROM slack_nudged_threads WHERE external_id = ?").get(externalId);
+}
+function markThreadNudged(externalId: string): void {
+  getDb().prepare("INSERT OR IGNORE INTO slack_nudged_threads (external_id) VALUES (?)").run(externalId);
+}
 
 // --- Approval gate for non-owner users ---
 
@@ -307,12 +312,12 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
 
   if (!isMentioned && !isDM && !hasAudioInThread) {
     // If this is a thread the bot has participated in, send a one-time nudge
-    if (event.thread_ts && !nudgedThreads.has(externalId)) {
+    if (event.thread_ts && !hasNudgedThread(externalId)) {
       const existing = getDb()
         .prepare("SELECT id FROM conversations WHERE integration_type = 'slack' AND external_id = ?")
         .get(externalId) as { id: string } | undefined;
       if (existing) {
-        nudgedThreads.add(externalId);
+        markThreadNudged(externalId);
         await sendSlackMessage(
           channelId,
           "Is this message meant for me? If so, please include @theagentpost in your ask so that I can take action.",
