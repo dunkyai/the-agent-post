@@ -130,7 +130,7 @@ deploy_instance() {
       -e GROQ_API_KEY="$GROQ_API_KEY" \\
       -e PIXABAY_API_KEY="$PIXABAY_API_KEY" \\
       -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \\
-      -e ONE_SECRET="$ONE_SECRET" \\
+      -e ONE_SECRET="${ONE_SECRET:-}" \\
       -e MESSAGE_LIMIT="$INST_MLIMIT" \\
       -e PLAN="$INST_PLAN" \\
       $([ "$ID" = "cb1d6d97" ] && echo '-e SKIP_AUTH=true') \\
