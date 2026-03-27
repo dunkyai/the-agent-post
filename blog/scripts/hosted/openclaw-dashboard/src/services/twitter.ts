@@ -415,6 +415,86 @@ export async function twitterUndoRetweet(tweetIdOrUrl: string): Promise<string> 
   }
 }
 
+export async function twitterLookupUser(username: string): Promise<string> {
+  if (!twitterConfig) return JSON.stringify({ error: "Twitter is not connected" });
+
+  try {
+    const handle = username.replace(/^@/, "").trim();
+    if (!handle) return JSON.stringify({ error: "Username is required" });
+
+    const res = await fetch(
+      `${TWITTER_API}/users/by/username/${encodeURIComponent(handle)}?user.fields=description,public_metrics,created_at,profile_image_url`,
+      { headers: await authHeaders() }
+    );
+
+    if (!res.ok) {
+      return JSON.stringify({ error: `Twitter API error (${res.status}): ${await res.text()}` });
+    }
+
+    const data: any = await res.json();
+    if (!data.data) return JSON.stringify({ error: `User @${handle} not found` });
+
+    return JSON.stringify({
+      id: data.data.id,
+      username: data.data.username,
+      name: data.data.name,
+      description: data.data.description,
+      profile_url: `https://x.com/${data.data.username}`,
+      metrics: data.data.public_metrics,
+      created_at: data.data.created_at,
+    });
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to look up user" });
+  }
+}
+
+export async function twitterGetUserTweets(username: string, maxResults: number = 5): Promise<string> {
+  if (!twitterConfig) return JSON.stringify({ error: "Twitter is not connected" });
+
+  try {
+    const handle = username.replace(/^@/, "").trim();
+    if (!handle) return JSON.stringify({ error: "Username is required" });
+
+    // Resolve username to user ID
+    const userRes = await fetch(
+      `${TWITTER_API}/users/by/username/${encodeURIComponent(handle)}`,
+      { headers: await authHeaders() }
+    );
+
+    if (!userRes.ok) {
+      return JSON.stringify({ error: `Twitter API error (${userRes.status}): ${await userRes.text()}` });
+    }
+
+    const userData: any = await userRes.json();
+    if (!userData.data) return JSON.stringify({ error: `User @${handle} not found` });
+
+    const userId = userData.data.id;
+    const count = Math.min(Math.max(maxResults, 5), 100);
+
+    const res = await fetch(
+      `${TWITTER_API}/users/${userId}/tweets?max_results=${count}&tweet.fields=created_at,public_metrics,conversation_id`,
+      { headers: await authHeaders() }
+    );
+
+    if (!res.ok) {
+      return JSON.stringify({ error: `Twitter API error (${res.status}): ${await res.text()}` });
+    }
+
+    const data: any = await res.json();
+    const tweets = (data.data || []).map((t: any) => ({
+      id: t.id,
+      text: t.text,
+      created_at: t.created_at,
+      url: `https://x.com/${handle}/status/${t.id}`,
+      conversation_id: t.conversation_id,
+      metrics: t.public_metrics,
+    }));
+    return JSON.stringify({ user: `@${handle}`, tweets, count: tweets.length });
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to get user tweets" });
+  }
+}
+
 export async function twitterDeleteTweet(tweetId: string): Promise<string> {
   if (!twitterConfig) return JSON.stringify({ error: "Twitter is not connected" });
 
