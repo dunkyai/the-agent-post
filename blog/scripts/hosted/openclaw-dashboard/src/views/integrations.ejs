@@ -739,10 +739,7 @@
             </form>
           <% } %>
 
-          <!-- AuthKit iframe container (hidden until clicked) -->
-          <div id="one-authkit" style="display: none; margin-top: 12px; border: 1px solid var(--rule-light); border-radius: 8px; overflow: hidden; height: 500px;">
-            <iframe id="one-authkit-iframe" style="width: 100%; height: 100%; border: none;"></iframe>
-          </div>
+          <!-- AuthKit opens a full-screen iframe overlay via JS -->
         </div>
       </details>
       <% } %>
@@ -873,83 +870,84 @@
   renderGmailTags();
 })();
 
-// --- One (AuthKit) ---
+// --- One (AuthKit via Pica) ---
+// Replicates @picahq/authkit SDK behavior: opens a full-screen iframe to
+// authkit.picaos.com with our link-token endpoint encoded in the URL.
 (function () {
   var connectBtn = document.getElementById("one-connect-btn");
   if (!connectBtn) return;
 
-  var container = document.getElementById("one-authkit");
-  var iframe = document.getElementById("one-authkit-iframe");
-  var isOpen = false;
+  var AUTHKIT_BASE = "https://authkit.picaos.com";
 
-  connectBtn.addEventListener("click", async function () {
-    if (isOpen) {
-      container.style.display = "none";
-      iframe.src = "";
-      isOpen = false;
-      connectBtn.textContent = "Connect a Platform";
+  function closeAuthKit() {
+    var el = document.getElementById("event-link");
+    if (el) el.remove();
+  }
+
+  connectBtn.addEventListener("click", function () {
+    // If already open, close
+    if (document.getElementById("event-link")) {
+      closeAuthKit();
       return;
     }
 
-    connectBtn.textContent = "Loading...";
-    connectBtn.disabled = true;
+    // Build the config the AuthKit iframe expects
+    var config = {
+      linkTokenEndpoint: window.location.origin + "/integrations/one/link-token",
+      linkHeaders: {},
+      appTheme: "light",
+    };
 
-    try {
-      var res = await fetch("/integrations/one/link-token", { method: "POST", headers: { "Content-Type": "application/json" } });
-      var data = await res.json();
-      if (data.error) {
-        alert("Failed to start AuthKit: " + data.error);
-        connectBtn.textContent = "Connect a Platform";
-        connectBtn.disabled = false;
-        return;
-      }
+    var encoded = btoa(JSON.stringify(config));
+    var url = AUTHKIT_BASE + "?data=" + encodeURIComponent(encoded);
 
-      iframe.src = "https://auth.withone.ai?token=" + encodeURIComponent(data.token);
-      container.style.display = "block";
-      isOpen = true;
-      connectBtn.textContent = "Cancel";
-      connectBtn.disabled = false;
-    } catch (err) {
-      alert("Failed to start AuthKit: " + (err.message || err));
-      connectBtn.textContent = "Connect a Platform";
-      connectBtn.disabled = false;
-    }
+    // Create full-screen iframe overlay (matching SDK behavior)
+    var iframe = document.createElement("iframe");
+    iframe.id = "event-link";
+    iframe.src = url;
+    iframe.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999;border:none;background:transparent;";
+    iframe.style.display = "none";
+    iframe.style.visibility = "hidden";
+    document.body.appendChild(iframe);
+
+    iframe.onload = function () {
+      setTimeout(function () {
+        iframe.style.display = "block";
+        iframe.style.visibility = "visible";
+      }, 100);
+    };
   });
 
   // Listen for AuthKit postMessage events
   window.addEventListener("message", function (event) {
-    if (!event.origin.includes("withone.ai")) return;
+    if (!event.data || typeof event.data !== "object" || !event.data.messageType) return;
 
-    var data = event.data;
-    if (!data || typeof data !== "object") return;
+    var type = event.data.messageType;
+    var message = event.data.message;
 
-    if (data.type === "LINK_SUCCESS" || data.event === "LINK_SUCCESS") {
-      // Connection succeeded — save it
-      container.style.display = "none";
-      iframe.src = "";
-      isOpen = false;
+    if (type === "LINK_SUCCESS") {
+      closeAuthKit();
 
-      // POST to save the connection, then reload
+      // Send connection data to our backend, then reload
+      var body = "key=" + encodeURIComponent(message.key || "") +
+                 "&platform=" + encodeURIComponent(message.platform || "") +
+                 "&name=" + encodeURIComponent(message.name || "");
+
       fetch("/integrations/one/connection", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: "",
+        body: body,
       }).then(function () {
         window.location.href = "/integrations?flash=Platform+connected";
       }).catch(function () {
         window.location.reload();
       });
-    } else if (data.type === "LINK_ERROR" || data.event === "LINK_ERROR") {
-      container.style.display = "none";
-      iframe.src = "";
-      isOpen = false;
+    } else if (type === "LINK_ERROR") {
+      closeAuthKit();
       connectBtn.textContent = "Connect a Platform";
-      alert("Connection failed. Please try again.");
-    } else if (data.type === "EXIT_EVENT_LINK" || data.event === "EXIT_EVENT_LINK") {
-      container.style.display = "none";
-      iframe.src = "";
-      isOpen = false;
-      connectBtn.textContent = "Connect a Platform";
+      alert("Connection failed: " + (message || "Unknown error"));
+    } else if (type === "EXIT_EVENT_LINK") {
+      closeAuthKit();
     }
   });
 })();
