@@ -152,11 +152,29 @@ export async function processTask(
     );
 
     // Hallucination guard: if the user asked for an action but the AI made zero tool calls,
-    // reject the response. Rules-based — no retry, no AI judgement.
+    // retry once with clean context (no history). Rules-based — conversation history may be
+    // contaminated with previous hallucinated responses that teach the AI to skip tools.
     const actionPattern = /\b(send|draft|create|schedule|book|add|delete|remove|update|set up|cancel|retweet|post)\b/i;
     if (toolCallsCount === 0 && actionPattern.test(task.input.raw_input || "")) {
-      console.log(`[processor] Hallucination guard: task ${taskId} had 0 tool calls for action request — rejecting`);
-      response = { role: "assistant", content: "I wasn't able to complete that action. Please try again — if the issue persists, try rephrasing your request." };
+      console.log(`[processor] Hallucination guard: task ${taskId} had 0 tool calls — retrying with clean context`);
+      toolCallsCount = 0;
+      const cleanHistory = [{ role: "user" as const, content: task.input.raw_input, created_at: new Date().toISOString() }];
+      response = await caller(
+        model,
+        apiKey,
+        systemPrompt,
+        cleanHistory,
+        temperature,
+        maxTokens,
+        onStatus,
+        onToolCallLog
+      );
+
+      // If retry still has 0 tool calls, hard reject
+      if (toolCallsCount === 0) {
+        console.log(`[processor] Hallucination guard: task ${taskId} retry also had 0 tool calls — rejecting`);
+        response = { role: "assistant", content: "I wasn't able to complete that action. Please try again — if the issue persists, try rephrasing your request." };
+      }
     }
 
     // Save assistant response to conversation
