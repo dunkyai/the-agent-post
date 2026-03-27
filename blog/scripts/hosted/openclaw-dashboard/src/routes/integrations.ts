@@ -11,6 +11,7 @@ import { startBuffer, stopBuffer, testBufferConnection, bufferListChannels, isBu
 import { startLuma, stopLuma, testLumaConnection } from "../services/luma";
 import { buildTwitterOAuthUrl, stopTwitter } from "../services/twitter";
 import { startBeehiiv, stopBeehiiv, testBeehiivConnection } from "../services/beehiiv";
+import { isOneRunning, startOne, stopOne, getOneConnections, createLinkToken, fetchConnections } from "../services/one";
 
 const router = Router();
 
@@ -204,6 +205,10 @@ router.get("/integrations", async (req: Request, res: Response) => {
       }
       return base;
     })(),
+    one: {
+      configured: !!process.env.ONE_SECRET,
+      connections: getOneConnections(),
+    },
     flash: req.query.flash || null,
   });
 });
@@ -814,5 +819,75 @@ function parseTemplateRows(body: any): { name: string; id: string }[] {
   }
   return templates;
 }
+
+// --- One (withone.ai) ---
+
+router.post("/integrations/one/link-token", async (req: Request, res: Response) => {
+  try {
+    const result = await createLinkToken();
+    const parsed = JSON.parse(result);
+    if (parsed.error) {
+      res.status(400).json({ error: parsed.error });
+    } else {
+      res.json(parsed);
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to create link token";
+    res.status(500).json({ error: message });
+  }
+});
+
+router.post("/integrations/one/connection", async (req: Request, res: Response) => {
+  try {
+    // After AuthKit completes, refresh connections from One's vault
+    const connections = await fetchConnections();
+    if (connections.length === 0) {
+      res.redirect(303, "/integrations?flash=No+connections+found");
+      return;
+    }
+
+    const config = encrypt(JSON.stringify({ connections }));
+    upsertIntegration("one", config, "connected");
+    startOne({ connections });
+
+    const platforms = connections.map((c) => c.platform).join(", ");
+    res.redirect(303, "/integrations?flash=Connected:+" + encodeURIComponent(platforms));
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to save connection";
+    res.redirect(303, "/integrations?flash=One+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/one/disconnect-platform", async (req: Request, res: Response) => {
+  const { platform } = req.body;
+  if (!platform) {
+    res.redirect(303, "/integrations?flash=Missing+platform");
+    return;
+  }
+
+  try {
+    const current = getOneConnections();
+    const filtered = current.filter((c) => c.platform !== platform);
+
+    if (filtered.length === 0) {
+      stopOne();
+      deleteIntegration("one");
+    } else {
+      const config = encrypt(JSON.stringify({ connections: filtered }));
+      upsertIntegration("one", config, "connected");
+      startOne({ connections: filtered });
+    }
+    res.redirect(303, "/integrations?flash=" + encodeURIComponent(`${platform} disconnected`));
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to disconnect";
+    res.redirect(303, "/integrations?flash=One+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/one/disconnect", (req: Request, res: Response) => {
+  stopOne();
+  deleteIntegration("one");
+  res.redirect(303, "/integrations?flash=All+One+integrations+disconnected");
+});
 
 export default router;
