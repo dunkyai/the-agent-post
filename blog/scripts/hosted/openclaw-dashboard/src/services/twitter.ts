@@ -340,6 +340,42 @@ export async function twitterLookupTweet(tweetIdOrUrl: string): Promise<string> 
   }
 }
 
+export async function twitterQuoteTweet(tweetIdOrUrl: string, comment: string): Promise<string> {
+  if (!twitterConfig) return JSON.stringify({ error: "Twitter is not connected" });
+
+  try {
+    const tweetId = extractTweetId(tweetIdOrUrl);
+    if (!tweetId) {
+      return JSON.stringify({ error: "Invalid tweet ID or URL. Provide a numeric tweet ID or a full x.com/twitter.com URL." });
+    }
+    if (!comment || comment.trim().length === 0) {
+      return JSON.stringify({ error: "Comment text is required for a quote tweet" });
+    }
+
+    // Look up the original tweet to get the author's username for the URL
+    const lookupRes = await fetch(
+      `${TWITTER_API}/tweets/${tweetId}?expansions=author_id&user.fields=username`,
+      { headers: await authHeaders() }
+    );
+    let tweetUrl = `https://x.com/i/status/${tweetId}`;
+    if (lookupRes.ok) {
+      const lookupData: any = await lookupRes.json();
+      const author = lookupData.includes?.users?.[0];
+      if (author) tweetUrl = `https://x.com/${author.username}/status/${tweetId}`;
+    }
+
+    // Post as a new tweet with the URL appended — X renders it as a quote tweet
+    const fullText = `${comment.trim()} ${tweetUrl}`;
+    if (fullText.length > 280) {
+      return JSON.stringify({ error: `Quote tweet exceeds 280 characters (${fullText.length}). Shorten your comment.` });
+    }
+
+    return await twitterPostTweet(fullText);
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to quote tweet" });
+  }
+}
+
 export async function twitterRetweet(tweetIdOrUrl: string): Promise<string> {
   if (!twitterConfig) return JSON.stringify({ error: "Twitter is not connected" });
 
