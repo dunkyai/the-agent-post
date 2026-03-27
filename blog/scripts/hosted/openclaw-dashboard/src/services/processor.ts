@@ -12,6 +12,8 @@ import {
   callOpenAI,
   type ToolCallCallback,
 } from "./ai";
+import { isGoogleRunning, getConnectedServices } from "./google";
+import { isLumaRunning } from "./luma";
 import {
   getSetting,
   getOrCreateConversation,
@@ -21,6 +23,32 @@ import {
 } from "./db";
 
 export type StatusCallback = (status: string) => void;
+
+/**
+ * Detect when a user's request could be routed to multiple integrations.
+ * Returns a clarification message if ambiguous, null if routing is clear.
+ */
+function detectRoutingAmbiguity(input: string): string | null {
+  // Calendar: both Google Calendar and Luma connected
+  const eventPattern = /\b(event|meeting|appointment|invite|calendar)\b/i;
+  if (eventPattern.test(input)) {
+    const googleServices = getConnectedServices();
+    const hasGoogleCalendar = googleServices?.includes("calendar") ?? false;
+    const hasLuma = isLumaRunning();
+
+    if (hasGoogleCalendar && hasLuma) {
+      // If user explicitly mentions which one, no ambiguity
+      if (/\b(google|gcal|google calendar)\b/i.test(input)) return null;
+      if (/\bluma\b/i.test(input)) return null;
+
+      return "You have both Google Calendar and Luma connected. Which would you like me to use?\n\n" +
+        "- **Google Calendar** — personal calendar events\n" +
+        "- **Luma** — public events with RSVPs and a landing page";
+    }
+  }
+
+  return null;
+}
 
 export async function processTask(
   task: Task,
@@ -81,6 +109,21 @@ export async function processTask(
       while (history.length > 0 && history[0].role !== "user") {
         history.shift();
       }
+    }
+
+    // Channel routing: detect ambiguous action requests and ask user to clarify.
+    // Rules-based — if multiple integrations can handle the same action, don't let AI guess.
+    const rawInput = (task.input.raw_input || "").toLowerCase();
+    const clarification = detectRoutingAmbiguity(rawInput);
+    if (clarification) {
+      addMessage(conversationId, "assistant", clarification);
+      const completedAt = new Date().toISOString();
+      const durationMs = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+      updateTaskStatus(taskId, "completed", {
+        output: JSON.stringify({ ...task.output, result: clarification }),
+        execution: JSON.stringify({ model, provider, started_at: startedAt, completed_at: completedAt, duration_ms: durationMs, tool_calls_count: 0 }),
+      });
+      return getTaskById(taskId)!;
     }
 
     // Tool call logging callback
