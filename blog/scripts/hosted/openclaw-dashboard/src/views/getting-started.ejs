@@ -64,21 +64,19 @@
           <div class="gs-card-body">
             <div class="form-group">
               <label for="context_company">Company</label>
-              <textarea id="context_company" name="context_company" rows="3" placeholder="What does your company do? What products or services do you offer?"><%= contextCompany %></textarea>
+              <textarea id="context_company" name="context_company" rows="4" placeholder="What does your company do? What products or services do you offer?"><%= contextCompany %></textarea>
             </div>
             <div class="form-group">
               <label for="context_user">About You</label>
-              <textarea id="context_user" name="context_user" rows="3" placeholder="Your role, responsibilities, and what you'd like your agent to help with"><%= contextUser %></textarea>
+              <textarea id="context_user" name="context_user" rows="4" placeholder="Your role, responsibilities, and what you'd like your agent to help with"><%= contextUser %></textarea>
             </div>
-            <div class="gs-row">
-              <div class="form-group">
-                <label for="context_rules">Rules</label>
-                <textarea id="context_rules" name="context_rules" rows="3" placeholder="Communication style, tone preferences, things to avoid"><%= contextRules %></textarea>
-              </div>
-              <div class="form-group">
-                <label for="context_knowledge">Knowledge</label>
-                <textarea id="context_knowledge" name="context_knowledge" rows="3" placeholder="Key facts, numbers, terminology your agent should know"><%= contextKnowledge %></textarea>
-              </div>
+            <div class="form-group">
+              <label for="context_rules">Rules</label>
+              <textarea id="context_rules" name="context_rules" rows="4" placeholder="Communication style, tone preferences, things to avoid"><%= contextRules %></textarea>
+            </div>
+            <div class="form-group">
+              <label for="context_knowledge">Knowledge</label>
+              <textarea id="context_knowledge" name="context_knowledge" rows="4" placeholder="Key facts, numbers, terminology your agent should know"><%= contextKnowledge %></textarea>
             </div>
           </div>
         </div>
@@ -98,27 +96,29 @@
 
   .gs-tabs {
     display: flex;
-    gap: 4px;
+    gap: 6px;
     margin-bottom: 16px;
-    border-bottom: 1px solid var(--rule-light);
-    padding-bottom: 0;
+    background: var(--rule-light);
+    border-radius: 10px;
+    padding: 4px;
   }
   .gs-tab {
-    padding: 10px 20px;
+    flex: 1;
+    padding: 8px 16px;
     font-size: 14px;
     font-weight: 500;
     color: var(--text-secondary);
     background: none;
     border: none;
-    border-bottom: 2px solid transparent;
+    border-radius: 8px;
     cursor: pointer;
-    transition: color 0.15s, border-color 0.15s;
-    margin-bottom: -1px;
+    transition: background 0.15s, color 0.15s, box-shadow 0.15s;
   }
   .gs-tab:hover { color: var(--fg); }
   .gs-tab.active {
-    color: var(--accent);
-    border-bottom-color: var(--accent);
+    color: var(--fg);
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
   }
 
   .gs-tab-panel { display: none; }
@@ -161,8 +161,8 @@
     box-sizing: border-box;
   }
   .getting-started textarea {
-    min-height: 72px;
-    max-height: 200px;
+    min-height: 96px;
+    max-height: 240px;
     resize: vertical;
   }
 
