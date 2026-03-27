@@ -822,9 +822,13 @@ function parseTemplateRows(body: any): { name: string; id: string }[] {
 
 // --- One (withone.ai / Pica) ---
 
-// CORS preflight for AuthKit iframe (authkit.picaos.com calls our endpoint)
+// CORS preflight for AuthKit iframe (authkit.picaos.com → auth.withone.ai calls our endpoint)
+const AUTHKIT_ORIGINS = ["https://authkit.picaos.com", "https://auth.withone.ai"];
 router.options("/integrations/one/link-token", (req: Request, res: Response) => {
-  res.setHeader("Access-Control-Allow-Origin", "https://authkit.picaos.com");
+  const origin = req.headers.origin || "";
+  if (AUTHKIT_ORIGINS.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   res.setHeader("Access-Control-Max-Age", "86400");
@@ -832,8 +836,10 @@ router.options("/integrations/one/link-token", (req: Request, res: Response) => 
 });
 
 router.post("/integrations/one/link-token", async (req: Request, res: Response) => {
-  // Allow AuthKit iframe at authkit.picaos.com to call this endpoint
-  res.setHeader("Access-Control-Allow-Origin", "https://authkit.picaos.com");
+  const origin = req.headers.origin || "";
+  if (AUTHKIT_ORIGINS.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
 
   try {
     const result = await getAuthKitData();
