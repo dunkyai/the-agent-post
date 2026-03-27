@@ -151,12 +151,12 @@ export async function processTask(
       onToolCallLog
     );
 
-    // Hallucination guard: if the user asked for an action but the AI made zero tool calls,
-    // retry once with clean context (no history). Rules-based — conversation history may be
-    // contaminated with previous hallucinated responses that teach the AI to skip tools.
-    const actionPattern = /\b(send|draft|create|schedule|book|add|delete|remove|update|set up|cancel|retweet|post|change|edit|modify|write|move|rename|insert|append|replace)\b/i;
-    if (toolCallsCount === 0 && actionPattern.test(task.input.raw_input || "")) {
-      console.log(`[processor] Hallucination guard: task ${taskId} had 0 tool calls — retrying with clean context`);
+    // Hallucination guard: if the AI made zero tool calls but claims it performed an action,
+    // that's a hallucination. Rules-based — check the OUTPUT for success claims, not the input
+    // for action keywords. Legitimate 0-tool responses (follow-up questions, conversation) pass through.
+    const claimsAction = /\b(I've sent|I've drafted|I've created|I've searched|I've saved|I've uploaded|I've updated|I've deleted|I've added|I've removed|I've scheduled|I've posted|I've modified|I've edited|I've found|I've checked|I've confirmed|successfully sent|successfully created|successfully saved|successfully drafted|successfully posted|successfully updated|Email Sent|Event Created|Draft Created|File Saved)\b/i;
+    if (toolCallsCount === 0 && claimsAction.test(response.content || "")) {
+      console.log(`[processor] Hallucination guard: task ${taskId} claims action with 0 tool calls — retrying with clean context`);
       toolCallsCount = 0;
       const cleanHistory = [{ role: "user" as const, content: task.input.raw_input, created_at: new Date().toISOString() }];
       response = await caller(
@@ -170,9 +170,9 @@ export async function processTask(
         onToolCallLog
       );
 
-      // If retry still has 0 tool calls, hard reject
-      if (toolCallsCount === 0) {
-        console.log(`[processor] Hallucination guard: task ${taskId} retry also had 0 tool calls — rejecting`);
+      // If retry still claims action with 0 tool calls, hard reject
+      if (toolCallsCount === 0 && claimsAction.test(response.content || "")) {
+        console.log(`[processor] Hallucination guard: task ${taskId} retry still hallucinating — rejecting`);
         response = { role: "assistant", content: "I wasn't able to complete that action. Please try again — if the issue persists, try rephrasing your request." };
       }
     }
