@@ -27,6 +27,8 @@ set -euo pipefail
 BACKUP_BUCKET="${BACKUP_BUCKET:-s3://agentpost-backups}"
 S3_ENDPOINT="${S3_ENDPOINT:-}"  # e.g. https://s3.us-west-004.backblazeb2.com for B2
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
+LOCAL_BACKUP_DIR="${LOCAL_BACKUP_DIR:-/opt/agentpost/backups}"
+LOCAL_RETENTION_DAYS="${LOCAL_RETENTION_DAYS:-7}"
 PROVISIONING_DB="${PROVISIONING_DB:-/opt/agentpost/data/instances.db}"
 BACKUP_TMP="/tmp/agentpost-backup-$$"
 DATE=$(date -u +"%Y-%m-%d_%H%M%S")
@@ -145,7 +147,9 @@ fi
 if [ "$DRY_RUN" = true ]; then
   echo ""
   echo "[dry-run] Would compress and upload to $BACKUP_BUCKET/backups/$DATE.tar.gz"
-  echo "[dry-run] Would prune backups older than $RETENTION_DAYS days"
+  echo "[dry-run] Would save local copy to $LOCAL_BACKUP_DIR/$DATE.tar.gz"
+  echo "[dry-run] Would prune remote backups older than $RETENTION_DAYS days"
+  echo "[dry-run] Would prune local backups older than $LOCAL_RETENTION_DAYS days"
   exit 0
 fi
 
@@ -155,6 +159,12 @@ ARCHIVE="/tmp/agentpost-backup-${DATE}.tar.gz"
 tar -czf "$ARCHIVE" -C "$BACKUP_TMP" .
 ARCHIVE_SIZE=$(stat -c%s "$ARCHIVE" 2>/dev/null || stat -f%z "$ARCHIVE")
 echo "  Archive: $(numfmt --to=iec $ARCHIVE_SIZE 2>/dev/null || echo "${ARCHIVE_SIZE}B")"
+
+echo ""
+echo "--- Saving local copy ---"
+mkdir -p "$LOCAL_BACKUP_DIR"
+cp "$ARCHIVE" "$LOCAL_BACKUP_DIR/$DATE.tar.gz"
+echo "  Saved: $LOCAL_BACKUP_DIR/$DATE.tar.gz"
 
 echo ""
 echo "--- Uploading to $BACKUP_BUCKET ---"
@@ -176,7 +186,13 @@ s3cmd ls "$BACKUP_BUCKET/backups/" | awk '{print $NF}' | while read -r KEY; do
   fi
 done
 
+# --- 6. Prune old local backups ---
+echo ""
+echo "--- Pruning local backups older than $LOCAL_RETENTION_DAYS days ---"
+find "$LOCAL_BACKUP_DIR" -name "*.tar.gz" -type f -mtime +$LOCAL_RETENTION_DAYS -print -delete 2>/dev/null || true
+
 echo ""
 echo "=== Backup complete ==="
 echo "  Total data: $(numfmt --to=iec $TOTAL_SIZE 2>/dev/null || echo "${TOTAL_SIZE}B")"
 echo "  Archive: backups/$DATE.tar.gz"
+echo "  Local copy: $LOCAL_BACKUP_DIR/$DATE.tar.gz (${LOCAL_RETENTION_DAYS}-day retention)"
