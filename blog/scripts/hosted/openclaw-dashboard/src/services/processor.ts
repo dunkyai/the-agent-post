@@ -11,6 +11,7 @@ import {
   callAnthropic,
   callOpenAI,
   type ToolCallCallback,
+  type SourceContext,
 } from "./ai";
 import { isGoogleRunning, getConnectedServices } from "./google";
 import { isLumaRunning } from "./luma";
@@ -138,6 +139,12 @@ export async function processTask(
       });
     };
 
+    // Build source context for Slack thread delivery
+    const sourceContext: SourceContext | undefined =
+      task.input.source_channel === "slack" && task.input.metadata?.channelId
+        ? { channelId: task.input.metadata.channelId as string, threadTs: task.input.metadata.threadTs as string | undefined }
+        : undefined;
+
     // Call the appropriate provider
     const caller = provider === "anthropic" ? callAnthropic : callOpenAI;
     let response = await caller(
@@ -148,7 +155,8 @@ export async function processTask(
       temperature,
       maxTokens,
       onStatus,
-      onToolCallLog
+      onToolCallLog,
+      sourceContext
     );
 
     // Hallucination guard: if the AI made zero tool calls but claims it performed an action,
@@ -168,7 +176,8 @@ export async function processTask(
         temperature,
         maxTokens,
         onStatus,
-        onToolCallLog
+        onToolCallLog,
+        sourceContext
       );
 
       // If retry still claims action with 0 tool calls, hard reject

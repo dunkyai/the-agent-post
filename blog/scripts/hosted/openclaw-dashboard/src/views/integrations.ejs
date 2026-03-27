@@ -701,6 +701,52 @@
         </div>
       </details>
 
+      <!-- One (withone.ai) -->
+      <% if (one.configured) { %>
+      <details class="integration-tile" id="one-tile">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #18181B;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M6 12h12"/></svg></span>
+          <div class="integration-tile-info">
+            <h3>One <span style="font-size: 11px; font-weight: 400; color: var(--text-secondary);">200+ apps</span></h3>
+            <p>Connect HubSpot, Salesforce, Shopify, and more</p>
+          </div>
+          <% if (one.connections.length > 0) { %>
+            <span class="status-badge status-connected"><%= one.connections.length %> connected</span>
+          <% } else { %>
+            <span class="status-badge status-disconnected">disconnected</span>
+          <% } %>
+        </summary>
+        <div class="integration-tile-body">
+          <% if (one.connections.length > 0) { %>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;">
+              <% one.connections.forEach(function(conn) { %>
+                <form method="POST" action="/integrations/one/disconnect-platform" style="margin: 0;">
+                  <input type="hidden" name="platform" value="<%= conn.platform %>">
+                  <button type="submit" class="one-pill">
+                    <%= conn.display_name || conn.platform %>
+                    <span class="one-pill-x">&times;</span>
+                  </button>
+                </form>
+              <% }); %>
+            </div>
+          <% } %>
+
+          <button type="button" class="btn" id="one-connect-btn">Connect a Platform</button>
+
+          <% if (one.connections.length > 0) { %>
+            <form method="POST" action="/integrations/one/disconnect" style="margin-top: 8px;">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect All</button>
+            </form>
+          <% } %>
+
+          <!-- AuthKit iframe container (hidden until clicked) -->
+          <div id="one-authkit" style="display: none; margin-top: 12px; border: 1px solid var(--rule-light); border-radius: 8px; overflow: hidden; height: 500px;">
+            <iframe id="one-authkit-iframe" style="width: 100%; height: 100%; border: none;"></iframe>
+          </div>
+        </div>
+      </details>
+      <% } %>
+
     </div><!-- /integration-grid -->
   </div>
 </div>
@@ -826,5 +872,104 @@
   updateGmailVisibility();
   renderGmailTags();
 })();
+
+// --- One (AuthKit) ---
+(function () {
+  var connectBtn = document.getElementById("one-connect-btn");
+  if (!connectBtn) return;
+
+  var container = document.getElementById("one-authkit");
+  var iframe = document.getElementById("one-authkit-iframe");
+  var isOpen = false;
+
+  connectBtn.addEventListener("click", async function () {
+    if (isOpen) {
+      container.style.display = "none";
+      iframe.src = "";
+      isOpen = false;
+      connectBtn.textContent = "Connect a Platform";
+      return;
+    }
+
+    connectBtn.textContent = "Loading...";
+    connectBtn.disabled = true;
+
+    try {
+      var res = await fetch("/integrations/one/link-token", { method: "POST", headers: { "Content-Type": "application/json" } });
+      var data = await res.json();
+      if (data.error) {
+        alert("Failed to start AuthKit: " + data.error);
+        connectBtn.textContent = "Connect a Platform";
+        connectBtn.disabled = false;
+        return;
+      }
+
+      iframe.src = "https://auth.withone.ai?token=" + encodeURIComponent(data.token);
+      container.style.display = "block";
+      isOpen = true;
+      connectBtn.textContent = "Cancel";
+      connectBtn.disabled = false;
+    } catch (err) {
+      alert("Failed to start AuthKit: " + (err.message || err));
+      connectBtn.textContent = "Connect a Platform";
+      connectBtn.disabled = false;
+    }
+  });
+
+  // Listen for AuthKit postMessage events
+  window.addEventListener("message", function (event) {
+    if (!event.origin.includes("withone.ai")) return;
+
+    var data = event.data;
+    if (!data || typeof data !== "object") return;
+
+    if (data.type === "LINK_SUCCESS" || data.event === "LINK_SUCCESS") {
+      // Connection succeeded — save it
+      container.style.display = "none";
+      iframe.src = "";
+      isOpen = false;
+
+      // POST to save the connection, then reload
+      fetch("/integrations/one/connection", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "",
+      }).then(function () {
+        window.location.href = "/integrations?flash=Platform+connected";
+      }).catch(function () {
+        window.location.reload();
+      });
+    } else if (data.type === "LINK_ERROR" || data.event === "LINK_ERROR") {
+      container.style.display = "none";
+      iframe.src = "";
+      isOpen = false;
+      connectBtn.textContent = "Connect a Platform";
+      alert("Connection failed. Please try again.");
+    } else if (data.type === "EXIT_EVENT_LINK" || data.event === "EXIT_EVENT_LINK") {
+      container.style.display = "none";
+      iframe.src = "";
+      isOpen = false;
+      connectBtn.textContent = "Connect a Platform";
+    }
+  });
+})();
 </script>
+<style>
+.one-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--tag-bg);
+  color: var(--accent);
+  border: 1px solid #E9D5FF;
+  border-radius: 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.one-pill:hover { background: #E9D5FF; }
+.one-pill-x { font-size: 15px; line-height: 1; opacity: 0.6; }
+.one-pill:hover .one-pill-x { opacity: 1; }
+</style>
 <%- include('partials/foot') %>

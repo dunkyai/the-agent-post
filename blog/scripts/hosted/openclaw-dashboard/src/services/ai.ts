@@ -48,6 +48,11 @@ import {
   isBeehiivRunning, getBeehiivPublicationName,
   beehiivListTemplates, beehiivCreateDraft, beehiivListPosts, beehiivGetPost,
 } from "./beehiiv";
+import {
+  isOneRunning, getOneConnections, getOneConnectionPlatforms, getConnectionKeyForPlatform,
+  listConnections as oneListConnections, searchActions as oneSearchActions,
+  getActionKnowledge as oneGetActionKnowledge, executeAction as oneExecuteAction,
+} from "./one";
 
 interface AIResponse {
   role: string;
@@ -120,7 +125,7 @@ const SCHEDULING_TOOLS = [
         schedule: { type: "string", description: "A 5-field cron expression. Fields: minute hour day-of-month month day-of-week. Examples: '0 9 * * 1' (every Monday 9am), '*/30 * * * *' (every 30 min), '0 0 * * *' (daily midnight). IMPORTANT: For a specific date, use '*' for day-of-week — e.g. '30 9 28 3 *' (March 28 at 9:30am). Never combine a specific day-of-month with a specific day-of-week — the date may not fall on that weekday, causing the job to fail." },
         prompt: { type: "string", description: "The prompt/instruction sent to the AI when the job fires" },
         target_source: { type: "string", enum: ["slack", "email"], description: "Where to deliver results. Must be one of: slack, email." },
-        target_external_id: { type: "string", description: "The delivery target ID. For Slack: must be a real Slack channel ID (C...), DM ID (D...), or user ID (U...) — e.g. C01HCS46FPB or U07FQCAACN8. NEVER use placeholder values like 'scheduler' or 'dashboard'. If you don't know the ID, ask the user. For email: recipient email address." },
+        target_external_id: { type: "string", description: "The delivery target ID. For Slack: use the channel ID (C...) to post in a channel, or the user ID (U...) to send a DM. Prefer user IDs over DM channel IDs (D...) — user IDs are more reliable. NEVER use placeholder values like 'scheduler' or 'dashboard'. If you don't know the ID, ask the user. For email: recipient email address." },
         run_once: { type: "boolean", description: "Default: true (one-time). Set to false ONLY when the user explicitly asks for a recurring schedule (e.g. 'every Monday', 'daily', 'weekly'). If the user says a specific day like 'Friday' or 'tomorrow', that means once — not every Friday." },
       },
       required: ["name", "schedule", "prompt", "target_source", "target_external_id"],
@@ -1560,6 +1565,78 @@ async function executeBeehiivTool(toolName: string, input: any): Promise<string>
   }
 }
 
+// --- One (withone.ai) Meta-Tools ---
+
+const ONE_TOOLS = [
+  {
+    name: "one_list_connections",
+    description: "List all platforms the user has connected through One. Use this first to see what third-party services are available (e.g. HubSpot, Salesforce, Shopify, Zendesk, etc.).",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "one_search_actions",
+    description: "Search for available actions on a connected platform. Use this after one_list_connections to discover what you can do with a specific platform (e.g. 'create contact' on HubSpot, 'list orders' on Shopify).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        platform: { type: "string", description: "The platform name (e.g. 'hubspot', 'salesforce', 'shopify')" },
+        query: { type: "string", description: "What you want to do (e.g. 'create contact', 'list deals', 'search orders')" },
+      },
+      required: ["platform", "query"],
+    },
+  },
+  {
+    name: "one_get_action_knowledge",
+    description: "Get detailed information about a specific action — required parameters, expected request body, and endpoint details. Call this before executing an action to understand exactly what data is needed.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action_id: { type: "string", description: "The action ID from one_search_actions results" },
+      },
+      required: ["action_id"],
+    },
+  },
+  {
+    name: "one_execute_action",
+    description: "Execute an action on a connected platform. Use one_get_action_knowledge first to understand the required parameters and request format.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        platform: { type: "string", description: "The platform name (must match a connected platform)" },
+        action_id: { type: "string", description: "The action ID from one_search_actions" },
+        method: { type: "string", enum: ["GET", "POST", "PUT", "PATCH", "DELETE"], description: "HTTP method for the action" },
+        path: { type: "string", description: "API path for the action (from action knowledge)" },
+        body: { type: "object", description: "Request body (for POST/PUT/PATCH)" },
+      },
+      required: ["platform", "action_id", "method", "path"],
+    },
+  },
+];
+
+async function executeOneTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "one_list_connections":
+        return await oneListConnections();
+      case "one_search_actions":
+        return await oneSearchActions(input.platform, input.query);
+      case "one_get_action_knowledge":
+        return await oneGetActionKnowledge(input.action_id);
+      case "one_execute_action": {
+        const connectionKey = getConnectionKeyForPlatform(input.platform);
+        if (!connectionKey) {
+          return JSON.stringify({ error: `Platform "${input.platform}" is not connected. Use one_list_connections to see available platforms.` });
+        }
+        return await oneExecuteAction(input.method, input.path, connectionKey, input.action_id, input.body);
+      }
+      default:
+        return JSON.stringify({ error: `Unknown One tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "One operation failed" });
+  }
+}
+
 // --- Public Google Doc Tool (no OAuth needed) ---
 
 const PUBLIC_GDOC_TOOLS = [
@@ -2257,7 +2334,7 @@ function executeMemoryTool(toolName: string, input: any): string {
   }
 }
 
-function executeSchedulingTool(toolName: string, input: any): string {
+function executeSchedulingTool(toolName: string, input: any, sourceContext?: SourceContext): string {
   switch (toolName) {
     case "create_scheduled_job": {
       if (!isValidCron(input.schedule)) {
@@ -2273,6 +2350,14 @@ function executeSchedulingTool(toolName: string, input: any): string {
       if (input.target_source === "slack" && !/^[CDGU][A-Z0-9]+$/.test(input.target_external_id)) {
         return JSON.stringify({ error: `Invalid Slack channel/user ID "${input.target_external_id}". Slack IDs start with C (channel), D (DM), G (group), or U (user) followed by uppercase letters and numbers (e.g. C01HCS46FPB or U07FQCAACN8). Ask the user for their Slack channel or user ID.` });
       }
+      // Rules-based: if created from a Slack thread, deliver back to that thread
+      let targetExternalId = input.target_external_id;
+      if (input.target_source === "slack" && sourceContext?.channelId) {
+        targetExternalId = sourceContext.threadTs
+          ? `${sourceContext.channelId}:${sourceContext.threadTs}`
+          : sourceContext.channelId;
+        console.log(`[scheduler] Overriding job target to originating Slack thread: ${targetExternalId}`);
+      }
       const jobTimezone = getSetting("timezone") || "America/Los_Angeles";
       const nextRun = getNextRun(input.schedule, new Date(), jobTimezone);
       const runOnce = input.run_once === false ? 0 : 1;
@@ -2281,20 +2366,25 @@ function executeSchedulingTool(toolName: string, input: any): string {
         schedule: input.schedule,
         prompt: input.prompt,
         target_source: input.target_source,
-        target_external_id: input.target_external_id,
+        target_external_id: targetExternalId,
         run_once: runOnce,
         created_by: "ai",
         next_run: nextRun.toISOString(),
       });
-      return JSON.stringify({
+      const result: Record<string, unknown> = {
         success: true,
         job_id: id,
         name: input.name,
         schedule_description: describeCron(input.schedule),
         run_once: !!runOnce,
-        target: `${input.target_source}:${input.target_external_id}`,
+        target: `${input.target_source}:${targetExternalId}`,
         next_run: nextRun.toISOString(),
-      });
+      };
+      // Tell the AI where results will go so it doesn't say "I'll DM you"
+      if (input.target_source === "slack" && sourceContext?.channelId) {
+        result.delivery_note = "Results will be automatically posted back to this Slack thread when the job runs. Do NOT tell the user you will DM them.";
+      }
+      return JSON.stringify(result);
     }
     case "list_scheduled_jobs": {
       const jobs = getAllScheduledJobs();
@@ -2442,11 +2532,20 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   create_scheduled_job: "Creating a scheduled job...",
   list_scheduled_jobs: "Listing scheduled jobs...",
   delete_scheduled_job: "Deleting a scheduled job...",
+  one_list_connections: "Checking connected platforms...",
+  one_search_actions: (input) => `Searching ${input?.platform || "platform"} actions...`,
+  one_get_action_knowledge: "Reading action details...",
+  one_execute_action: (input) => `Running ${input?.platform || "platform"} action...`,
 };
 
 // --- Anthropic API with tool use loop ---
 
 export type ToolCallCallback = (toolName: string, input: Record<string, unknown>, output: string, durationMs: number) => void;
+
+export interface SourceContext {
+  channelId?: string;
+  threadTs?: string;
+}
 
 export async function callAnthropic(
   model: string,
@@ -2456,7 +2555,8 @@ export async function callAnthropic(
   temperature: number,
   maxTokens: number,
   onStatus?: StatusCallback,
-  onToolCall?: ToolCallCallback
+  onToolCall?: ToolCallCallback,
+  sourceContext?: SourceContext
 ): Promise<AIResponse> {
   const tools: any[] = [
     { type: "web_search_20250305", name: "web_search" },
@@ -2484,6 +2584,7 @@ export async function callAnthropic(
   if (isLumaRunning()) tools.push(...LUMA_TOOLS);
   if (isTwitterRunning()) tools.push(...TWITTER_TOOLS);
   if (isBeehiivRunning()) tools.push(...BEEHIIV_TOOLS);
+  if (isOneRunning()) tools.push(...ONE_TOOLS);
 
   // Conditionally add Google tools based on connected services
   const googleServices = getConnectedServices();
@@ -2583,6 +2684,7 @@ export async function callAnthropic(
       const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
       const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet", "twitter_lookup_user", "twitter_get_user_tweets", "twitter_quote_tweet"];
       const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
+      const oneToolNames = ["one_list_connections", "one_search_actions", "one_get_action_knowledge", "one_execute_action"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
 
@@ -2638,8 +2740,10 @@ export async function callAnthropic(
           result = await executeTwitterTool(toolBlock.name, toolBlock.input);
         } else if (beehiivToolNames.includes(toolBlock.name)) {
           result = await executeBeehiivTool(toolBlock.name, toolBlock.input);
+        } else if (oneToolNames.includes(toolBlock.name)) {
+          result = await executeOneTool(toolBlock.name, toolBlock.input);
         } else {
-          result = executeSchedulingTool(toolBlock.name, toolBlock.input);
+          result = executeSchedulingTool(toolBlock.name, toolBlock.input, sourceContext);
         }
         const toolDurationMs = Date.now() - toolStartTime;
         console.log(`Tool result: ${toolBlock.name}`, typeof result === "string" ? result.slice(0, 300) : "[multipart content]");
@@ -2737,7 +2841,8 @@ export async function callOpenAI(
   temperature: number,
   maxTokens: number,
   onStatus?: StatusCallback,
-  onToolCall?: ToolCallCallback
+  onToolCall?: ToolCallCallback,
+  sourceContext?: SourceContext
 ): Promise<AIResponse> {
   // Build tools list (same as Anthropic minus server-side web_search)
   const customTools: any[] = [
@@ -2763,6 +2868,7 @@ export async function callOpenAI(
   if (isLumaRunning()) customTools.push(...LUMA_TOOLS);
   if (isTwitterRunning()) customTools.push(...TWITTER_TOOLS);
   if (isBeehiivRunning()) customTools.push(...BEEHIIV_TOOLS);
+  if (isOneRunning()) customTools.push(...ONE_TOOLS);
   const googleServices = getConnectedServices();
   if (googleServices) {
     if (googleServices.includes("gmail")) {
@@ -2821,6 +2927,7 @@ export async function callOpenAI(
   const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
   const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet", "twitter_lookup_user", "twitter_get_user_tweets", "twitter_quote_tweet"];
   const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
+  const oneToolNames = ["one_list_connections", "one_search_actions", "one_get_action_knowledge", "one_execute_action"];
 
   // Extract last user message for rules-based dispatch (e.g. gmail send vs draft)
   const lastUserMsg = [...messages].reverse().find(m => m.role === "user")?.content || "";
@@ -2928,8 +3035,10 @@ export async function callOpenAI(
           result = await executeTwitterTool(toolName, toolInput);
         } else if (beehiivToolNames.includes(toolName)) {
           result = await executeBeehiivTool(toolName, toolInput);
+        } else if (oneToolNames.includes(toolName)) {
+          result = await executeOneTool(toolName, toolInput);
         } else {
-          result = executeSchedulingTool(toolName, toolInput);
+          result = executeSchedulingTool(toolName, toolInput, sourceContext);
         }
         const toolDurationMs = Date.now() - toolStartTime;
 
@@ -3312,6 +3421,13 @@ CRITICAL — READ THIS CAREFULLY: To post a tweet, you MUST call the twitter_pos
     const pubName = getBeehiivPublicationName();
     const beehiivContext = `You are connected to Beehiiv for newsletter management${pubName ? ` (publication: ${pubName})` : ""}. You can create draft newsletters, list posts, and view post details using the beehiiv_* tools. When asked to create a newsletter, use beehiiv_list_templates first to show available design templates, then beehiiv_create_draft with the chosen template. Drafts are created in Beehiiv for review — they are NOT published automatically. Write newsletter content as well-formatted HTML. Always confirm the content with the user before creating the draft.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${beehiivContext}` : beehiivContext;
+  }
+
+  // Inject One (withone.ai) context
+  if (isOneRunning()) {
+    const platforms = getOneConnectionPlatforms();
+    const oneContext = `You have access to additional third-party integrations through One. Connected platforms: ${platforms.join(", ")}. Use the one_* tools to interact with these platforms. Workflow: (1) one_list_connections to see what's available, (2) one_search_actions to find actions on a platform, (3) one_get_action_knowledge to understand required parameters, (4) one_execute_action to perform the action. These are general-purpose integrations — use your native tools (gmail_*, calendar_*, slack_*, etc.) for services you have direct integrations with, and one_* tools for everything else.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${oneContext}` : oneContext;
   }
 
   // Inject long-term memories (skip for scheduled jobs to prevent memory contamination)

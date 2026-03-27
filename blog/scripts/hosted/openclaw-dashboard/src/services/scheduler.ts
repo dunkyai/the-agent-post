@@ -140,7 +140,8 @@ async function executeJob(jobId: number, force = false): Promise<void> {
     // For Slack-targeted jobs: fetch recent channel history and enforce output rules
     if (job.target_source === "slack" && job.target_external_id) {
       const { fetchChannelHistory, SLACK_OUTPUT_RULES } = require("./slack");
-      const channelContext = await fetchChannelHistory(job.target_external_id);
+      const slackChannelId = job.target_external_id.split(":")[0];
+      const channelContext = await fetchChannelHistory(slackChannelId);
       if (channelContext) {
         extraContext += `\n\n[Recent Slack channel activity — for context only, do not summarize unless the job requires it]\n${channelContext}\n[End of channel context]`;
       }
@@ -192,7 +193,11 @@ async function deliverResult(
   if (job.target_source === "slack") {
     try {
       const { sendSlackMessage } = require("./slack");
-      await sendSlackMessage(job.target_external_id, result);
+      // Support composite "channelId:threadTs" format for thread delivery
+      const parts = job.target_external_id.split(":");
+      const channelId = parts[0];
+      const threadTs = parts[1] || undefined;
+      await sendSlackMessage(channelId, result, threadTs);
     } catch (err: unknown) {
       console.error(`Job "${job.name}" Slack delivery failed:`, err instanceof Error ? err.message : err);
     }
