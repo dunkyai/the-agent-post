@@ -54,8 +54,8 @@
         <div class="integration-header">
           <h3><%= job.name %></h3>
           <div style="display: flex; gap: 6px; align-items: center;">
-            <% if (!job.enabled && job.created_by === 'ai') { %>
-              <span class="status-badge" style="background: #FEF3C7; color: #92400E;">needs review</span>
+            <% if (job.created_by === 'ai') { %>
+              <span class="status-badge" style="background: #DBEAFE; color: #1E40AF;">ai-created</span>
             <% } %>
             <% if (job.run_once) { %>
               <span class="status-badge" style="background: #FEF3C7; color: #92400E;"><%= job.run_once && !job.enabled && job.last_run ? 'completed' : 'one-time' %></span>
@@ -187,9 +187,8 @@
         return;
       }
       container.innerHTML = jobs.map(function(job) {
-        var needsReview = !job.enabled && job.created_by === 'ai';
         var badges = '';
-        if (needsReview) badges += '<span class="status-badge" style="background: #FEF3C7; color: #92400E;">needs review</span>';
+        if (job.created_by === 'ai') badges += '<span class="status-badge" style="background: #DBEAFE; color: #1E40AF;">ai-created</span>';
         if (job.run_once) badges += '<span class="status-badge" style="background: #FEF3C7; color: #92400E;">' + (job.run_once && !job.enabled && job.last_run ? 'completed' : 'one-time') + '</span>';
         badges += '<span class="status-badge status-' + (job.enabled ? 'connected' : 'disconnected') + '">' + (job.enabled ? 'enabled' : 'disabled') + '</span>';
 

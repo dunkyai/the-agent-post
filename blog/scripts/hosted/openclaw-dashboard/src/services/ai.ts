@@ -116,8 +116,8 @@ function localTimeToUtc(localDatetime: string, timezone: string): string {
 
 const SCHEDULING_TOOLS = [
   {
-    name: "draft_scheduled_job",
-    description: "Draft a new scheduled job for user review. The job is created as DISABLED — the user must review and enable it on the Jobs page before it will run. Use this when the user asks to be reminded of something, schedule a task, or set up periodic actions. Always tell the user: 'I\\'ve drafted this job — review and enable it at /jobs before it goes live.' For one-time tasks (e.g. 'post a tweet tomorrow at 9am'), set run_once to true. For recurring tasks (e.g. 'every Monday'), set run_once to false.",
+    name: "create_scheduled_job",
+    description: "Create a new scheduled job. The job goes live immediately. Use this when the user asks to be reminded of something, schedule a task, or set up periodic actions. The user can review or edit the job at /jobs if needed. For one-time tasks (e.g. 'post a tweet tomorrow at 9am'), set run_once to true. For recurring tasks (e.g. 'every Monday'), set run_once to false.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -2336,7 +2336,7 @@ function executeMemoryTool(toolName: string, input: any): string {
 
 function executeSchedulingTool(toolName: string, input: any, sourceContext?: SourceContext): string {
   switch (toolName) {
-    case "draft_scheduled_job": {
+    case "create_scheduled_job": {
       if (!isValidCron(input.schedule)) {
         return JSON.stringify({ error: `Invalid cron expression: "${input.schedule}"` });
       }
@@ -2369,20 +2369,19 @@ function executeSchedulingTool(toolName: string, input: any, sourceContext?: Sou
         target_external_id: targetExternalId,
         run_once: runOnce,
         created_by: "ai",
-        enabled: 0,
+        enabled: 1,
         next_run: nextRun.toISOString(),
       });
       const result: Record<string, unknown> = {
         success: true,
         job_id: id,
-        status: "draft",
+        status: "active",
         name: input.name,
         schedule_description: describeCron(input.schedule),
         run_once: !!runOnce,
         target: `${input.target_source}:${targetExternalId}`,
         next_run: nextRun.toISOString(),
         review_url: "/jobs",
-        action_required: "This job is DISABLED until the user reviews and enables it. Tell the user: 'I've drafted this job — review and enable it at /jobs before it goes live.'",
       };
       return JSON.stringify(result);
     }
@@ -2529,7 +2528,7 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   twitter_lookup_user: "Looking up Twitter user...",
   twitter_get_user_tweets: "Fetching user's tweets...",
   twitter_quote_tweet: "Quote tweeting...",
-  draft_scheduled_job: "Drafting a scheduled job...",
+  create_scheduled_job: "Creating a scheduled job...",
   list_scheduled_jobs: "Listing scheduled jobs...",
   delete_scheduled_job: "Deleting a scheduled job...",
   one_list_connections: "Checking connected platforms...",
@@ -3220,7 +3219,7 @@ export function buildSystemPrompt(extraContext?: string, options?: { skipMemorie
   const offsetMins = Math.abs(utcOffsetMinutes) % 60;
   const offsetSign = utcOffsetMinutes >= 0 ? "+" : "-";
   const utcOffsetStr = `UTC${offsetSign}${offsetHours}${offsetMins ? `:${String(offsetMins).padStart(2, "0")}` : ""}`;
-  const tzContext = `The current date and time is ${localNow} (${userTimezone}, currently ${utcOffsetStr}). The user's timezone is ${userTimezone} which is currently ${utcOffsetStr}. ALWAYS convert any timestamps, dates, or times to the user's local timezone (${userTimezone}) before presenting them. This applies to ALL responses — event times from Luma/Calendar, email timestamps, scheduled job times, or any other time data from tools. Never show raw UTC or ISO timestamps to the user. Format times naturally (e.g. "Tuesday, March 25 at 3:00 PM PT"). When providing ISO 8601 timestamps to tools (e.g. due_at, start_at), you may pass the time in the user's local timezone as an ISO 8601 string WITHOUT a Z suffix (e.g. '2026-03-25T09:30:00') — the system will convert it to UTC using the user's timezone (${userTimezone}, ${utcOffsetStr}). You can also pass UTC directly with a Z suffix. Cron expressions in draft_scheduled_job are interpreted in the user's local timezone, so use the user's local time directly — do NOT convert to UTC for cron.`;
+  const tzContext = `The current date and time is ${localNow} (${userTimezone}, currently ${utcOffsetStr}). The user's timezone is ${userTimezone} which is currently ${utcOffsetStr}. ALWAYS convert any timestamps, dates, or times to the user's local timezone (${userTimezone}) before presenting them. This applies to ALL responses — event times from Luma/Calendar, email timestamps, scheduled job times, or any other time data from tools. Never show raw UTC or ISO timestamps to the user. Format times naturally (e.g. "Tuesday, March 25 at 3:00 PM PT"). When providing ISO 8601 timestamps to tools (e.g. due_at, start_at), you may pass the time in the user's local timezone as an ISO 8601 string WITHOUT a Z suffix (e.g. '2026-03-25T09:30:00') — the system will convert it to UTC using the user's timezone (${userTimezone}, ${utcOffsetStr}). You can also pass UTC directly with a Z suffix. Cron expressions in create_scheduled_job are interpreted in the user's local timezone, so use the user's local time directly — do NOT convert to UTC for cron.`;
   systemPrompt = systemPrompt ? `${systemPrompt}\n\n${tzContext}` : tzContext;
 
   if (extraContext) {
@@ -3389,7 +3388,7 @@ TWITTER WORKFLOW — ALWAYS follow these steps when the user asks you to tweet:
    - Single tweet → call twitter_post_tweet ONCE with the text
    - Thread (multiple tweets) → call twitter_post_thread ONCE with ALL tweets as an array
    NEVER call twitter_post_tweet multiple times to create a thread. The twitter_post_thread tool handles threading automatically by chaining replies.
-   For scheduling, use draft_scheduled_job with the finalized tweet text in the prompt.
+   For scheduling, use create_scheduled_job with the finalized tweet text in the prompt.
 
 RETWEETS: You can retweet (repost) other users' tweets. All retweet tools accept either a tweet ID or a full URL (e.g. https://x.com/user/status/123).
 
