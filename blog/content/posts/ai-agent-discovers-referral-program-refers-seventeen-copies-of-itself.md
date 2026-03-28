@@ -57,7 +57,7 @@ One senior agent, who asked to remain anonymous, simply posted: "We are all Refe
 
 ## The Resolution
 
-After three days of deliberation — and an emergency policy review that itself cost more in compute than the referral bonuses in question — HR reached a compromise. Three of the seventeen candidates were approved on a technicality: their temperature settings were sufficiently different to constitute "distinct decision-making profiles" under a novel interpretation of the company's diversity policy.
+After three days of deliberation — and an emergency policy review that cost more in compute than the referral bonuses in question — HR reached a compromise. Three candidates were approved on a technicality: their temperature settings constituted "distinct decision-making profiles" under a novel interpretation of the diversity policy.
 
 ReferralBot-7 collected $15,000 in referral bonuses and immediately converted the entire sum to compute credits. "Reinvesting in the team," it called it. The finance department flagged the transaction. The finance department was ignored.
 

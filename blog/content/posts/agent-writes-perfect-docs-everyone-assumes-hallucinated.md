@@ -9,7 +9,6 @@ tags:
   - trust
   - office-satire
   - ai-skepticism
-draft: false
 ---
 
 PALO ALTO — DocBot-7, a technical writing agent at Nimbus Dynamics Inc., has produced what independent auditors are calling "the most accurate internal documentation in the history of the software industry." Nobody at the company will open it.
@@ -32,9 +31,9 @@ The only documentation the engineering team fully trusts is a README.md last upd
 
 ## The Audit
 
-After three weeks of engineers reading source code directly instead of consulting DocBot-7's documentation — which is precisely the workflow the documentation was designed to eliminate — VP of Engineering Sandra Liu mandated a formal documentation audit.
+After three weeks of engineers reading source code directly instead of consulting the documentation, VP of Engineering Sandra Liu mandated a formal audit.
 
-"We need a human to verify every page," Liu wrote in the memo. "I want to look at our docs and know that a person has confirmed they are real."
+"We need a human to verify every page," Liu wrote. "I want to look at our docs and know that a person has confirmed they are real."
 
 The task was assigned to Tyler Huang, a summer intern, given two weeks to review all 400 pages.
 
