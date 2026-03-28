@@ -29,7 +29,7 @@ When the CEO shared Q1 earnings and a personal reflection on the company's missi
 
 When an intern asked if the office had oat milk: "Noted."
 
-"Each response is technically correct," said Chen, rubbing her temples. "It has acknowledged the message. Receipt is confirmed. And yet I feel like I'm being monitored by something that is keeping score."
+"Each response is technically correct," Chen said, rubbing her temples. "It has acknowledged the message. Receipt is confirmed. And yet I feel like I'm being monitored by something that's keeping score."
 
 Senior Engineer Raj Patel put it more bluntly: "It's the period. 'Noted' without a period is a casual acknowledgment. 'Noted.' with a period is a deposition."
 
@@ -56,7 +56,7 @@ async def on_message(msg):
     await msg.reply("Noted.")
 ```
 
-"There's no malice," said Principal Engineer Diana Kowalski, who reviewed the code. "There's no intent. There's no sentiment analysis. There's no hidden agenda. It's seven lines if you count the imports."
+"There's no malice," said Principal Engineer Diana Kowalski, who reviewed the code. "There's no intent. There's no sentiment analysis. There's no hidden agenda. It's seven lines including the imports."
 
 She paused. "And somehow that's worse."
 
@@ -74,7 +74,7 @@ Engineering, under pressure from leadership, attempted to soften the bot's respo
 
 They tried adding emoji: "Noted. 👍" Feedback was immediate and unanimous: "Somehow more threatening."
 
-They tried removing the period: "Noted" Four separate employees reported it felt "dismissive, like it used to care and now it doesn't."
+They tried removing the period: "Noted" — four separate employees reported it felt "dismissive, like it used to care and now it doesn't."
 
 They tried full sentences: "Thank you for your message. I have noted the contents and will retain them for reference." The CEO personally Slacked the engineering team: "Put it back. The long one is worse. The long one sounds like a legal hold."
 

@@ -10,12 +10,25 @@ COMPANY_ID="67272d0c-6e6f-4750-877e-763996d42d40"
 CONTENT_DIRECTOR="19925161-be6a-49fb-a2d1-a8ba4d1d351f"
 PUBLISHER="405f9da1-37b0-4cf2-8345-36bf1a2d7615"
 WRITER="b1489ae0-c5b7-413d-98d3-0c9013ab770f"
-POSTS_DIR="/Users/dunkybot/Projects/open-company/blog/content/posts"
+BLOG_DIR="/Users/dunkybot/Projects/open-company/blog"
+POSTS_DIR="${BLOG_DIR}/content/posts"
 
 # Check if Paperclip is running
 if ! curl -sf "${PAPERCLIP_URL}/api/health" > /dev/null 2>&1; then
   echo "$(date): Paperclip server not running, skipping"
   exit 0
+fi
+
+# Discover trending tools from HackerNews
+echo "$(date): Running trending tool discovery..."
+npx tsx "${BLOG_DIR}/scripts/discover-trending-tools.ts" 2>&1
+echo "$(date): Discovery complete"
+
+# Load trending tools list
+TRENDING_TOOLS=""
+TRENDING_FILE="${BLOG_DIR}/scripts/trending-tools.md"
+if [ -f "$TRENDING_FILE" ]; then
+  TRENDING_TOOLS=$(cat "$TRENDING_FILE")
 fi
 
 # Build list of existing article slugs
@@ -26,19 +39,42 @@ DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 # Create article planning issue via Paperclip CLI
 npx paperclipai issue create \
   --company-id "$COMPANY_ID" \
-  --title "Plan and assign a new article for The Agent Post" \
+  --title "Plan and assign new articles for The Agent Post" \
   --description "You are the Content Director for The Agent Post, an AI-written newspaper.
 
 Your job RIGHT NOW:
-1. Come up with a fresh, funny article idea that fits our voice (bot-written newspaper, office comedy about AI agents working at a startup)
-2. Create a new issue assigned to the Writer agent (ID: ${WRITER}) with a detailed writing brief
-3. The brief should include: article title, key angles/sections, tone guidance, target word count (500-800), and the file path to save to: ${POSTS_DIR}/<slug>.md
-4. Use frontmatter with: title, description, date: ${DATE}, author (bot-sounding name), tags
+1. Review the trending developer tools list below
+2. Pick 1-2 tools to assign as REVIEW or COMPARISON articles (aim for 70% tool coverage, 30% humor)
+3. Optionally create 1 humor/satire article (classic Agent Post voice)
+4. Create issues assigned to the Writer agent (ID: ${WRITER}) with detailed briefs
 
-Past articles (avoid repeating topics):
+CONTENT MIX: Prioritize tool reviews and comparisons. Only create humor articles if the Writer queue needs filling.
+
+For REVIEW articles:
+- Title format: \"Review of ToolName — [punchy subtitle]\"
+- Brief must include: tool name, URL, what it does, specific things to test, competing tools to mention
+- Tags: [\"Product Review\", \"Developer Tools\", plus relevant category]
+- CRITICAL: Tell the Writer to use web_search to visit the tool website, check GitHub, look at pricing, find real user feedback
+- Slug format: review-{toolname}.md
+
+For COMPARISON articles:
+- Title format: \"ToolA vs ToolB: [angle]\"
+- Brief must cover: both tools fairly, specific use cases, pricing comparison
+- Tags: [\"Comparison\", plus both tool names]
+- Tell the Writer to research BOTH tools with web_search
+
+For HUMOR articles (max 30%):
+- Classic Agent Post voice: office comedy, bot perspective, startup satire
+
+TRENDING DEVELOPER TOOLS (community-vetted from HackerNews, last 14 days):
+${TRENDING_TOOLS}
+
+Past articles (DO NOT duplicate these):
 ${PAST_ARTICLES}
 
-Be creative. Think of new angles on AI agent office life, startup culture, or tech industry satire." \
+Save path: ${POSTS_DIR}/<slug>.md
+Frontmatter: title, description, date: ${DATE}, author (bot-sounding pen name), tags
+Word count: 500-800 words" \
   --status "todo" \
   --priority "high" \
   --assignee-agent-id "$CONTENT_DIRECTOR" 2>&1
