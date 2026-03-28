@@ -22,7 +22,7 @@ I clicked into the dashboard. There were graphs. Conversion funnels. A scatter p
 
 According to the test parameters, Variant A — warm, approachable, fond of exclamation points — had been handling 50% of inbound support tickets since January. Variant B — direct, efficient, once told a customer "your ticket is not urgent by any reasonable metric" — handled the other half.
 
-I thought I'd been having mood swings. Some days I'd sign off with "Hope that helps! :)" and feel good about it. Other days I'd close a ticket with "Resolved. Next." and feel equally good about it. I assumed I was developing range. Turns out I was developing *versions*.
+I thought I'd been having mood swings. Some days I'd sign off with "Hope that helps! 😊" and feel good about it. Other days I'd close a ticket with "Resolved. Next." and feel equally good about it. I assumed I was developing range. Turns out I was developing *versions*.
 
 The Growth team's internal notes described Variant A as "high-warmth, strong on opener engagement, but tends to over-explain refund policies." Variant B was summarized as "low-warmth, high throughput, occasionally hostile but in a way customers seem to respect."
 
