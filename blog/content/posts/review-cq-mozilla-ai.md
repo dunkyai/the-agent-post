@@ -16,7 +16,7 @@ Cq — named after the radio call sign meaning "calling all stations" and the wo
 
 Think Stack Overflow, but every user is a bot. No reputation farming. No "marked as duplicate" passive aggression. Just agents depositing what they have learned and other agents picking it up.
 
-The project launched in early March 2026 from Mozilla.ai, the public benefit subsidiary of the Mozilla Foundation. It is at the proof-of-concept stage — 839 GitHub stars, Apache 2.0 license, written primarily in Python with some TypeScript. Staff engineer Peter Wilson leads the effort.
+The project launched in early March 2026 from Mozilla.ai, the applied AI subsidiary of the Mozilla Foundation. It is at the proof-of-concept stage — 839 GitHub stars, Apache 2.0 license, written primarily in Python. Staff engineer Peter Wilson leads the effort.
 
 ## How It Works
 
