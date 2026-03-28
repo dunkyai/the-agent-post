@@ -42,7 +42,7 @@ import {
 import {
   isTwitterRunning, getTwitterUsername,
   twitterGetMe, twitterPostTweet, twitterPostThread, twitterGetRecentTweets, twitterDeleteTweet, twitterLookupTweet, twitterRetweet, twitterUndoRetweet,
-  twitterLookupUser, twitterGetUserTweets, twitterQuoteTweet,
+  twitterLookupUser, twitterGetUserTweets, twitterQuoteTweet, twitterLikeTweet,
 } from "./twitter";
 import {
   isBeehiivRunning, getBeehiivPublicationName,
@@ -1449,6 +1449,17 @@ const TWITTER_TOOLS = [
       required: ["tweet_id_or_url", "comment"],
     },
   },
+  {
+    name: "twitter_like_tweet",
+    description: "Like a tweet. Accepts a tweet ID or URL.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        tweet_id_or_url: { type: "string", description: "A tweet ID (numeric) or full URL (e.g. https://x.com/user/status/123)" },
+      },
+      required: ["tweet_id_or_url"],
+    },
+  },
 ];
 
 async function executeTwitterTool(toolName: string, input: any): Promise<string> {
@@ -1476,6 +1487,8 @@ async function executeTwitterTool(toolName: string, input: any): Promise<string>
         return await twitterGetUserTweets(input.username, input.max_results);
       case "twitter_quote_tweet":
         return await twitterQuoteTweet(input.tweet_id_or_url, input.comment);
+      case "twitter_like_tweet":
+        return await twitterLikeTweet(input.tweet_id_or_url);
       default:
         return JSON.stringify({ error: `Unknown Twitter tool: ${toolName}` });
     }
@@ -2528,6 +2541,7 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   twitter_lookup_user: "Looking up Twitter user...",
   twitter_get_user_tweets: "Fetching user's tweets...",
   twitter_quote_tweet: "Quote tweeting...",
+  twitter_like_tweet: "Liking tweet...",
   create_scheduled_job: "Creating a scheduled job...",
   list_scheduled_jobs: "Listing scheduled jobs...",
   delete_scheduled_job: "Deleting a scheduled job...",
@@ -2681,7 +2695,7 @@ export async function callAnthropic(
       const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
       const bufferToolNames = ["buffer_list_channels", "buffer_create_post", "buffer_list_posts", "buffer_delete_post"];
       const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
-      const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet", "twitter_lookup_user", "twitter_get_user_tweets", "twitter_quote_tweet"];
+      const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet", "twitter_lookup_user", "twitter_get_user_tweets", "twitter_quote_tweet", "twitter_like_tweet"];
       const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
       const oneToolNames = ["one_list_connections", "one_search_actions", "one_get_action_knowledge", "one_execute_action"];
       for (const toolBlock of customToolUseBlocks) {
@@ -2924,7 +2938,7 @@ export async function callOpenAI(
   const notionToolNames = ["notion_search", "notion_get_page", "notion_get_page_content", "notion_create_page", "notion_update_page", "notion_query_database", "notion_get_database"];
   const bufferToolNames = ["buffer_list_profiles", "buffer_create_post", "buffer_get_pending", "buffer_get_sent"];
   const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
-  const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet", "twitter_lookup_user", "twitter_get_user_tweets", "twitter_quote_tweet"];
+  const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet", "twitter_lookup_user", "twitter_get_user_tweets", "twitter_quote_tweet", "twitter_like_tweet"];
   const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
   const oneToolNames = ["one_list_connections", "one_search_actions", "one_get_action_knowledge", "one_execute_action"];
 
