@@ -2,7 +2,7 @@ import Dockerode from "dockerode";
 
 const docker = new Dockerode({ socketPath: "/var/run/docker.sock" });
 
-const IMAGE = "ghcr.io/dunkyai/openclaw:latest";
+const IMAGE = process.env.DOCKER_IMAGE || "openclaw-dashboard:latest";
 const MEMORY_LIMIT = 1024 * 1024 * 1024; // 1GB
 const CPU_PERIOD = 100000;
 const CPU_QUOTA = 100000; // 1 vCPU
@@ -32,6 +32,8 @@ export async function createContainer(opts: {
   name: string;
   port: number;
   gatewayToken: string;
+  plan?: string;
+  messageLimit?: number;
 }): Promise<string> {
   // Create isolated network for this instance
   await createNetwork(opts.name);
@@ -48,9 +50,22 @@ export async function createContainer(opts: {
       `GOOGLE_CLIENT_ID=${process.env.GOOGLE_CLIENT_ID || ""}`,
       `GOOGLE_CLIENT_SECRET=${process.env.GOOGLE_CLIENT_SECRET || ""}`,
       `SLACK_CLIENT_ID=${process.env.SLACK_CLIENT_ID || ""}`,
+      `SLACK_CLIENT_SECRET=${process.env.SLACK_CLIENT_SECRET || ""}`,
+      `SLACK_SIGNING_SECRET=${process.env.SLACK_SIGNING_SECRET || ""}`,
+      `AIRTABLE_CLIENT_ID=${process.env.AIRTABLE_CLIENT_ID || ""}`,
+      `AIRTABLE_CLIENT_SECRET=${process.env.AIRTABLE_CLIENT_SECRET || ""}`,
+      `NOTION_CLIENT_ID=${process.env.NOTION_CLIENT_ID || ""}`,
+      `NOTION_CLIENT_SECRET=${process.env.NOTION_CLIENT_SECRET || ""}`,
       `TWITTER_CLIENT_ID=${process.env.TWITTER_CLIENT_ID || ""}`,
       `TWITTER_CLIENT_SECRET=${process.env.TWITTER_CLIENT_SECRET || ""}`,
       `GROQ_API_KEY=${process.env.GROQ_API_KEY || ""}`,
+      `PIXABAY_API_KEY=${process.env.PIXABAY_API_KEY || ""}`,
+      `ANTHROPIC_API_KEY=${process.env.ANTHROPIC_API_KEY || ""}`,
+      `RESEND_API_KEY=${process.env.RESEND_API_KEY || ""}`,
+      `BROWSER_SERVICE_URL=${process.env.BROWSER_SERVICE_URL || ""}`,
+      `BROWSER_SERVICE_SECRET=${process.env.BROWSER_SERVICE_SECRET || ""}`,
+      `MESSAGE_LIMIT=${opts.messageLimit || 250}`,
+      `PLAN=${opts.plan || "standard"}`,
     ],
     ExposedPorts: { "3000/tcp": {} },
     HostConfig: {

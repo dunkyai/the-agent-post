@@ -53,6 +53,8 @@ router.post("/", async (req, res) => {
       name: id,
       port,
       gatewayToken,
+      plan: instancePlan,
+      messageLimit,
     });
 
     // Register Caddy route
