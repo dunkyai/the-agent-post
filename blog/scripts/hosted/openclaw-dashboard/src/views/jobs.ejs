@@ -58,7 +58,7 @@
               <span class="status-badge" style="background: #FEF3C7; color: #92400E;">needs review</span>
             <% } %>
             <% if (job.run_once) { %>
-              <span class="status-badge" style="background: #FEF3C7; color: #92400E;"><%= job.run_once && !job.enabled && job.last_run ? 'completed' : 'one-time' %></span>
+              <span class="status-badge" style="background: #FEF3C7; color: #92400E;">one-time</span>
             <% } %>
             <span class="status-badge status-<%= job.enabled ? 'connected' : 'disconnected' %>">
               <%= job.enabled ? 'enabled' : 'disabled' %>
@@ -190,7 +190,7 @@
         var needsReview = !job.enabled && job.created_by === 'ai';
         var badges = '';
         if (needsReview) badges += '<span class="status-badge" style="background: #FEF3C7; color: #92400E;">needs review</span>';
-        if (job.run_once) badges += '<span class="status-badge" style="background: #FEF3C7; color: #92400E;">' + (job.run_once && !job.enabled && job.last_run ? 'completed' : 'one-time') + '</span>';
+        if (job.run_once) badges += '<span class="status-badge" style="background: #FEF3C7; color: #92400E;">one-time</span>';
         badges += '<span class="status-badge status-' + (job.enabled ? 'connected' : 'disconnected') + '">' + (job.enabled ? 'enabled' : 'disabled') + '</span>';
 
         return '<div class="card">'

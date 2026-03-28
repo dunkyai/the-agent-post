@@ -1,4 +1,4 @@
-import { getDueJobs, getScheduledJob, markJobRun, updateScheduledJob, deleteConversation, getOrCreateConversation, getSetting } from "./db";
+import { getDueJobs, getScheduledJob, markJobRun, updateScheduledJob, deleteScheduledJob, deleteConversation, getOrCreateConversation, getSetting } from "./db";
 import { processMessage } from "./ai";
 import { getNextRun } from "./cron";
 import { getPendingTasks, markStuckTasksFailed, deactivateOldTasks } from "./task";
@@ -160,10 +160,9 @@ async function executeJob(jobId: number, force = false): Promise<void> {
     await deliverResult(job, result);
 
     if (job.run_once) {
-      // One-time job: mark as completed and disable
-      markJobRun(job.id, result, null, "");
-      updateScheduledJob(job.id, { enabled: 0, next_run: "" });
-      console.log(`Job #${job.id} completed (one-time). Auto-disabled.`);
+      // One-time job: delete from DB to keep the jobs page clean
+      deleteScheduledJob(job.id);
+      console.log(`Job #${job.id} completed (one-time). Removed.`);
     } else {
       const tz = getSetting("timezone") || "America/Los_Angeles";
       const nextRun = getNextRun(job.schedule, new Date(), tz);
