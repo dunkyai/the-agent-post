@@ -592,12 +592,24 @@ function createEmailTask(
         ? "Write your response as a Slack message using Slack formatting. It will be posted to Slack."
         : "Write your response as a professional email reply body. Start with a greeting.";
 
+  // Include the latest email body so the AI can see URLs, links, and specifics
+  // that the triage summary may have paraphrased away
+  const latestMessage = ctx.threadMessages[ctx.threadMessages.length - 1];
+  const originalBody = latestMessage?.body
+    ? latestMessage.body.length > 3000
+      ? latestMessage.body.slice(0, 3000) + "\n[... truncated ...]"
+      : latestMessage.body
+    : "";
+
   const extraContext = `You are processing an email request from ${structuredRequest.original_sender}.
 
 THREAD CONTEXT: ${structuredRequest.context}
 
 THREAD SUBJECT: ${structuredRequest.thread_subject}
 THREAD PARTICIPANTS: ${structuredRequest.thread_participants.join(", ")}
+
+ORIGINAL EMAIL:
+${originalBody}
 
 INSTRUCTIONS:
 - Fulfill the request described in the user message below.
