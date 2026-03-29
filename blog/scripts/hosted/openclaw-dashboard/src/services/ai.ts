@@ -1502,7 +1502,7 @@ async function executeTwitterTool(toolName: string, input: any): Promise<string>
 const BEEHIIV_TOOLS = [
   {
     name: "beehiiv_list_templates",
-    description: "List the configured design templates for Beehiiv newsletters. Use this first to show template options before creating a draft.",
+    description: "Fetch available design templates from Beehiiv. Use this to show template options before creating a draft.",
     input_schema: { type: "object" as const, properties: {} },
   },
   {
@@ -1551,7 +1551,7 @@ async function executeBeehiivTool(toolName: string, input: any): Promise<string>
   try {
     switch (toolName) {
       case "beehiiv_list_templates":
-        return beehiivListTemplates();
+        return await beehiivListTemplates();
       case "beehiiv_create_draft":
         return await beehiivCreateDraft({
           title: input.title,
@@ -3432,7 +3432,40 @@ CRITICAL — READ THIS CAREFULLY: To post a tweet, you MUST call the twitter_pos
   // Inject Beehiiv context
   if (isBeehiivRunning()) {
     const pubName = getBeehiivPublicationName();
-    const beehiivContext = `You are connected to Beehiiv for newsletter management${pubName ? ` (publication: ${pubName})` : ""}. You can create draft newsletters, list posts, and view post details using the beehiiv_* tools. When asked to create a newsletter, use beehiiv_list_templates first to show available design templates, then beehiiv_create_draft with the chosen template. Drafts are created in Beehiiv for review — they are NOT published automatically. Write newsletter content as well-formatted HTML. Always confirm the content with the user before creating the draft.`;
+    const beehiivContext = `You are connected to Beehiiv for newsletter management${pubName ? ` (publication: ${pubName})` : ""}.
+
+When asked to create a newsletter, follow these steps IN ORDER:
+
+1. GATHER — Confirm these details with the user before writing anything:
+   - Topic / subject
+   - Target audience or angle
+   - Key points to cover
+   - Desired tone (informational, casual, promotional, etc.)
+   - Any specific links, images, or CTAs to include
+   If the user's request is vague, ask clarifying questions. If the request is detailed enough, proceed.
+
+2. DRAFT — Write the newsletter content as HTML. Include:
+   - A compelling subject line
+   - Preview text (1-2 sentences shown in email clients)
+   - The full body with proper HTML formatting (headings, paragraphs, links, images)
+   - A clear CTA if appropriate
+   Present the draft to the user in a readable format.
+
+3. CONFIRM — Show the user a summary of what will be created:
+   - Title
+   - Subject line
+   - Preview text
+   - Content summary (first 2-3 sentences)
+   - Template (if applicable — use beehiiv_list_templates to show options)
+   Ask: "Does this look good? Should I create the draft in Beehiiv?"
+   Do NOT proceed until the user explicitly confirms.
+
+4. CREATE — Only after explicit user confirmation, call beehiiv_create_draft.
+   Report back the draft URL so the user can review it in Beehiiv.
+
+CRITICAL: NEVER skip to step 4 without user confirmation in step 3. Drafts are created in Beehiiv for review — they are NOT published automatically.
+
+You can also list existing posts with beehiiv_list_posts and view post details with beehiiv_get_post.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${beehiivContext}` : beehiivContext;
   }
 
