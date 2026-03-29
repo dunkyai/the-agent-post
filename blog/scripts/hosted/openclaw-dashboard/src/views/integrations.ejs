@@ -568,52 +568,36 @@
               </div>
             </div>
 
-            <form method="POST" action="/integrations/beehiiv/templates">
-              <label style="font-size: 13px; color: var(--text-secondary); display: block; margin-bottom: 8px;">Design Templates <span style="font-weight: normal;">(optional — find IDs in Beehiiv dashboard under My Templates)</span></label>
-              <div id="beehiiv-templates" style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;">
-                <% if (beehiiv.templates.length > 0) { %>
+            <div style="margin-bottom: 12px;">
+              <label style="font-size: 13px; color: var(--text-secondary); display: block; margin-bottom: 8px;">Design Templates</label>
+              <% if (beehiiv.templates.length > 0) { %>
+                <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px;">
                   <% beehiiv.templates.forEach(function(t) { %>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                      <input type="text" name="template_name" value="<%= t.name %>" placeholder="Template name" style="flex: 1; padding: 6px 10px; border: 1px solid var(--rule-light); border-radius: 4px; font-size: 13px; background: var(--bg); color: var(--text);">
-                      <input type="text" name="template_id" value="<%= t.id %>" placeholder="post_template_..." style="flex: 2; padding: 6px 10px; border: 1px solid var(--rule-light); border-radius: 4px; font-size: 13px; background: var(--bg); color: var(--text); font-family: monospace;">
+                    <div style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px; font-size: 13px;">
+                      <span style="color: var(--text);"><%= t.name %></span>
+                      <code style="color: var(--text-secondary); font-size: 11px; margin-left: auto;"><%= t.id %></code>
                     </div>
                   <% }); %>
-                <% } else { %>
-                  <div style="display: flex; gap: 8px; align-items: center;">
-                    <input type="text" name="template_name" placeholder="Template name" style="flex: 1; padding: 6px 10px; border: 1px solid var(--rule-light); border-radius: 4px; font-size: 13px; background: var(--bg); color: var(--text);">
-                    <input type="text" name="template_id" placeholder="post_template_..." style="flex: 2; padding: 6px 10px; border: 1px solid var(--rule-light); border-radius: 4px; font-size: 13px; background: var(--bg); color: var(--text); font-family: monospace;">
-                  </div>
-                <% } %>
-              </div>
-              <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-                <button type="button" class="btn btn-sm" onclick="(function(){var c=document.getElementById('beehiiv-templates');var r=c.children[0].cloneNode(true);r.querySelectorAll('input').forEach(function(i){i.value=''});c.appendChild(r);})()">+ Add Template</button>
-                <button type="submit" class="btn btn-sm">Save Templates</button>
-              </div>
-            </form>
+                </div>
+              <% } else { %>
+                <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">No templates found in your Beehiiv account.</p>
+              <% } %>
+              <form method="POST" action="/integrations/beehiiv/refresh-templates" style="display: inline;">
+                <button type="submit" class="btn btn-sm">Refresh Templates</button>
+              </form>
+            </div>
 
             <form method="POST" action="/integrations/beehiiv/disconnect">
               <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
             </form>
           <% } else { %>
             <form method="POST" action="/integrations/beehiiv/connect">
-              <p style="font-size: 14px; margin-bottom: 12px;">Connect your Beehiiv account so your agent can draft and manage newsletters.</p>
+              <p style="font-size: 14px; margin-bottom: 12px;">Connect your Beehiiv account so your agent can draft and manage newsletters. Templates will be imported automatically.</p>
               <div class="form-group">
                 <label for="beehiiv_api_key">API Key</label>
                 <input type="password" id="beehiiv_api_key" name="api_key" placeholder="API key..." required>
                 <div class="hint">Generate your API key in <a href="https://app.beehiiv.com/settings/integrations" target="_blank" style="color: var(--accent);">Beehiiv Settings → Integrations → API</a></div>
               </div>
-
-              <details style="margin-bottom: 12px;">
-                <summary style="font-size: 13px; color: var(--text-secondary); cursor: pointer;">Design Templates (optional)</summary>
-                <div id="beehiiv-templates-setup" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
-                  <div style="display: flex; gap: 8px; align-items: center;">
-                    <input type="text" name="template_name" placeholder="Template name" style="flex: 1; padding: 6px 10px; border: 1px solid var(--rule-light); border-radius: 4px; font-size: 13px; background: var(--bg); color: var(--text);">
-                    <input type="text" name="template_id" placeholder="post_template_..." style="flex: 2; padding: 6px 10px; border: 1px solid var(--rule-light); border-radius: 4px; font-size: 13px; background: var(--bg); color: var(--text); font-family: monospace;">
-                  </div>
-                </div>
-                <button type="button" class="btn btn-sm" style="margin-top: 8px;" onclick="(function(){var c=document.getElementById('beehiiv-templates-setup');var r=c.children[0].cloneNode(true);r.querySelectorAll('input').forEach(function(i){i.value=''});c.appendChild(r);})()">+ Add Template</button>
-              </details>
-
               <button type="submit" class="btn">Connect</button>
             </form>
           <% } %>

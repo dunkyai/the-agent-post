@@ -10,7 +10,7 @@ import { buildNotionOAuthUrl, stopNotion, getNotionWorkspaceName } from "../serv
 import { startBuffer, stopBuffer, testBufferConnection, bufferListChannels, isBufferRunning } from "../services/buffer";
 import { startLuma, stopLuma, testLumaConnection } from "../services/luma";
 import { buildTwitterOAuthUrl, stopTwitter } from "../services/twitter";
-import { startBeehiiv, stopBeehiiv, testBeehiivConnection } from "../services/beehiiv";
+import { startBeehiiv, stopBeehiiv, testBeehiivConnection, fetchTemplates } from "../services/beehiiv";
 import { isOneRunning, startOne, stopOne, getOneConnections, getAuthKitData, fetchConnections } from "../services/one";
 
 const router = Router();
@@ -732,8 +732,7 @@ router.post("/integrations/beehiiv/connect", async (req: Request, res: Response)
     const { publications } = await testBeehiivConnection(apiKey);
 
     if (publications.length === 1) {
-      // Parse templates from form
-      const templates = parseTemplateRows(req.body);
+      const templates = await fetchTemplates(apiKey, publications[0].id);
       const configData = { api_key: apiKey, publication_id: publications[0].id, publication_name: publications[0].name, templates };
       const config = encrypt(JSON.stringify(configData));
       upsertIntegration("beehiiv", config, "connected");
@@ -741,8 +740,7 @@ router.post("/integrations/beehiiv/connect", async (req: Request, res: Response)
       res.redirect(303, "/integrations?flash=Beehiiv+connected+successfully");
     } else {
       // Multiple publications — store key temporarily and show picker
-      const templates = parseTemplateRows(req.body);
-      const pending = encrypt(JSON.stringify({ api_key: apiKey, publications, templates }));
+      const pending = encrypt(JSON.stringify({ api_key: apiKey, publications }));
       upsertIntegration("beehiiv", pending, "pending");
       res.redirect(303, "/integrations?flash=Choose+a+publication");
     }
@@ -753,7 +751,7 @@ router.post("/integrations/beehiiv/connect", async (req: Request, res: Response)
   }
 });
 
-router.post("/integrations/beehiiv/select-pub", (req: Request, res: Response) => {
+router.post("/integrations/beehiiv/select-pub", async (req: Request, res: Response) => {
   try {
     const integration = getIntegration("beehiiv");
     if (!integration || integration.status !== "pending") {
@@ -769,7 +767,8 @@ router.post("/integrations/beehiiv/select-pub", (req: Request, res: Response) =>
       return;
     }
 
-    const configData = { api_key: pending.api_key, publication_id: pub.id, publication_name: pub.name, templates: pending.templates || [] };
+    const templates = await fetchTemplates(pending.api_key, pub.id);
+    const configData = { api_key: pending.api_key, publication_id: pub.id, publication_name: pub.name, templates };
     const config = encrypt(JSON.stringify(configData));
     upsertIntegration("beehiiv", config, "connected");
     startBeehiiv(configData);
@@ -780,7 +779,7 @@ router.post("/integrations/beehiiv/select-pub", (req: Request, res: Response) =>
   }
 });
 
-router.post("/integrations/beehiiv/templates", (req: Request, res: Response) => {
+router.post("/integrations/beehiiv/refresh-templates", async (req: Request, res: Response) => {
   try {
     const integration = getIntegration("beehiiv");
     if (!integration || integration.status !== "connected") {
@@ -789,16 +788,16 @@ router.post("/integrations/beehiiv/templates", (req: Request, res: Response) => 
     }
 
     const config = JSON.parse(decrypt(integration.config));
-    config.templates = parseTemplateRows(req.body);
+    config.templates = await fetchTemplates(config.api_key, config.publication_id);
 
     const encrypted = encrypt(JSON.stringify(config));
     upsertIntegration("beehiiv", encrypted, "connected");
     startBeehiiv(config);
 
-    res.redirect(303, "/integrations?flash=Beehiiv+templates+saved");
+    res.redirect(303, "/integrations?flash=Templates+refreshed+(" + config.templates.length + "+found)");
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    res.redirect(303, "/integrations?flash=Template+error:+" + encodeURIComponent(message));
+    res.redirect(303, "/integrations?flash=Refresh+error:+" + encodeURIComponent(message));
   }
 });
 
@@ -807,18 +806,6 @@ router.post("/integrations/beehiiv/disconnect", (req: Request, res: Response) =>
   upsertIntegration("beehiiv", "{}", "disconnected");
   res.redirect(303, "/integrations?flash=Beehiiv+disconnected");
 });
-
-function parseTemplateRows(body: any): { name: string; id: string }[] {
-  const names = Array.isArray(body.template_name) ? body.template_name : body.template_name ? [body.template_name] : [];
-  const ids = Array.isArray(body.template_id) ? body.template_id : body.template_id ? [body.template_id] : [];
-  const templates: { name: string; id: string }[] = [];
-  for (let i = 0; i < names.length; i++) {
-    const name = (names[i] || "").trim();
-    const id = (ids[i] || "").trim();
-    if (name && id) templates.push({ name, id });
-  }
-  return templates;
-}
 
 // --- One (withone.ai / Pica) ---
 

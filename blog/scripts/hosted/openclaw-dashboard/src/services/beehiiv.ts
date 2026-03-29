@@ -56,16 +56,27 @@ export function getBeehiivPublicationName(): string | null {
 
 // --- API wrappers ---
 
-export function beehiivListTemplates(): string {
+export async function fetchTemplates(apiKey: string, publicationId: string): Promise<{ name: string; id: string }[]> {
+  try {
+    const res = await fetch(`${BEEHIIV_API}/publications/${publicationId}/post_templates`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok) return [];
+    const json: any = await res.json();
+    const templates = json.data || [];
+    return templates.map((t: any) => ({ name: t.name || "Untitled", id: t.id }));
+  } catch {
+    return [];
+  }
+}
+
+export async function beehiivListTemplates(): Promise<string> {
   if (!beehiivConfig) return JSON.stringify({ error: "Beehiiv is not connected" });
 
-  const templates = beehiivConfig.templates || [];
+  const templates = await fetchTemplates(beehiivConfig.api_key, beehiivConfig.publication_id);
   return JSON.stringify({
-    templates: templates.map((t) => ({ name: t.name, id: t.id })),
+    templates,
     count: templates.length,
-    note: templates.length === 0
-      ? "No templates configured. Add templates in the Beehiiv integration settings on the Integrations page."
-      : undefined,
   });
 }
 
