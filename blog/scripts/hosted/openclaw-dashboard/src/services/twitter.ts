@@ -575,28 +575,3 @@ export async function twitterDeleteTweet(tweetId: string): Promise<string> {
     return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to delete tweet" });
   }
 }
-
-export async function twitterLikeTweet(tweetIdOrUrl: string): Promise<string> {
-  if (!twitterConfig) return JSON.stringify({ error: "Twitter is not connected" });
-
-  try {
-    const tweetId = extractTweetId(tweetIdOrUrl);
-    if (!tweetId) {
-      return JSON.stringify({ error: "Invalid tweet ID or URL. Provide a numeric tweet ID or a full x.com/twitter.com URL." });
-    }
-
-    const res = await fetch(`${TWITTER_API}/users/${twitterConfig.user_id}/likes`, {
-      method: "POST",
-      headers: await authHeaders(),
-      body: JSON.stringify({ tweet_id: tweetId }),
-    });
-
-    if (!res.ok) {
-      return JSON.stringify({ error: `Twitter API error (${res.status}): ${await res.text()}` });
-    }
-
-    return JSON.stringify({ success: true, liked: true, tweet_id: tweetId });
-  } catch (err) {
-    return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to like tweet" });
-  }
-}
