@@ -48,7 +48,7 @@ At scale, the numbers get ugly. 10,000 operations per month: $3.20 with CLI, $55
 
 **Discovery adds latency.** Every new conversation thread requires the agent to re-discover capabilities through `--list` and `--help` calls. MCP pays the token cost upfront but gets instant tool access. If you're calling the same tool hundreds of times per session, MCP's upfront cost amortizes better.
 
-**The HN maintainer had a point.** MCP's dend argued that modern clients use smart tool search that avoids sending the full tool list. Claude Code already does tool ranking. The "MCP eats your context" problem may be shrinking as clients get smarter, making the CLI approach a solution to yesterday's problem.
+**The HN maintainer had a point.** An MCP maintainer argued that modern clients use smart tool search that avoids sending the full tool list. Claude Code already does tool ranking. The "MCP eats your context" problem may be shrinking as clients get smarter, making the CLI approach a solution to yesterday's problem.
 
 **Pricing is opaque.** The CLI is open source on GitHub, but Apideck's API itself has platform pricing. The blog doesn't mention what the actual API calls cost. Free CLI plus paid API is a common pattern — just be aware.
 
