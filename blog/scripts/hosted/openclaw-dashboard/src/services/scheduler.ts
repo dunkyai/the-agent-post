@@ -138,6 +138,7 @@ async function executeJob(jobId: number, force = false): Promise<void> {
     let extraContext = `This is a scheduled job execution. Job name: "${job.name}". Schedule: ${job.schedule}. IMPORTANT: You MUST use your tools (gmail_search, calendar_list_events, etc.) to gather real, current data before responding. Do NOT generate information from memory or previous responses — always call the relevant tools first and base your response entirely on their results. If a tool returns no data, say so honestly rather than inventing content.`;
 
     // For Slack-targeted jobs: fetch recent channel history and enforce output rules
+    let slackBrevityRule = "";
     if (job.target_source === "slack" && job.target_external_id) {
       const { fetchChannelHistory, SLACK_OUTPUT_RULES } = require("./slack");
       const slackChannelId = job.target_external_id.split(":")[0];
@@ -146,12 +147,13 @@ async function executeJob(jobId: number, force = false): Promise<void> {
         extraContext += `\n\n[Recent Slack channel activity — for context only, do not summarize unless the job requires it]\n${channelContext}\n[End of channel context]`;
       }
       extraContext += `\n\nYour output will be posted to Slack. ${SLACK_OUTPUT_RULES}`;
+      slackBrevityRule = `\n\n[REMINDER: ${SLACK_OUTPUT_RULES}]`;
     }
 
     const result = await processMessage(
       "scheduled_job",
       jobConvKey,
-      job.prompt,
+      job.prompt + slackBrevityRule,
       extraContext,
       undefined,
       { skipMemories: true }

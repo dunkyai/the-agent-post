@@ -15,7 +15,7 @@ interface SlackConfig {
 let slackConfig: SlackConfig | null = null;
 
 // Single source of truth for Slack output formatting — used by both @mention responses and scheduled jobs
-export const SLACK_OUTPUT_RULES = "Be BRIEF — 3 lines maximum. No preamble, no filler, no restating the question. Lead with the answer. Only elaborate if the user asks for more detail.";
+export const SLACK_OUTPUT_RULES = "CRITICAL FORMAT RULE: Your response MUST be 3 lines or fewer. No preamble, no filler, no bullet lists, no restating the question. Lead with the answer in plain sentences. Do NOT elaborate unless explicitly asked. Violating this rule makes your response useless — it will be too long for Slack.";
 
 // Event deduplication
 const recentEventIds = new Set<string>();
@@ -206,12 +206,18 @@ export function buildSlackOAuthUrl(): string {
   const scopes = [
     "chat:write",
     "channels:history",
+    "channels:read",
     "groups:history",
+    "groups:read",
     "im:history",
     "im:write",
     "mpim:history",
     "users:read",
+    "users.profile:read",
     "files:read",
+    "files:write",
+    "reactions:read",
+    "reactions:write",
   ].join(",");
 
   const params = new URLSearchParams({
@@ -387,8 +393,15 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
       threadContext = await fetchThreadContext(channelId, event.thread_ts, slackConfig.bot_user_id);
     }
 
+    // Also fetch recent channel history so the agent has broader context
+    // (e.g. team updates posted as top-level messages, not in this thread)
+    const channelHistory = await fetchChannelHistory(channelId);
+
     // Create task — scheduler picks it up within ~2s, router delivers reply
-    let slackContext = `You are responding via Slack. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. ${SLACK_OUTPUT_RULES} Always follow the user's formatting and style preferences (e.g. if they ask for no emojis, stop using emojis). IMPORTANT: You CAN handle audio files and voice clips in Slack. When a user shares audio, the system automatically transcribes it before you see the message — the transcribed text appears as [Audio transcription: ...] at the start of the message. You do NOT need to access files directly; transcription is handled for you. If asked whether you can process audio, say YES.`;
+    let slackContext = `You are responding via Slack. The user @mentioned you directly — you MUST respond to their message. Your @mention has been removed from the text for cleanliness, but you were explicitly tagged. IMPORTANT: Do NOT use the send_slack tool to reply to this conversation — just return your reply text and it will be automatically posted as a threaded reply. Only use send_slack to message OTHER channels. ${SLACK_OUTPUT_RULES} Always follow the user's formatting and style preferences (e.g. if they ask for no emojis, stop using emojis). IMPORTANT: You CAN handle audio files and voice clips in Slack. When a user shares audio, the system automatically transcribes it before you see the message — the transcribed text appears as [Audio transcription: ...] at the start of the message. You do NOT need to access files directly; transcription is handled for you. If asked whether you can process audio, say YES.`;
+    if (channelHistory) {
+      slackContext += `\n\n[Recent channel activity — top-level messages in this channel]\n${channelHistory}\n[End of channel activity]`;
+    }
     if (threadContext) {
       slackContext += `\n\n[Thread context — all messages in this thread prior to your current request]\n${threadContext}\n[End of thread context]`;
     }
@@ -651,7 +664,10 @@ export async function getChannelMembers(channelId: string): Promise<string> {
     headers: { Authorization: `Bearer ${slackConfig.bot_token}` },
   });
   const data: any = await res.json();
-  if (!data.ok) return JSON.stringify({ error: data.error });
+  if (!data.ok) {
+    console.error(`[slack] conversations.members error:`, JSON.stringify(data));
+    return JSON.stringify({ error: data.error, needed: data.needed, provided: data.provided });
+  }
 
   // Look up user names
   const members = [];
@@ -672,7 +688,7 @@ export async function getChannelMembers(channelId: string): Promise<string> {
     }
   }
 
-  return JSON.stringify({ channel: channelId, members });
+  return JSON.stringify({ channel: channelId, members, hint: "To @mention a user in Slack, use <@USER_ID> format (e.g. <@U0ALNN8RZQA>). Never use @DisplayName." });
 }
 
 // --- Sending messages ---
