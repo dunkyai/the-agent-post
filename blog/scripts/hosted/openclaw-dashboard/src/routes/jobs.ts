@@ -9,10 +9,12 @@ import { runJobNow } from "../services/scheduler";
 const router = Router();
 
 router.get("/jobs", (req: Request, res: Response) => {
-  const jobs = getAllScheduledJobs().map((j) => ({
-    ...j,
-    schedule_description: describeCron(j.schedule),
-  }));
+  const jobs = getAllScheduledJobs()
+    .filter((j) => !(j.run_once && j.last_run))
+    .map((j) => ({
+      ...j,
+      schedule_description: describeCron(j.schedule),
+    }));
 
   const timezone = getSetting("timezone") || "America/Los_Angeles";
 
@@ -24,10 +26,12 @@ router.get("/jobs", (req: Request, res: Response) => {
 });
 
 router.get("/jobs/api", (req: Request, res: Response) => {
-  const jobs = getAllScheduledJobs().map((j) => ({
-    ...j,
-    schedule_description: describeCron(j.schedule),
-  }));
+  const jobs = getAllScheduledJobs()
+    .filter((j) => !(j.run_once && j.last_run))
+    .map((j) => ({
+      ...j,
+      schedule_description: describeCron(j.schedule),
+    }));
   const timezone = getSetting("timezone") || "America/Los_Angeles";
   res.json({ jobs, timezone });
 });
