@@ -5,123 +5,180 @@
     <h2>Settings</h2>
     <%- include('partials/flash', { flash }) %>
 
-    <form method="POST" action="/settings">
-      <div class="card card-compact">
-        <h3>System Prompt</h3>
-        <div class="form-group">
-          <label for="system_prompt">Custom instructions sent with every message</label>
-          <textarea id="system_prompt" name="system_prompt" rows="6" placeholder="e.g. You are a friendly assistant named Archie who works for Acme Corp..."><%= systemPrompt %></textarea>
-          <div class="hint">For power users. Context fields from Getting Started are injected automatically — this is for additional custom instructions.</div>
-        </div>
-        <button type="submit" class="btn btn-sm">Save</button>
-      </div>
+    <div class="tab-bar" style="display: flex; gap: 0; margin-bottom: 16px; border-bottom: 2px solid var(--border, #e0e0e0);">
+      <a href="/settings?tab=settings" class="tab-link<%= tab === 'settings' ? ' tab-active' : '' %>">Settings</a>
+      <a href="/settings?tab=memories" class="tab-link<%= tab === 'memories' ? ' tab-active' : '' %>">Memories (<%= memories.length %>)</a>
+    </div>
 
-      <div class="card card-compact">
-        <h3>Timezone</h3>
-        <div class="form-group">
-          <label for="timezone">Your local timezone</label>
-          <select id="timezone" name="timezone">
-            <optgroup label="Common">
-              <option value="America/Los_Angeles" <%= timezone === 'America/Los_Angeles' ? 'selected' : '' %>>Pacific Time (PT)</option>
-              <option value="America/Denver" <%= timezone === 'America/Denver' ? 'selected' : '' %>>Mountain Time (MT)</option>
-              <option value="America/Chicago" <%= timezone === 'America/Chicago' ? 'selected' : '' %>>Central Time (CT)</option>
-              <option value="America/New_York" <%= timezone === 'America/New_York' ? 'selected' : '' %>>Eastern Time (ET)</option>
-              <option value="America/Anchorage" <%= timezone === 'America/Anchorage' ? 'selected' : '' %>>Alaska Time (AKT)</option>
-              <option value="Pacific/Honolulu" <%= timezone === 'Pacific/Honolulu' ? 'selected' : '' %>>Hawaii Time (HT)</option>
-              <option value="UTC" <%= timezone === 'UTC' ? 'selected' : '' %>>UTC</option>
-            </optgroup>
-            <optgroup label="Europe">
-              <option value="Europe/London" <%= timezone === 'Europe/London' ? 'selected' : '' %>>London (GMT/BST)</option>
-              <option value="Europe/Paris" <%= timezone === 'Europe/Paris' ? 'selected' : '' %>>Paris (CET/CEST)</option>
-              <option value="Europe/Berlin" <%= timezone === 'Europe/Berlin' ? 'selected' : '' %>>Berlin (CET/CEST)</option>
-            </optgroup>
-            <optgroup label="Asia / Pacific">
-              <option value="Asia/Tokyo" <%= timezone === 'Asia/Tokyo' ? 'selected' : '' %>>Tokyo (JST)</option>
-              <option value="Asia/Shanghai" <%= timezone === 'Asia/Shanghai' ? 'selected' : '' %>>Shanghai (CST)</option>
-              <option value="Asia/Kolkata" <%= timezone === 'Asia/Kolkata' ? 'selected' : '' %>>India (IST)</option>
-              <option value="Australia/Sydney" <%= timezone === 'Australia/Sydney' ? 'selected' : '' %>>Sydney (AEST/AEDT)</option>
-            </optgroup>
-          </select>
-          <div class="hint">Used for scheduling jobs and displaying times. The AI will convert your local time to UTC for cron schedules.</div>
-        </div>
-        <button type="submit" class="btn btn-sm">Save</button>
-      </div>
-
-      <details class="card card-collapsible">
-        <summary class="integration-toggle">
-          <div class="integration-header">
-            <h3>Advanced Settings</h3>
+    <!-- SETTINGS TAB -->
+    <div id="tab-settings" style="display: <%= tab === 'settings' ? 'block' : 'none' %>;">
+      <form method="POST" action="/settings">
+        <div class="card card-compact">
+          <h3>System Prompt</h3>
+          <div class="form-group">
+            <label for="system_prompt">Custom instructions sent with every message</label>
+            <textarea id="system_prompt" name="system_prompt" rows="6" placeholder="e.g. You are a friendly assistant named Archie who works for Acme Corp..."><%= systemPrompt %></textarea>
+            <div class="hint">For power users. Context fields from Getting Started are injected automatically — this is for additional custom instructions.</div>
           </div>
-          <span class="toggle-arrow"></span>
-        </summary>
-        <div class="integration-body">
-
-      <div class="card card-compact" style="margin: 0 0 16px 0; box-shadow: none; border: 1px solid var(--rule-light);">
-        <h3>AI Model</h3>
-        <div class="form-group">
-          <label for="model">Model</label>
-          <select id="model" name="model">
-            <option value="claude-sonnet-4-20250514" <%= model === 'claude-sonnet-4-20250514' ? 'selected' : '' %>>Claude Sonnet 4</option>
-            <option value="claude-haiku-4-5-20251001" <%= model === 'claude-haiku-4-5-20251001' ? 'selected' : '' %>>Claude Haiku 4.5</option>
-            <option value="claude-opus-4-20250514" <%= model === 'claude-opus-4-20250514' ? 'selected' : '' %>>Claude Opus 4</option>
-          </select>
-          <div class="hint">Sonnet is recommended for most use cases. Opus is more capable but uses more of your monthly messages per task.</div>
+          <button type="submit" class="btn btn-sm">Save</button>
         </div>
-        <button type="submit" class="btn btn-sm">Save</button>
+
+        <div class="card card-compact">
+          <h3>Timezone</h3>
+          <div class="form-group">
+            <label for="timezone">Your local timezone</label>
+            <select id="timezone" name="timezone">
+              <optgroup label="Common">
+                <option value="America/Los_Angeles" <%= timezone === 'America/Los_Angeles' ? 'selected' : '' %>>Pacific Time (PT)</option>
+                <option value="America/Denver" <%= timezone === 'America/Denver' ? 'selected' : '' %>>Mountain Time (MT)</option>
+                <option value="America/Chicago" <%= timezone === 'America/Chicago' ? 'selected' : '' %>>Central Time (CT)</option>
+                <option value="America/New_York" <%= timezone === 'America/New_York' ? 'selected' : '' %>>Eastern Time (ET)</option>
+                <option value="America/Anchorage" <%= timezone === 'America/Anchorage' ? 'selected' : '' %>>Alaska Time (AKT)</option>
+                <option value="Pacific/Honolulu" <%= timezone === 'Pacific/Honolulu' ? 'selected' : '' %>>Hawaii Time (HT)</option>
+                <option value="UTC" <%= timezone === 'UTC' ? 'selected' : '' %>>UTC</option>
+              </optgroup>
+              <optgroup label="Europe">
+                <option value="Europe/London" <%= timezone === 'Europe/London' ? 'selected' : '' %>>London (GMT/BST)</option>
+                <option value="Europe/Paris" <%= timezone === 'Europe/Paris' ? 'selected' : '' %>>Paris (CET/CEST)</option>
+                <option value="Europe/Berlin" <%= timezone === 'Europe/Berlin' ? 'selected' : '' %>>Berlin (CET/CEST)</option>
+              </optgroup>
+              <optgroup label="Asia / Pacific">
+                <option value="Asia/Tokyo" <%= timezone === 'Asia/Tokyo' ? 'selected' : '' %>>Tokyo (JST)</option>
+                <option value="Asia/Shanghai" <%= timezone === 'Asia/Shanghai' ? 'selected' : '' %>>Shanghai (CST)</option>
+                <option value="Asia/Kolkata" <%= timezone === 'Asia/Kolkata' ? 'selected' : '' %>>India (IST)</option>
+                <option value="Australia/Sydney" <%= timezone === 'Australia/Sydney' ? 'selected' : '' %>>Sydney (AEST/AEDT)</option>
+              </optgroup>
+            </select>
+            <div class="hint">Used for scheduling jobs and displaying times. The AI will convert your local time to UTC for cron schedules.</div>
+          </div>
+          <button type="submit" class="btn btn-sm">Save</button>
+        </div>
+
+        <details class="card card-collapsible">
+          <summary class="integration-toggle">
+            <div class="integration-header">
+              <h3>Advanced Settings</h3>
+            </div>
+            <span class="toggle-arrow"></span>
+          </summary>
+          <div class="integration-body">
+
+        <div class="card card-compact" style="margin: 0 0 16px 0; box-shadow: none; border: 1px solid var(--rule-light);">
+          <h3>AI Model</h3>
+          <div class="form-group">
+            <label for="model">Model</label>
+            <select id="model" name="model">
+              <option value="claude-sonnet-4-20250514" <%= model === 'claude-sonnet-4-20250514' ? 'selected' : '' %>>Claude Sonnet 4</option>
+              <option value="claude-haiku-4-5-20251001" <%= model === 'claude-haiku-4-5-20251001' ? 'selected' : '' %>>Claude Haiku 4.5</option>
+              <option value="claude-opus-4-20250514" <%= model === 'claude-opus-4-20250514' ? 'selected' : '' %>>Claude Opus 4</option>
+            </select>
+            <div class="hint">Sonnet is recommended for most use cases. Opus is more capable but uses more of your monthly messages per task.</div>
+          </div>
+          <button type="submit" class="btn btn-sm">Save</button>
+        </div>
+
+        <div class="card card-compact" style="margin: 0 0 16px 0; box-shadow: none; border: 1px solid var(--rule-light);">
+          <h3>Parameters</h3>
+          <div class="form-group">
+            <label for="temperature">Temperature</label>
+            <input type="number" id="temperature" name="temperature" value="<%= temperature %>" min="0" max="2" step="0.1">
+            <div class="hint">0 = deterministic, 1 = creative, 2 = very random</div>
+          </div>
+          <div class="form-group">
+            <label for="max_tokens">Max Tokens</label>
+            <input type="number" id="max_tokens" name="max_tokens" value="<%= maxTokens %>" min="1" max="16384" step="1">
+            <div class="hint">Max response length. A typical blog post is 1,000-5,000 tokens. (Max: 16,384)</div>
+          </div>
+          <button type="submit" class="btn btn-sm">Save</button>
+        </div>
+
+        <div class="card card-compact" style="margin: 0 0 0 0; box-shadow: none; border: 1px solid var(--rule-light);">
+          <h3>Security</h3>
+          <div class="form-group">
+            <label for="session_expiry_days">Session Duration</label>
+            <select id="session_expiry_days" name="session_expiry_days">
+              <option value="1" <%= sessionExpiryDays === '1' ? 'selected' : '' %>>1 day</option>
+              <option value="7" <%= sessionExpiryDays === '7' ? 'selected' : '' %>>7 days</option>
+              <option value="30" <%= sessionExpiryDays === '30' || !sessionExpiryDays ? 'selected' : '' %>>30 days</option>
+              <option value="90" <%= sessionExpiryDays === '90' ? 'selected' : '' %>>90 days</option>
+            </select>
+            <div class="hint">How long you stay logged in before needing to sign in again</div>
+          </div>
+          <button type="submit" class="btn btn-sm">Save</button>
+        </div>
+
+          </div>
+        </details>
+      </form>
+    </div>
+
+    <!-- MEMORIES TAB -->
+    <div id="tab-memories" style="display: <%= tab === 'memories' ? 'block' : 'none' %>;">
+      <div class="card">
+        <p style="color: var(--text-secondary); font-size: 14px; margin: 0;">
+          These are facts your AI has saved to remember across conversations. Memories are injected into every interactive conversation (chat, Slack, email) but <strong>not</strong> into scheduled jobs. Delete any that are incorrect, outdated, or duplicated.
+        </p>
       </div>
 
-      <div class="card card-compact" style="margin: 0 0 16px 0; box-shadow: none; border: 1px solid var(--rule-light);">
-        <h3>Parameters</h3>
-        <div class="form-group">
-          <label for="temperature">Temperature</label>
-          <input type="number" id="temperature" name="temperature" value="<%= temperature %>" min="0" max="2" step="0.1">
-          <div class="hint">0 = deterministic, 1 = creative, 2 = very random</div>
+      <% if (memories.length === 0) { %>
+        <div class="card">
+          <p style="color: var(--text-secondary); text-align: center;">
+            No memories saved yet. Your AI will save important facts as you interact with it.
+          </p>
         </div>
-        <div class="form-group">
-          <label for="max_tokens">Max Tokens</label>
-          <input type="number" id="max_tokens" name="max_tokens" value="<%= maxTokens %>" min="1" max="16384" step="1">
-          <div class="hint">Max response length. A typical blog post is 1,000-5,000 tokens. (Max: 16,384)</div>
-        </div>
-        <button type="submit" class="btn btn-sm">Save</button>
-      </div>
+      <% } %>
 
-      <div class="card card-compact" style="margin: 0 0 0 0; box-shadow: none; border: 1px solid var(--rule-light);">
-        <h3>Security</h3>
-        <div class="form-group">
-          <label for="session_expiry_days">Session Duration</label>
-          <select id="session_expiry_days" name="session_expiry_days">
-            <option value="1" <%= sessionExpiryDays === '1' ? 'selected' : '' %>>1 day</option>
-            <option value="7" <%= sessionExpiryDays === '7' ? 'selected' : '' %>>7 days</option>
-            <option value="30" <%= sessionExpiryDays === '30' || !sessionExpiryDays ? 'selected' : '' %>>30 days</option>
-            <option value="90" <%= sessionExpiryDays === '90' ? 'selected' : '' %>>90 days</option>
-          </select>
-          <div class="hint">How long you stay logged in before needing to sign in again</div>
+      <% memories.forEach(function(mem) { %>
+        <div class="card card-compact" style="display: flex; align-items: flex-start; gap: 12px;">
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 14px; line-height: 1.5;"><%= mem.content %></div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+              #<%= mem.id %> &middot; <%= new Date(mem.created_at + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) %>
+            </div>
+          </div>
+          <form method="POST" action="/memories/<%= mem.id %>/delete" style="flex-shrink: 0;" onsubmit="return confirm('Delete this memory?')">
+            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+          </form>
         </div>
-        <button type="submit" class="btn btn-sm">Save</button>
-      </div>
-
-        </div>
-      </details>
-    </form>
+      <% }); %>
+    </div>
   </div>
 </div>
+
+<style>
+.tab-link {
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab-link:hover { color: var(--fg); }
+.tab-active { color: var(--accent); border-bottom-color: var(--accent); }
+</style>
+
 <script>
 (function () {
   var form = document.querySelector("form[action='/settings']");
-  form.addEventListener("submit", function (e) {
-    var temp = parseFloat(document.getElementById("temperature").value);
-    if (isNaN(temp) || temp < 0 || temp > 2) {
-      e.preventDefault();
-      alert("Temperature must be between 0 and 2.");
-      return;
-    }
-    var tokens = parseInt(document.getElementById("max_tokens").value, 10);
-    if (isNaN(tokens) || tokens < 1 || tokens > 16384) {
-      e.preventDefault();
-      alert("Max tokens must be between 1 and 16,384.");
-      return;
-    }
-  });
+  if (form) {
+    form.addEventListener("submit", function (e) {
+      var temp = parseFloat(document.getElementById("temperature").value);
+      if (isNaN(temp) || temp < 0 || temp > 2) {
+        e.preventDefault();
+        alert("Temperature must be between 0 and 2.");
+        return;
+      }
+      var tokens = parseInt(document.getElementById("max_tokens").value, 10);
+      if (isNaN(tokens) || tokens < 1 || tokens > 16384) {
+        e.preventDefault();
+        alert("Max tokens must be between 1 and 16,384.");
+        return;
+      }
+    });
+  }
 })();
 </script>
 <%- include('partials/foot') %>
