@@ -818,23 +818,40 @@ export function deleteShortcut(id: number): void {
  */
 export function expandShortcut(message: string, hasAttachments = false): { shortcut: Shortcut; expanded: string } | null {
   const trimmed = message.trim();
-  if (!trimmed.startsWith(";")) return null;
 
-  // Extract the trigger word (first word after ;)
-  const match = trimmed.match(/^;(\S+)/);
+  // Find ;trigger anywhere in the text (may be preceded by transcription, @mentions, etc.)
+  const match = trimmed.match(/(?:^|\s);(\S+)/);
   if (!match) return null;
 
   const trigger = match[1].toLowerCase();
   const shortcut = getShortcutByTrigger(trigger);
   if (!shortcut) return null;
 
-  // Everything after ";trigger " is the input
-  const input = trimmed.slice(match[0].length).trim();
+  // Text before the ;trigger (e.g. audio transcriptions) and after it are both context
+  const matchStart = trimmed.indexOf(match[0]);
+  const matchEnd = matchStart + match[0].length;
+  const before = trimmed.slice(0, matchStart).trim();
+  const after = trimmed.slice(matchEnd).trim();
+  const input = [before, after].filter(Boolean).join("\n\n");
   let expanded = shortcut.prompt;
+  const hasInputPlaceholder = expanded.includes("{{input}}");
   expanded = expanded.replace(/\{\{input\}\}/g, input || "");
   expanded = expanded.replace(/\{\{attachments\}\}/g, hasAttachments ? "with attached files" : "");
   // Clean up double spaces from empty replacements
   expanded = expanded.replace(/  +/g, " ").trim();
+  // If there's context (e.g. audio transcription) but no {{input}} placeholder, append it
+  if (input && !hasInputPlaceholder) {
+    expanded += `\n\nCONTEXT:\n${input}`;
+  }
+
+  // Wrap with strict execution instructions — remove AI judgement about which steps to follow
+  expanded = `[SHORTCUT WORKFLOW: "${shortcut.name}"]\n\n`
+    + `The following is a predefined workflow. You MUST execute EVERY instruction below literally and in order. `
+    + `Do NOT skip, combine, or reinterpret any step. Do NOT put content inline that the instructions say to put in a document or other tool. `
+    + `If the instructions say to create a Google Doc, you MUST call the google_docs_create tool. `
+    + `If the instructions say to post a link, you MUST include the link in your response. `
+    + `Complete every step before responding.\n\n`
+    + `INSTRUCTIONS:\n${expanded}`;
 
   return { shortcut, expanded };
 }
