@@ -1,0 +1,107 @@
+<%- include('partials/head', { title: 'Shortcuts' }) %>
+<div class="app">
+  <%- include('partials/nav', { active: 'shortcuts' }) %>
+  <div class="main">
+    <h2>Shortcuts</h2>
+    <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
+      Define reusable commands that expand into full prompts. Type <code>;<em>trigger</em></code> in Slack, email, or chat to run a shortcut. Any text after the trigger becomes <code>{{input}}</code> in the prompt.
+    </p>
+    <%- include('partials/flash', { flash }) %>
+
+    <details class="card" style="margin-bottom: 16px;">
+      <summary style="cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-secondary); list-style: none; display: flex; align-items: center; gap: 6px;">
+        <span style="font-size: 16px;">+</span> Create Shortcut
+      </summary>
+      <form method="POST" action="/shortcuts" style="margin-top: 12px;">
+        <div style="display: flex; gap: 12px;">
+          <div class="form-group" style="flex: 0 0 160px;">
+            <label>Trigger</label>
+            <input type="text" name="trigger" placeholder="e.g. amplify" required>
+            <p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0 0;">Users type <code>;trigger</code> to activate</p>
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label>Name</label>
+            <input type="text" name="name" placeholder="e.g. Amplify Content" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <input type="text" name="description" placeholder="Short description of what this shortcut does">
+        </div>
+        <div class="form-group">
+          <label>Prompt Template</label>
+          <textarea name="prompt" rows="5" placeholder="The full prompt to send to the AI. Use {{input}} for any text the user types after the trigger." required></textarea>
+          <p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0 0;">
+            <code>{{input}}</code> = text after trigger &nbsp;&middot;&nbsp; <code>{{attachments}}</code> = "with attached files" if files present
+          </p>
+        </div>
+        <button type="submit" class="btn">Create Shortcut</button>
+      </form>
+    </details>
+
+    <% if (shortcuts.length === 0) { %>
+      <div class="card">
+        <p style="color: var(--text-secondary); text-align: center;">
+          No shortcuts yet. Create one above to get started.
+        </p>
+      </div>
+    <% } %>
+
+    <% shortcuts.forEach(function(sc) { %>
+      <div class="card">
+        <div class="integration-header">
+          <h3><%= sc.name %></h3>
+          <span class="status-badge status-connected">;<%= sc.trigger %></span>
+        </div>
+
+        <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+          <% if (sc.description) { %>
+            <div style="margin-bottom: 4px;"><%= sc.description %></div>
+          <% } %>
+          <div><strong>Prompt:</strong> <%= sc.prompt.length > 150 ? sc.prompt.slice(0, 150) + '...' : sc.prompt %>
+            <% if (sc.prompt.length > 150) { %>
+              <a href="#" style="color: var(--accent); text-decoration: underline; font-size: 12px; margin-left: 4px;" onclick="var el=this.nextElementSibling;var show=el.style.display==='none';el.style.display=show?'block':'none';this.textContent=show?'hide':'show more';return false;">show more</a>
+              <span style="display:none; white-space: pre-wrap; word-break: break-word; margin-top: 4px;"><%= sc.prompt %></span>
+            <% } %>
+          </div>
+        </div>
+
+        <details style="margin-bottom: 12px;">
+          <summary style="cursor: pointer; font-size: 13px; color: var(--accent); text-decoration: underline; list-style: none;">Edit shortcut</summary>
+          <form method="POST" action="/shortcuts/<%= sc.id %>" style="margin-top: 10px;">
+            <div style="display: flex; gap: 12px;">
+              <div class="form-group" style="flex: 0 0 160px;">
+                <label>Trigger</label>
+                <input type="text" name="trigger" value="<%= sc.trigger %>" required>
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label>Name</label>
+                <input type="text" name="name" value="<%= sc.name %>" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Description</label>
+              <input type="text" name="description" value="<%= sc.description %>">
+            </div>
+            <div class="form-group">
+              <label>Prompt Template</label>
+              <textarea name="prompt" rows="5" required><%= sc.prompt %></textarea>
+              <p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0 0;">
+                <code>{{input}}</code> = text after trigger &nbsp;&middot;&nbsp; <code>{{attachments}}</code> = "with attached files" if files present
+              </p>
+            </div>
+            <button type="submit" class="btn">Save</button>
+          </form>
+        </details>
+
+        <div style="display: flex; gap: 8px;">
+          <form method="POST" action="/shortcuts/<%= sc.id %>/delete" style="display:inline;"
+                onsubmit="return confirm('Delete this shortcut?')">
+            <button type="submit" class="btn btn-danger">Delete</button>
+          </form>
+        </div>
+      </div>
+    <% }); %>
+  </div>
+</div>
+<%- include('partials/foot') %>

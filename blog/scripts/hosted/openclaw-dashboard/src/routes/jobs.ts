@@ -5,7 +5,9 @@ import {
 } from "../services/db";
 import { isValidCron, getNextRun, describeCron } from "../services/cron";
 import { runJobNow } from "../services/scheduler";
+import { getRecentTasks, countActiveTasks } from "../services/task";
 
+const TASK_PAGE_SIZE = 25;
 const router = Router();
 
 router.get("/jobs", (req: Request, res: Response) => {
@@ -16,10 +18,21 @@ router.get("/jobs", (req: Request, res: Response) => {
       schedule_description: describeCron(j.schedule),
     }));
 
+  const taskPage = Math.max(1, parseInt(req.query.taskPage as string, 10) || 1);
+  const taskTotal = countActiveTasks();
+  const taskTotalPages = Math.max(1, Math.ceil(taskTotal / TASK_PAGE_SIZE));
+  const tasks = getRecentTasks(TASK_PAGE_SIZE, (taskPage - 1) * TASK_PAGE_SIZE);
+
   const timezone = getSetting("timezone") || "America/Los_Angeles";
+  const tab = req.query.tab === "tasks" ? "tasks" : "jobs";
 
   res.render("jobs", {
     jobs,
+    tasks,
+    taskPage,
+    taskTotalPages,
+    taskTotal,
+    tab,
     timezone,
     flash: req.query.flash || null,
   });

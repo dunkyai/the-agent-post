@@ -1,237 +1,265 @@
-<%- include('partials/head', { title: 'Scheduled Jobs' }) %>
+<%- include('partials/head', { title: 'Jobs & Tasks' }) %>
 <div class="app">
   <%- include('partials/nav', { active: 'jobs' }) %>
   <div class="main">
-    <h2>Scheduled Jobs</h2>
+    <h2>Jobs & Tasks</h2>
     <%- include('partials/flash', { flash }) %>
 
-    <details class="card" style="margin-bottom: 16px;">
-      <summary style="cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-secondary); list-style: none; display: flex; align-items: center; gap: 6px;">
-        <span style="font-size: 16px;">+</span> Create Job Manually
-      </summary>
-      <form method="POST" action="/jobs" style="margin-top: 12px;">
-        <div class="form-group">
-          <label>Name</label>
-          <input type="text" name="name" placeholder="e.g. Weekly digest" required>
-        </div>
-        <div class="form-group">
-          <label>Schedule (cron)</label>
-          <input type="text" name="schedule" placeholder="e.g. 0 9 * * 1" required>
-          <p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0 0;">5-field cron: minute hour day month weekday. Times are in your local timezone.</p>
-        </div>
-        <div class="form-group">
-          <label>Prompt</label>
-          <textarea name="prompt" rows="3" placeholder="What should the AI do when this job runs?" required></textarea>
-        </div>
-        <div style="display: flex; gap: 12px;">
-          <div class="form-group" style="flex: 0 0 140px;">
-            <label>Deliver to</label>
-            <select name="target_source">
-              <option value="slack">Slack</option>
-              <option value="email">Email</option>
-            </select>
-          </div>
-          <div class="form-group" style="flex: 1;">
-            <label>Target ID</label>
-            <input type="text" name="target_external_id" placeholder="Channel ID (C...) or email address">
-          </div>
-        </div>
-        <button type="submit" class="btn">Create Job</button>
-      </form>
-    </details>
+    <div class="tab-bar" style="display: flex; gap: 0; margin-bottom: 16px; border-bottom: 2px solid var(--border, #e0e0e0);">
+      <a href="/jobs?tab=jobs" class="tab-link<%= tab === 'jobs' ? ' tab-active' : '' %>">Scheduled Jobs</a>
+      <a href="/jobs?tab=tasks" class="tab-link<%= tab === 'tasks' ? ' tab-active' : '' %>">Individual Tasks</a>
+    </div>
 
-    <div id="jobs-list">
-    <% if (jobs.length === 0) { %>
-      <div class="card">
-        <p style="color: var(--text-secondary); text-align: center;">
-          No scheduled jobs yet. Create one above or ask your agent via chat or Slack.
-        </p>
-      </div>
-    <% } %>
-
-    <% jobs.forEach(function(job) { %>
-      <div class="card">
-        <div class="integration-header">
-          <h3><%= job.name %></h3>
-          <div style="display: flex; gap: 6px; align-items: center;">
-            <% if (job.created_by === 'ai') { %>
-              <span class="status-badge" style="background: #DBEAFE; color: #1E40AF;">ai-created</span>
-            <% } %>
-            <% if (job.run_once) { %>
-              <span class="status-badge" style="background: #FEF3C7; color: #92400E;">one-time</span>
-            <% } %>
-            <span class="status-badge status-<%= job.enabled ? 'connected' : 'disconnected' %>">
-              <%= job.enabled ? 'enabled' : 'disabled' %>
-            </span>
-          </div>
+    <!-- SCHEDULED JOBS TAB -->
+    <div id="tab-jobs" style="display: <%= tab === 'jobs' ? 'block' : 'none' %>;">
+      <div id="jobs-list">
+      <% if (jobs.length === 0) { %>
+        <div class="card">
+          <p style="color: var(--text-secondary); text-align: center;">
+            No scheduled jobs yet. Ask your agent via chat or Slack to create one.
+          </p>
         </div>
+      <% } %>
 
-        <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
-          <div><strong>Schedule:</strong> <%= job.schedule_description %></div>
-          <div><strong>Prompt:</strong> <%= job.prompt.length > 120 ? job.prompt.slice(0, 120) + '...' : job.prompt %>
-            <% if (job.prompt.length > 120) { %>
-              <a href="#" class="prompt-toggle" style="color: var(--accent); text-decoration: underline; font-size: 12px; margin-left: 4px;" onclick="var el=this.nextElementSibling;var show=el.style.display==='none';el.style.display=show?'block':'none';this.textContent=show?'hide':'show more';return false;">show more</a>
-              <span style="display:none; white-space: pre-wrap; word-break: break-word; margin-top: 4px;"><%= job.prompt %></span>
-            <% } %>
+      <% jobs.forEach(function(job) { %>
+        <div class="card job-card" style="padding: 12px 16px;">
+          <div class="job-summary" onclick="toggleJob(this)" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+              <span class="job-chevron" style="font-size: 12px; color: var(--text-secondary); transition: transform 0.15s; flex-shrink: 0;">&#9654;</span>
+              <span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><%= job.name %></span>
+              <span style="font-size: 12px; color: var(--text-secondary); white-space: nowrap;"><%= job.schedule_description %></span>
+            </div>
+            <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
+              <% if (job.created_by === 'ai') { %>
+                <span class="status-badge" style="background: #DBEAFE; color: #1E40AF;">ai</span>
+              <% } %>
+              <% if (job.run_once) { %>
+                <span class="status-badge" style="background: #FEF3C7; color: #92400E;">one-time</span>
+              <% } %>
+              <span class="status-badge status-<%= job.enabled ? 'connected' : 'disconnected' %>">
+                <%= job.enabled ? 'enabled' : 'disabled' %>
+              </span>
+            </div>
           </div>
-          <div><strong>Deliver to:</strong> <%= job.target_source %> &mdash; <%= job.target_external_id %></div>
-          <div><strong>Created by:</strong> <%= job.created_by %></div>
-          <% if (job.next_run && job.next_run.trim()) { %>
-            <div><strong>Next run:</strong> <span class="local-time" data-utc="<%= job.next_run %>"><%= job.next_run %></span></div>
-          <% } %>
-          <% if (job.last_run) { %>
-            <div><strong>Last run:</strong> <span class="local-time" data-utc="<%= job.last_run %>"><%= job.last_run %></span></div>
-          <% } %>
-          <% if (job.last_error) { %>
-            <div style="color: var(--danger);"><strong>Last error:</strong> <%= job.last_error %></div>
-          <% } %>
-          <% if (job.last_result) { %>
-            <div><strong>Last result:</strong> <%= job.last_result.length > 120 ? job.last_result.slice(0, 120) + '...' : job.last_result %>
-              <% if (job.last_result.length > 120) { %>
-                <a href="#" class="prompt-toggle" style="color: var(--accent); text-decoration: underline; font-size: 12px; margin-left: 4px;" onclick="var el=this.nextElementSibling;var show=el.style.display==='none';el.style.display=show?'block':'none';this.textContent=show?'hide':'show more';return false;">show more</a>
-                <span style="display:none; white-space: pre-wrap; word-break: break-word; margin-top: 4px;"><%= job.last_result %></span>
+
+          <div class="job-details" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border, #e0e0e0);">
+            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+              <div><strong>Schedule:</strong> <%= job.schedule %> &mdash; <%= job.schedule_description %></div>
+              <div><strong>Prompt:</strong> <%= job.prompt.length > 120 ? job.prompt.slice(0, 120) + '...' : job.prompt %>
+                <% if (job.prompt.length > 120) { %>
+                  <a href="#" style="color: var(--accent); text-decoration: underline; font-size: 12px; margin-left: 4px;" onclick="var el=this.nextElementSibling;var show=el.style.display==='none';el.style.display=show?'block':'none';this.textContent=show?'hide':'show more';return false;">show more</a>
+                  <span style="display:none; white-space: pre-wrap; word-break: break-word; margin-top: 4px;"><%= job.prompt %></span>
+                <% } %>
+              </div>
+              <div><strong>Deliver to:</strong> <%= job.target_source %> &mdash; <%= job.target_external_id %></div>
+              <% if (job.next_run && job.next_run.trim()) { %>
+                <div><strong>Next run:</strong> <span class="local-time" data-utc="<%= job.next_run %>"><%= job.next_run %></span></div>
+              <% } %>
+              <% if (job.last_run) { %>
+                <div><strong>Last run:</strong> <span class="local-time" data-utc="<%= job.last_run %>"><%= job.last_run %></span></div>
+              <% } %>
+              <% if (job.last_error) { %>
+                <div style="color: var(--danger);"><strong>Last error:</strong> <%= job.last_error %></div>
+              <% } %>
+              <% if (job.last_result) { %>
+                <div><strong>Last result:</strong> <%= job.last_result.length > 120 ? job.last_result.slice(0, 120) + '...' : job.last_result %>
+                  <% if (job.last_result.length > 120) { %>
+                    <a href="#" style="color: var(--accent); text-decoration: underline; font-size: 12px; margin-left: 4px;" onclick="var el=this.nextElementSibling;var show=el.style.display==='none';el.style.display=show?'block':'none';this.textContent=show?'hide':'show more';return false;">show more</a>
+                    <span style="display:none; white-space: pre-wrap; word-break: break-word; margin-top: 4px;"><%= job.last_result %></span>
+                  <% } %>
+                </div>
               <% } %>
             </div>
-          <% } %>
-        </div>
 
-        <details style="margin-bottom: 12px;">
-          <summary style="cursor: pointer; font-size: 13px; color: var(--accent); text-decoration: underline; list-style: none;">Edit job</summary>
-          <form method="POST" action="/jobs/<%= job.id %>" style="margin-top: 10px;">
-            <div class="form-group">
-              <label>Name</label>
-              <input type="text" name="name" value="<%= job.name %>" required>
-            </div>
-            <div class="form-group">
-              <label>Schedule (cron)</label>
-              <input type="text" name="schedule" value="<%= job.schedule %>" required>
-              <p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0 0;"><%= job.schedule_description %></p>
-            </div>
-            <div class="form-group">
-              <label>Prompt</label>
-              <textarea name="prompt" rows="4" required><%= job.prompt %></textarea>
-            </div>
-            <div style="display: flex; gap: 12px;">
-              <div class="form-group" style="flex: 0 0 140px;">
-                <label>Deliver to</label>
-                <select name="target_source">
-                  <option value="slack" <%= job.target_source === 'slack' ? 'selected' : '' %>>Slack</option>
-                  <option value="email" <%= job.target_source === 'email' ? 'selected' : '' %>>Email</option>
-                </select>
-              </div>
-              <div class="form-group" style="flex: 1;">
-                <label>Target ID</label>
-                <input type="text" name="target_external_id" value="<%= job.target_external_id %>">
-                <p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0 0;">Slack: channel (C...) or user (U...). Email: address.</p>
-              </div>
-            </div>
+            <details style="margin-bottom: 12px;">
+              <summary style="cursor: pointer; font-size: 13px; color: var(--accent); text-decoration: underline; list-style: none;">Edit job</summary>
+              <form method="POST" action="/jobs/<%= job.id %>" style="margin-top: 10px;">
+                <div class="form-group">
+                  <label>Name</label>
+                  <input type="text" name="name" value="<%= job.name %>" required>
+                </div>
+                <div class="form-group">
+                  <label>Schedule (cron)</label>
+                  <input type="text" name="schedule" value="<%= job.schedule %>" required>
+                  <p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0 0;"><%= job.schedule_description %></p>
+                </div>
+                <div class="form-group">
+                  <label>Prompt</label>
+                  <textarea name="prompt" rows="4" required><%= job.prompt %></textarea>
+                </div>
+                <div style="display: flex; gap: 12px;">
+                  <div class="form-group" style="flex: 0 0 140px;">
+                    <label>Deliver to</label>
+                    <select name="target_source">
+                      <option value="slack" <%= job.target_source === 'slack' ? 'selected' : '' %>>Slack</option>
+                      <option value="email" <%= job.target_source === 'email' ? 'selected' : '' %>>Email</option>
+                    </select>
+                  </div>
+                  <div class="form-group" style="flex: 1;">
+                    <label>Target ID</label>
+                    <input type="text" name="target_external_id" value="<%= job.target_external_id %>">
+                    <p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0 0;">Slack: channel (C...) or user (U...). Email: address.</p>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                  <button type="submit" class="btn">Save</button>
+                  <% if (!job.enabled) { %>
+                    <button type="submit" name="enabled" value="1" class="btn" style="background: var(--accent);">Save & Enable</button>
+                  <% } %>
+                </div>
+              </form>
+            </details>
+
             <div style="display: flex; gap: 8px;">
-              <button type="submit" class="btn">Save</button>
-              <% if (!job.enabled) { %>
-                <button type="submit" name="enabled" value="1" class="btn" style="background: var(--accent);">Save & Enable</button>
-              <% } %>
+              <form method="POST" action="/jobs/<%= job.id %>/run" style="display:inline;">
+                <button type="submit" class="btn">Run Now</button>
+              </form>
+              <form method="POST" action="/jobs/<%= job.id %>/toggle" style="display:inline;">
+                <button type="submit" class="btn"><%= job.enabled ? 'Disable' : 'Enable' %></button>
+              </form>
+              <form method="POST" action="/jobs/<%= job.id %>/delete" style="display:inline;"
+                    onsubmit="return confirm('Delete this job?')">
+                <button type="submit" class="btn btn-danger">Delete</button>
+              </form>
             </div>
-          </form>
-        </details>
+          </div>
+        </div>
+      <% }); %>
+      </div>
+    </div>
 
-        <div style="display: flex; gap: 8px;">
-          <form method="POST" action="/jobs/<%= job.id %>/run" style="display:inline;">
-            <button type="submit" class="btn">Run Now</button>
-          </form>
-          <form method="POST" action="/jobs/<%= job.id %>/toggle" style="display:inline;">
-            <button type="submit" class="btn"><%= job.enabled ? 'Disable' : 'Enable' %></button>
-          </form>
-          <form method="POST" action="/jobs/<%= job.id %>/delete" style="display:inline;"
-                onsubmit="return confirm('Delete this job?')">
-            <button type="submit" class="btn btn-danger">Delete</button>
-          </form>
+    <!-- TASKS TAB -->
+    <div id="tab-tasks" style="display: <%= tab === 'tasks' ? 'block' : 'none' %>;">
+      <% if (tasks.length === 0) { %>
+        <p style="color: var(--text-secondary); text-align: center; padding: 32px 0;">
+          No tasks yet. Send a message via chat to create one.
+        </p>
+      <% } else { %>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; color: var(--text-secondary);">
+        <span><%= taskTotal %> task<%= taskTotal === 1 ? '' : 's' %></span>
+        <% if (taskTotalPages > 1) { %>
+        <div class="pagination">
+          <% if (taskPage > 1) { %><a href="/jobs?tab=tasks&taskPage=<%= taskPage - 1 %>" class="pagination-link">&laquo; Prev</a><% } %>
+          <% for (var p = 1; p <= taskTotalPages; p++) { %>
+            <% if (p === taskPage) { %><span class="pagination-current"><%= p %></span>
+            <% } else if (p === 1 || p === taskTotalPages || Math.abs(p - taskPage) <= 1) { %><a href="/jobs?tab=tasks&taskPage=<%= p %>" class="pagination-link"><%= p %></a>
+            <% } else if (Math.abs(p - taskPage) === 2) { %><span class="pagination-dots">&hellip;</span>
+            <% } %>
+          <% } %>
+          <% if (taskPage < taskTotalPages) { %><a href="/jobs?tab=tasks&taskPage=<%= taskPage + 1 %>" class="pagination-link">Next &raquo;</a><% } %>
+        </div>
+        <% } %>
+      </div>
+      <table class="tasks-table">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Source</th>
+            <th>Input</th>
+            <th>Duration</th>
+            <th>Tool Calls</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% tasks.forEach(function(task) { %>
+            <tr onclick="location.href='/tasks/<%= task.task_id %>'" style="cursor: pointer;">
+              <td><span class="task-status task-status-<%= task.status %>"><%= task.status.replace('_', ' ') %></span></td>
+              <td><span class="task-channel"><%= task.input.source_channel %></span></td>
+              <td class="task-input"><%= task.input.raw_input.length > 120 ? task.input.raw_input.slice(0, 120) + '...' : task.input.raw_input %></td>
+              <td class="task-meta"><% if (task.execution.duration_ms) { %><%= (task.execution.duration_ms / 1000).toFixed(1) %>s<% } else { %>-<% } %></td>
+              <td class="task-meta"><% if (task.execution.tool_calls_count) { %><%= task.execution.tool_calls_count %><% } else { %>-<% } %></td>
+              <td class="task-meta"><span class="local-time" data-utc="<%= task.created_at %>"><%= task.created_at %></span></td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+      <% if (taskTotalPages > 1) { %>
+      <div style="display: flex; justify-content: center; margin-top: 12px;">
+        <div class="pagination">
+          <% if (taskPage > 1) { %><a href="/jobs?tab=tasks&taskPage=<%= taskPage - 1 %>" class="pagination-link">&laquo; Prev</a><% } %>
+          <% for (var p = 1; p <= taskTotalPages; p++) { %>
+            <% if (p === taskPage) { %><span class="pagination-current"><%= p %></span>
+            <% } else if (p === 1 || p === taskTotalPages || Math.abs(p - taskPage) <= 1) { %><a href="/jobs?tab=tasks&taskPage=<%= p %>" class="pagination-link"><%= p %></a>
+            <% } else if (Math.abs(p - taskPage) === 2) { %><span class="pagination-dots">&hellip;</span>
+            <% } %>
+          <% } %>
+          <% if (taskPage < taskTotalPages) { %><a href="/jobs?tab=tasks&taskPage=<%= taskPage + 1 %>" class="pagination-link">Next &raquo;</a><% } %>
         </div>
       </div>
-    <% }); %>
+      <% } %>
+      <% } %>
     </div>
   </div>
 </div>
+
+<style>
+.tab-link {
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab-link:hover { color: var(--fg); }
+.tab-active { color: var(--accent); border-bottom-color: var(--accent); }
+.job-card { margin-bottom: 8px; }
+.job-chevron { display: inline-block; }
+.job-card.expanded .job-chevron { transform: rotate(90deg); }
+.tasks-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tasks-table th {
+  text-align: left; font-size: 11px; text-transform: uppercase;
+  color: var(--text-secondary); font-weight: 600; padding: 8px 12px;
+  border-bottom: 2px solid var(--border, #e0e0e0); white-space: nowrap;
+}
+.tasks-table td { padding: 8px 12px; border-bottom: 1px solid var(--border, #e0e0e0); vertical-align: middle; }
+.tasks-table tbody tr:hover { background: var(--bg-secondary, #f5f5f5); }
+.task-input { max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-meta { white-space: nowrap; color: var(--text-secondary); }
+.task-status { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500; white-space: nowrap; }
+.task-channel { font-size: 11px; text-transform: uppercase; color: var(--text-secondary); font-weight: 500; }
+.task-status-pending { background: var(--bg-secondary, #e0e0e0); color: var(--text-secondary); }
+.task-status-processing { background: #dbeafe; color: #1d4ed8; }
+.task-status-awaiting_confirmation { background: #fef3c7; color: #92400e; }
+.task-status-completed { background: #d1fae5; color: #065f46; }
+.task-status-failed { background: #fee2e2; color: #991b1b; }
+.task-status-cancelled { background: var(--bg-secondary, #e0e0e0); color: var(--text-secondary); }
+.pagination { display: flex; gap: 4px; align-items: center; }
+.pagination-link { padding: 4px 10px; border-radius: 4px; text-decoration: none; color: var(--accent); font-size: 13px; border: 1px solid var(--border, #e0e0e0); }
+.pagination-link:hover { background: var(--bg-secondary, #f5f5f5); }
+.pagination-current { padding: 4px 10px; border-radius: 4px; font-size: 13px; background: var(--accent, #4f46e5); color: #fff; font-weight: 600; }
+.pagination-dots { padding: 4px 4px; font-size: 13px; color: var(--text-secondary); }
+</style>
+
 <script>
 (function() {
   var POLL_INTERVAL = 30000;
   var userTimezone = "<%= timezone %>";
-  function escapeHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-  function truncate(s, n) { return s.length > n ? s.slice(0, n) + '...' : s; }
+
   function formatLocal(utcStr, tz) {
     try {
-      var d = new Date(utcStr);
+      var normalized = utcStr.indexOf('Z') === -1 && utcStr.indexOf('+') === -1 ? utcStr.replace(' ', 'T') + 'Z' : utcStr;
+      var d = new Date(normalized);
       if (isNaN(d.getTime())) return utcStr;
       return d.toLocaleString('en-US', { timeZone: tz, month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true, timeZoneName: 'short' });
     } catch (e) { return utcStr; }
-  }
-  function toggleHtml(text, max) {
-    if (text.length <= max) return escapeHtml(text);
-    return escapeHtml(truncate(text, max))
-      + ' <a href="#" style="color: var(--accent); text-decoration: underline; font-size: 12px;" onclick="var el=this.nextElementSibling;var show=el.style.display===\'none\';el.style.display=show?\'block\':\'none\';this.textContent=show?\'hide\':\'show more\';return false;">show more</a>'
-      + '<span style="display:none; white-space: pre-wrap; word-break: break-word; margin-top: 4px;">' + escapeHtml(text) + '</span>';
   }
 
   document.querySelectorAll('.local-time').forEach(function(el) {
     var utc = el.getAttribute('data-utc');
     if (utc) el.textContent = formatLocal(utc, userTimezone);
   });
-
-  function refreshJobs() {
-    fetch('/jobs/api').then(function(r) { return r.json(); }).then(function(data) {
-      var jobs = data.jobs || data;
-      var tz = data.timezone || userTimezone;
-      var container = document.getElementById('jobs-list');
-      if (!container) return;
-      if (jobs.length === 0) {
-        container.innerHTML = '<div class="card"><p style="color: var(--text-secondary); text-align: center;">No scheduled jobs yet. Create one above or ask your agent via chat or Slack.</p></div>';
-        return;
-      }
-      container.innerHTML = jobs.map(function(job) {
-        var badges = '';
-        if (job.created_by === 'ai') badges += '<span class="status-badge" style="background: #DBEAFE; color: #1E40AF;">ai-created</span>';
-        if (job.run_once) badges += '<span class="status-badge" style="background: #FEF3C7; color: #92400E;">one-time</span>';
-        badges += '<span class="status-badge status-' + (job.enabled ? 'connected' : 'disconnected') + '">' + (job.enabled ? 'enabled' : 'disabled') + '</span>';
-
-        return '<div class="card">'
-          + '<div class="integration-header"><h3>' + escapeHtml(job.name) + '</h3>'
-          + '<div style="display: flex; gap: 6px; align-items: center;">' + badges + '</div></div>'
-          + '<div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">'
-          + '<div><strong>Schedule:</strong> ' + escapeHtml(job.schedule_description) + '</div>'
-          + '<div><strong>Prompt:</strong> ' + toggleHtml(job.prompt, 120) + '</div>'
-          + '<div><strong>Deliver to:</strong> ' + escapeHtml(job.target_source) + ' &mdash; ' + escapeHtml(job.target_external_id) + '</div>'
-          + '<div><strong>Created by:</strong> ' + escapeHtml(job.created_by) + '</div>'
-          + (job.next_run && job.next_run.trim() ? '<div><strong>Next run:</strong> ' + escapeHtml(formatLocal(job.next_run, tz)) + '</div>' : '')
-          + (job.last_run ? '<div><strong>Last run:</strong> ' + escapeHtml(formatLocal(job.last_run, tz)) + '</div>' : '')
-          + (job.last_error ? '<div style="color: var(--danger);"><strong>Last error:</strong> ' + escapeHtml(job.last_error) + '</div>' : '')
-          + (job.last_result ? '<div><strong>Last result:</strong> ' + toggleHtml(job.last_result, 120) + '</div>' : '')
-          + '</div>'
-          + '<details style="margin-bottom: 12px;"><summary style="cursor: pointer; font-size: 13px; color: var(--accent); text-decoration: underline; list-style: none;">Edit job</summary>'
-          + '<form method="POST" action="/jobs/' + job.id + '" style="margin-top: 10px;">'
-          + '<div class="form-group"><label>Name</label><input type="text" name="name" value="' + escapeHtml(job.name) + '" required></div>'
-          + '<div class="form-group"><label>Schedule (cron)</label><input type="text" name="schedule" value="' + escapeHtml(job.schedule) + '" required>'
-          + '<p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0 0;">' + escapeHtml(job.schedule_description) + '</p></div>'
-          + '<div class="form-group"><label>Prompt</label><textarea name="prompt" rows="4" required>' + escapeHtml(job.prompt) + '</textarea></div>'
-          + '<div style="display: flex; gap: 12px;">'
-          + '<div class="form-group" style="flex: 0 0 140px;"><label>Deliver to</label><select name="target_source">'
-          + '<option value="slack"' + (job.target_source === 'slack' ? ' selected' : '') + '>Slack</option>'
-          + '<option value="email"' + (job.target_source === 'email' ? ' selected' : '') + '>Email</option>'
-          + '</select></div>'
-          + '<div class="form-group" style="flex: 1;"><label>Target ID</label><input type="text" name="target_external_id" value="' + escapeHtml(job.target_external_id) + '">'
-          + '<p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0 0;">Slack: channel (C...) or user (U...). Email: address.</p></div></div>'
-          + '<div style="display: flex; gap: 8px;">'
-          + '<button type="submit" class="btn">Save</button>'
-          + (!job.enabled ? '<button type="submit" name="enabled" value="1" class="btn" style="background: var(--accent);">Save &amp; Enable</button>' : '')
-          + '</div></form></details>'
-          + '<div style="display: flex; gap: 8px;">'
-          + '<form method="POST" action="/jobs/' + job.id + '/run" style="display:inline;"><button type="submit" class="btn">Run Now</button></form>'
-          + '<form method="POST" action="/jobs/' + job.id + '/toggle" style="display:inline;"><button type="submit" class="btn">' + (job.enabled ? 'Disable' : 'Enable') + '</button></form>'
-          + '<form method="POST" action="/jobs/' + job.id + '/delete" style="display:inline;" onsubmit="return confirm(\'Delete this job?\')"><button type="submit" class="btn btn-danger">Delete</button></form>'
-          + '</div></div>';
-      }).join('');
-    }).catch(function() {});
-  }
-
-  setInterval(refreshJobs, POLL_INTERVAL);
 })();
+
+function toggleJob(summaryEl) {
+  var card = summaryEl.closest('.job-card');
+  var details = card.querySelector('.job-details');
+  var isOpen = details.style.display !== 'none';
+  details.style.display = isOpen ? 'none' : 'block';
+  card.classList.toggle('expanded', !isOpen);
+}
 </script>
 <%- include('partials/foot') %>

@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { getSetting, setSetting, getOrCreateConversation, deleteConversation, getDb } from "./db";
+import { getSetting, setSetting, getOrCreateConversation, deleteConversation, getDb, expandShortcut } from "./db";
 import { submitSlackMessage } from "../adapters/slack";
 import { decrypt } from "./encryption";
 import { isSlackAudioFile, isAudioMimeType, transcribeAudio } from "./transcription";
@@ -348,6 +348,14 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
       await sendSlackMessage(channelId, "Conversation cleared! Starting fresh.", threadTs);
     } catch {}
     return;
+  }
+
+  // --- Shortcut expansion ---
+  const hasAttachments = (event.files || []).length > 0;
+  const shortcutMatch = expandShortcut(text, hasAttachments);
+  if (shortcutMatch) {
+    text = shortcutMatch.expanded;
+    console.log(`[slack] Shortcut ;${shortcutMatch.shortcut.trigger} expanded for user ${userId}`);
   }
 
   // --- Approval gate for non-owner users ---

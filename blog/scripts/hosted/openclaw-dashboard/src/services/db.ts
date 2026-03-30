@@ -165,6 +165,17 @@ function initSchema(): void {
       external_id TEXT PRIMARY KEY,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS shortcuts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trigger TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      prompt TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_shortcuts_trigger ON shortcuts(trigger);
   `);
 
   // Migrations: add columns to existing tables
@@ -752,4 +763,95 @@ export function getConfirmationRules() {
     description: string;
     enabled: number;
   }[];
+}
+
+// --- Shortcuts ---
+
+export interface Shortcut {
+  id: number;
+  trigger: string;
+  name: string;
+  description: string;
+  prompt: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export function getAllShortcuts(): Shortcut[] {
+  return getDb().prepare("SELECT * FROM shortcuts ORDER BY created_at DESC").all() as Shortcut[];
+}
+
+export function getShortcut(id: number): Shortcut | undefined {
+  return getDb().prepare("SELECT * FROM shortcuts WHERE id = ?").get(id) as Shortcut | undefined;
+}
+
+export function getShortcutByTrigger(trigger: string): Shortcut | undefined {
+  return getDb().prepare("SELECT * FROM shortcuts WHERE trigger = ?").get(trigger) as Shortcut | undefined;
+}
+
+export function createShortcut(trigger: string, name: string, description: string, prompt: string): void {
+  getDb()
+    .prepare("INSERT INTO shortcuts (trigger, name, description, prompt) VALUES (?, ?, ?, ?)")
+    .run(trigger, name, description, prompt);
+}
+
+export function updateShortcut(id: number, updates: { trigger?: string; name?: string; description?: string; prompt?: string }): void {
+  const fields: string[] = [];
+  const values: any[] = [];
+  if (updates.trigger !== undefined) { fields.push("trigger = ?"); values.push(updates.trigger); }
+  if (updates.name !== undefined) { fields.push("name = ?"); values.push(updates.name); }
+  if (updates.description !== undefined) { fields.push("description = ?"); values.push(updates.description); }
+  if (updates.prompt !== undefined) { fields.push("prompt = ?"); values.push(updates.prompt); }
+  if (fields.length === 0) return;
+  fields.push("updated_at = datetime('now')");
+  values.push(id);
+  getDb().prepare(`UPDATE shortcuts SET ${fields.join(", ")} WHERE id = ?`).run(...values);
+}
+
+export function deleteShortcut(id: number): void {
+  getDb().prepare("DELETE FROM shortcuts WHERE id = ?").run(id);
+}
+
+/**
+ * Check if a message starts with a shortcut trigger (;trigger).
+ * Returns the expanded prompt with {{input}} replaced, or null if no match.
+ */
+export function expandShortcut(message: string, hasAttachments = false): { shortcut: Shortcut; expanded: string } | null {
+  const trimmed = message.trim();
+
+  // Find ;trigger anywhere in the text (may be preceded by transcription, @mentions, etc.)
+  const match = trimmed.match(/(?:^|\s);(\S+)/);
+  if (!match) return null;
+
+  const trigger = match[1].toLowerCase();
+  const shortcut = getShortcutByTrigger(trigger);
+  if (!shortcut) return null;
+
+  // Text before the ;trigger (e.g. audio transcriptions) and after it are both context
+  const matchStart = trimmed.indexOf(match[0]);
+  const matchEnd = matchStart + match[0].length;
+  const before = trimmed.slice(0, matchStart).trim();
+  const after = trimmed.slice(matchEnd).trim();
+  const input = [before, after].filter(Boolean).join("\n\n");
+  let expanded = shortcut.prompt;
+  const hasInputPlaceholder = expanded.includes("{{input}}");
+  expanded = expanded.replace(/\{\{input\}\}/g, input || "");
+  expanded = expanded.replace(/\{\{attachments\}\}/g, hasAttachments ? "with attached files" : "");
+  // Clean up double spaces from empty replacements
+  expanded = expanded.replace(/  +/g, " ").trim();
+  // If there's context (e.g. audio transcription) but no {{input}} placeholder, append it
+  if (input && !hasInputPlaceholder) {
+    expanded += `\n\nCONTEXT:\n${input}`;
+  }
+
+  // Wrap with strict execution instructions — remove AI judgement about which steps to follow
+  expanded = `[SHORTCUT WORKFLOW: "${shortcut.name}"]\n\n`
+    + `The following is a predefined workflow. You MUST execute EVERY instruction below literally and in order. `
+    + `Do NOT skip, combine, or reinterpret any step. Do NOT put content inline that the instructions say to put in a document or other tool. `
+    + `If the instructions say to create a Google Doc, you MUST call the google_docs_create tool. `
+    + `If the instructions say to post a link, you MUST include the link in your response. `
+    + `Complete every step before responding.\n\n`
+    + `INSTRUCTIONS:\n${expanded}`;
+
+  return { shortcut, expanded };
 }

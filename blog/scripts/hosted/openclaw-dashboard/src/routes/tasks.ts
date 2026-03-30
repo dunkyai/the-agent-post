@@ -7,12 +7,9 @@ const PAGE_SIZE = 25;
 const router = Router();
 
 router.get("/tasks", (req: Request, res: Response) => {
-  const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
-  const total = countActiveTasks();
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const tasks = getRecentTasks(PAGE_SIZE, (page - 1) * PAGE_SIZE);
-  const timezone = getSetting("timezone") || "America/Los_Angeles";
-  res.render("tasks", { tasks, timezone, page, totalPages, total });
+  // Redirect to combined Jobs & Tasks page
+  const page = req.query.page || "1";
+  res.redirect(301, `/jobs?tab=tasks&taskPage=${page}`);
 });
 
 router.get("/tasks/api", (req: Request, res: Response) => {
