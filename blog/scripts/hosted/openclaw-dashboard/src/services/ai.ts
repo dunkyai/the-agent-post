@@ -746,7 +746,7 @@ const SLACK_MESSAGING_TOOLS = [
   },
   {
     name: "slack_channel_members",
-    description: "List the members of a Slack channel. Use when you need to see who is in a channel, find someone's name or user ID, or understand the audience.",
+    description: "List the members of a Slack channel with their user IDs and names. IMPORTANT: To @mention someone in Slack, you MUST use the format <@USER_ID> (e.g. <@U0ALNN8RZQA>). Never use @DisplayName — it won't work. Always call this tool first to look up user IDs before mentioning anyone.",
     input_schema: {
       type: "object" as const,
       properties: {
