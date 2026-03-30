@@ -10,6 +10,7 @@ import {
   markGmailThreadProcessed,
   getExecutionLog,
   type EmailThreadStateRow,
+  expandShortcut,
 } from "../services/db";
 import {
   gmailCreateDraft,
@@ -200,6 +201,33 @@ export async function processIncomingEmail(ctx: EmailThreadContext): Promise<voi
         delivery_channel: "email",
         reply_mode: ctx.replyMode,
       });
+    }
+
+    // --- Shortcut detection: skip triage if email starts with ;trigger ---
+    const latestBody = ctx.threadMessages[ctx.threadMessages.length - 1]?.body || "";
+    const hasAttachments = (ctx.threadMessages[ctx.threadMessages.length - 1]?.attachments || []).length > 0;
+    const emailShortcut = expandShortcut(latestBody.trim(), hasAttachments);
+    if (emailShortcut) {
+      console.log(`[email-adapter] Shortcut ;${emailShortcut.shortcut.trigger} detected in thread ${threadId}`);
+      upsertEmailThreadState(threadId, accountId, {
+        state: "processing",
+        triage_result: JSON.stringify({ classification: "request", confidence: "high", request_summary: `Shortcut: ${emailShortcut.shortcut.name}` }),
+        reply_mode: ctx.replyMode,
+      });
+      const structured: StructuredRequest = {
+        original_sender: ctx.latestSender,
+        request: emailShortcut.expanded,
+        context: `Shortcut ;${emailShortcut.shortcut.trigger} triggered via email`,
+        thread_subject: ctx.subject,
+        thread_participants: [ctx.latestSender],
+        delivery: { channel: "email", details: {} },
+        account_id: accountId,
+      };
+      const task = createEmailTask(ctx, structured);
+      upsertEmailThreadState(threadId, accountId, { task_id: task.task_id });
+      console.log(`[email-adapter] Shortcut task ${task.task_id} created for thread ${threadId}`);
+      markGmailThreadProcessed(threadId, latestMessageId, accountId);
+      return;
     }
 
     // Run triage

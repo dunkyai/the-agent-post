@@ -15,6 +15,7 @@ import jobsRouter from "./routes/jobs";
 import tasksRouter from "./routes/tasks";
 import bugReportRouter from "./routes/bug-report";
 import usageRouter from "./routes/usage";
+import shortcutsRouter from "./routes/shortcuts";
 
 const app = express();
 app.disable("x-powered-by");
@@ -63,6 +64,7 @@ app.use(jobsRouter);
 app.use(tasksRouter);
 app.use(bugReportRouter);
 app.use(usageRouter);
+app.use(shortcutsRouter);
 
 // Root redirect
 app.get("/", (_req, res) => {

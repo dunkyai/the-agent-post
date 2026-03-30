@@ -1,6 +1,6 @@
 import type { Task } from "../types/task";
 import { createTask } from "../services/task";
-import { getOrCreateConversation, getSetting, addMessage, getDb } from "../services/db";
+import { getOrCreateConversation, getSetting, addMessage, getDb, expandShortcut } from "../services/db";
 
 // --- In-memory pending state (same pattern as old chat.ts) ---
 
@@ -114,9 +114,16 @@ export function submitChatMessage(sessionId: string, message: string): { taskId:
     // If accepted or anything else, the system prompt onboarding directive handles the rest
   }
 
+  // --- Shortcut expansion ---
+  const shortcutMatch = expandShortcut(message);
+  const taskInput = shortcutMatch ? shortcutMatch.expanded : message;
+  if (shortcutMatch) {
+    console.log(`[chat-adapter] Shortcut ;${shortcutMatch.shortcut.trigger} expanded for session ${sessionId.slice(0, 8)}...`);
+  }
+
   // --- Normal flow ---
   const task = createTask({
-    raw_input: message,
+    raw_input: taskInput,
     source_channel: "chat",
     reply_channel: "chat",
     metadata: { sessionId },
