@@ -206,12 +206,18 @@ export function buildSlackOAuthUrl(): string {
   const scopes = [
     "chat:write",
     "channels:history",
+    "channels:read",
     "groups:history",
+    "groups:read",
     "im:history",
     "im:write",
     "mpim:history",
     "users:read",
+    "users.profile:read",
     "files:read",
+    "files:write",
+    "reactions:read",
+    "reactions:write",
   ].join(",");
 
   const params = new URLSearchParams({
