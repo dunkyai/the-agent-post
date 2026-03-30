@@ -2009,15 +2009,95 @@ async function pollGmail(): Promise<void> {
     const threadIds = [...new Set(rawMessages.map(m => m.threadId).filter(Boolean))];
     console.log(`Gmail poll: ${rawMessages.length} message(s) found, ${threadIds.length} unique thread(s)`);
 
-    // Helper to extract text from email parts
-    function extractTextFromPart(part: any): string {
-      let text = "";
-      if (part.mimeType === "text/plain" && part.body?.data) {
-        text += Buffer.from(part.body.data, "base64url").toString("utf-8");
+    // Helper to collect plain text and HTML from email parts separately
+    function collectParts(part: any): { plain: string; html: string } {
+      let plain = "";
+      let html = "";
+
+      if (part.body?.data) {
+        const decoded = Buffer.from(part.body.data, "base64url").toString("utf-8");
+        if (part.mimeType === "text/plain") {
+          plain += decoded;
+        } else if (part.mimeType === "text/html") {
+          html += decoded;
+        }
       }
+
       if (part.parts) {
-        for (const p of part.parts) text += extractTextFromPart(p);
+        for (const p of part.parts) {
+          const child = collectParts(p);
+          plain += child.plain;
+          html += child.html;
+        }
       }
+
+      return { plain, html };
+    }
+
+    // Extract text from email parts, preserving URLs from HTML links
+    function extractTextFromPart(part: any): string {
+      const { plain, html } = collectParts(part);
+
+      // If we have plain text, supplement with any URLs only found in HTML
+      if (plain) {
+        if (html) {
+          const htmlUrls = extractUrlsFromHtml(html);
+          const missingUrls = htmlUrls.filter(url => !plain.includes(url));
+          if (missingUrls.length > 0) {
+            return plain + "\n\nLinks from email:\n" + missingUrls.join("\n");
+          }
+        }
+        return plain;
+      }
+
+      // HTML only — convert to text while preserving URLs
+      if (html) {
+        return convertHtmlToTextWithUrls(html);
+      }
+
+      return "";
+    }
+
+    // Extract href URLs from HTML anchor tags
+    function extractUrlsFromHtml(html: string): string[] {
+      const urls: string[] = [];
+      const anchorRegex = /<a\s[^>]*href=["']([^"']+)["'][^>]*>/gi;
+      let match;
+      while ((match = anchorRegex.exec(html)) !== null) {
+        const url = match[1];
+        // Skip mailto:, javascript:, and # links
+        if (url && !url.startsWith("mailto:") && !url.startsWith("javascript:") && !url.startsWith("#")) {
+          urls.push(url);
+        }
+      }
+      return [...new Set(urls)]; // deduplicate
+    }
+
+    // Convert HTML to plain text while preserving URLs from links
+    function convertHtmlToTextWithUrls(html: string): string {
+      let text = html;
+      // Convert <a href="url">text</a> to "text (url)" when text differs from url
+      text = text.replace(/<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, url, linkText) => {
+        const cleanLinkText = linkText.replace(/<[^>]+>/g, "").trim();
+        if (url.startsWith("mailto:") || url.startsWith("javascript:") || url.startsWith("#")) {
+          return cleanLinkText;
+        }
+        // If the link text is the URL itself, just show it once
+        if (cleanLinkText === url || cleanLinkText === url.replace(/^https?:\/\//, "")) {
+          return url;
+        }
+        return `${cleanLinkText} (${url})`;
+      });
+      // Strip remaining HTML tags
+      text = text.replace(/<script[\s\S]*?<\/script>/gi, "");
+      text = text.replace(/<style[\s\S]*?<\/style>/gi, "");
+      text = text.replace(/<br\s*\/?>/gi, "\n");
+      text = text.replace(/<\/?(p|div|tr|li|h[1-6])[^>]*>/gi, "\n");
+      text = text.replace(/<[^>]+>/g, "");
+      // Decode common HTML entities
+      text = text.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&nbsp;/g, " ");
+      // Collapse excessive whitespace
+      text = text.replace(/\n{3,}/g, "\n\n").trim();
       return text;
     }
 
