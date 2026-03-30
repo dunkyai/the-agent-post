@@ -72,7 +72,15 @@ export async function processTask(
     const maxTokens = parseInt(getSetting("max_tokens") || "4096", 10);
 
     // Build system prompt with any channel-specific context from metadata
-    const extraContext = task.input.metadata?.context as string | undefined;
+    let extraContext = task.input.metadata?.context as string | undefined;
+
+    // Inject email thread info so the AI can reply on the same thread
+    const delivery = task.input.metadata?.delivery as any;
+    if (delivery?.details?.thread_id) {
+      const threadInfo = `\n\n[EMAIL REPLY CONTEXT] You MUST use these values when sending/drafting the reply to keep it in the same Gmail thread:\n- thread_id: ${delivery.details.thread_id}\n- in_reply_to: ${delivery.details.in_reply_to}\n- subject: ${delivery.details.subject || ""}`;
+      extraContext = extraContext ? extraContext + threadInfo : threadInfo;
+    }
+
     const systemPrompt = buildSystemPrompt(extraContext);
 
     const provider = getProvider(model);
