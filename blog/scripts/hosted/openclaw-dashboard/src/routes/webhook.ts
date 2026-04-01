@@ -8,6 +8,7 @@ import { isEmailAllowed, sanitizeEmailContent } from "../services/email";
 import { startAirtable } from "../services/airtable";
 import { startNotion } from "../services/notion";
 import { startTwitter } from "../services/twitter";
+import { startGranola } from "../services/granola";
 
 
 const router = Router();
@@ -296,6 +297,37 @@ router.post("/webhook/twitter/tokens", async (req: Request, res: Response) => {
   } catch (err: unknown) {
     console.error("Twitter token delivery error:", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "Failed to store Twitter tokens" });
+  }
+});
+
+// Granola MCP OAuth — provisioning API delivers tokens here after consent
+router.post("/webhook/granola/tokens", async (req: Request, res: Response) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (token !== process.env.GATEWAY_TOKEN) {
+    res.sendStatus(401);
+    return;
+  }
+
+  try {
+    const { access_token, refresh_token, expires_in, client_id, client_secret } = req.body;
+
+    const configData: Record<string, any> = {
+      access_token,
+      client_id,
+    };
+    if (refresh_token) configData.refresh_token = refresh_token;
+    if (client_secret) configData.client_secret = client_secret;
+    if (expires_in) configData.token_expiry = new Date(Date.now() + expires_in * 1000).toISOString();
+
+    const config = encrypt(JSON.stringify(configData));
+    upsertIntegration("granola", config, "connected");
+    startGranola(configData as any);
+
+    console.log("Granola connected via OAuth");
+    res.json({ ok: true });
+  } catch (err: unknown) {
+    console.error("Granola token delivery error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Failed to store Granola tokens" });
   }
 });
 

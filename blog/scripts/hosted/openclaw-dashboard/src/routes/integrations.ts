@@ -12,6 +12,7 @@ import { startLuma, stopLuma, testLumaConnection } from "../services/luma";
 import { buildTwitterOAuthUrl, stopTwitter } from "../services/twitter";
 import { startBeehiiv, stopBeehiiv, testBeehiivConnection, fetchTemplates } from "../services/beehiiv";
 import { isOneRunning, startOne, stopOne, getOneConnections, getAuthKitData, fetchConnections } from "../services/one";
+import { buildGranolaOAuthUrl, stopGranola, isGranolaRunning } from "../services/granola";
 
 const router = Router();
 
@@ -211,6 +212,7 @@ router.get("/integrations", async (req: Request, res: Response) => {
       configured: !!process.env.ONE_SECRET,
       connections: getOneConnections(),
     },
+    granola: integrationMap["granola"] || { status: "disconnected", error_message: null },
     memories: getAllMemories(),
     flash: req.query.flash || null,
   });
@@ -914,6 +916,24 @@ router.post("/integrations/one/disconnect", (req: Request, res: Response) => {
   stopOne();
   deleteIntegration("one");
   res.redirect(303, "/integrations?flash=All+One+integrations+disconnected");
+});
+
+// --- Granola ---
+
+router.post("/integrations/granola/connect", async (req: Request, res: Response) => {
+  try {
+    const url = await buildGranolaOAuthUrl();
+    res.redirect(url);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.redirect(303, "/integrations?flash=Granola+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/granola/disconnect", (req: Request, res: Response) => {
+  stopGranola();
+  upsertIntegration("granola", "{}", "disconnected");
+  res.redirect(303, "/integrations?flash=Granola+disconnected");
 });
 
 export default router;
