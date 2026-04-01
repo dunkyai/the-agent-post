@@ -660,4 +660,111 @@ router.get("/twitter/callback", async (req, res) => {
   }
 });
 
+// GET /oauth/granola/callback — Granola MCP OAuth redirects here after user consent
+router.get("/granola/callback", async (req, res) => {
+  const { code, state, error } = req.query;
+
+  if (error) {
+    try {
+      const statePayload = JSON.parse(Buffer.from(state as string, "base64url").toString());
+      const instance = store.getInstance(statePayload.instance_id);
+      if (instance) {
+        res.redirect(`https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Granola+connection+cancelled`);
+        return;
+      }
+    } catch {}
+    res.status(400).send("Granola connection was cancelled.");
+    return;
+  }
+
+  if (!code || !state) {
+    res.status(400).send("Missing code or state parameter");
+    return;
+  }
+
+  let statePayload: { instance_id: string; hmac: string; code_verifier: string; client_id: string; client_secret?: string };
+  try {
+    statePayload = JSON.parse(Buffer.from(state as string, "base64url").toString());
+  } catch {
+    res.status(400).send("Invalid state parameter");
+    return;
+  }
+
+  const instance = store.getInstance(statePayload.instance_id);
+  if (!instance) {
+    res.status(404).send("Instance not found");
+    return;
+  }
+
+  // Verify HMAC
+  const expectedHmac = crypto
+    .createHmac("sha256", instance.gatewayToken)
+    .update(instance.id)
+    .digest("hex");
+  if (statePayload.hmac !== expectedHmac) {
+    res.status(403).send("Invalid state signature");
+    return;
+  }
+
+  try {
+    // Exchange authorization code for tokens (public client, PKCE)
+    const tokenParams: Record<string, string> = {
+      code: code as string,
+      redirect_uri: "https://api.agents.theagentpost.co/oauth/granola/callback",
+      grant_type: "authorization_code",
+      client_id: statePayload.client_id,
+      code_verifier: statePayload.code_verifier,
+    };
+    if (statePayload.client_secret) {
+      tokenParams.client_secret = statePayload.client_secret;
+    }
+
+    const tokenRes = await fetch("https://mcp-auth.granola.ai/oauth2/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(tokenParams),
+    });
+
+    if (!tokenRes.ok) {
+      const body = await tokenRes.text();
+      console.error("Granola token exchange failed:", body);
+      res.redirect(`https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Granola+token+exchange+failed`);
+      return;
+    }
+
+    const tokens: any = await tokenRes.json();
+
+    // Deliver tokens to the instance
+    const deliverRes = await fetch(
+      `http://localhost:${instance.port}/webhook/granola/tokens`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${instance.gatewayToken}`,
+        },
+        body: JSON.stringify({
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          expires_in: tokens.expires_in,
+          client_id: statePayload.client_id,
+          client_secret: statePayload.client_secret,
+        }),
+      }
+    );
+
+    if (!deliverRes.ok) {
+      console.error("Granola token delivery to instance failed:", await deliverRes.text());
+      res.redirect(`https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Failed+to+deliver+Granola+tokens`);
+      return;
+    }
+
+    console.log(`Granola connected for instance ${instance.id}`);
+    res.redirect(`https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Granola+connected+successfully`);
+  } catch (err) {
+    console.error("Granola OAuth callback error:", err);
+    res.redirect(`https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Granola+connection+failed`);
+  }
+});
+
 export default router;

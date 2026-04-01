@@ -731,6 +731,40 @@
       </details>
       <% } %>
 
+      <!-- Granola -->
+      <details class="integration-tile">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #1a1a2e;"><span style="font-size: 18px;">📝</span></span>
+          <div class="integration-tile-info">
+            <h3>Granola</h3>
+            <p>AI meeting notes — search meetings, get transcripts, and follow up on action items</p>
+          </div>
+          <span class="status-badge status-<%= granola.status === 'connected' ? 'connected' : 'disconnected' %>">
+            <%= granola.status === 'connected' ? 'Connected' : 'Not connected' %>
+          </span>
+        </summary>
+        <div class="integration-body">
+          <% if (granola.status === 'connected') { %>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+              Your agent can search your Granola meeting notes, get transcripts, and query across meetings.
+            </p>
+            <form method="POST" action="/integrations/granola/disconnect" onsubmit="return confirm('Disconnect Granola?')">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+            </form>
+          <% } else { %>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+              Connect your Granola account to let your agent search meeting notes, retrieve transcripts, and follow up on action items. Requires a Granola Business or Enterprise plan.
+            </p>
+            <% if (granola.error_message) { %>
+              <p style="color: var(--danger); font-size: 13px; margin-bottom: 8px;"><%= granola.error_message %></p>
+            <% } %>
+            <form method="POST" action="/integrations/granola/connect">
+              <button type="submit" class="btn btn-sm">Connect Granola</button>
+            </form>
+          <% } %>
+        </div>
+      </details>
+
     </div><!-- /integration-grid -->
   </div>
 </div>

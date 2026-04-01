@@ -53,6 +53,11 @@ import {
   listConnections as oneListConnections, searchActions as oneSearchActions,
   getActionKnowledge as oneGetActionKnowledge, executeAction as oneExecuteAction,
 } from "./one";
+import {
+  isGranolaRunning,
+  granolaListMeetings, granolaGetMeetings, granolaGetTranscript,
+  granolaQueryMeetings, granolaListFolders,
+} from "./granola";
 
 interface AIResponse {
   role: string;
@@ -1682,6 +1687,81 @@ async function executeOneTool(toolName: string, input: any): Promise<string> {
   }
 }
 
+// --- Granola Meeting Notes Tools ---
+
+const GRANOLA_TOOLS = [
+  {
+    name: "granola_list_meetings",
+    description: "List recent meetings from Granola with their titles, dates, attendees, and summaries. Use this to find meetings with specific people or in a date range.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        created_after: { type: "string", description: "ISO date — only meetings after this date (e.g. '2026-03-01')" },
+        created_before: { type: "string", description: "ISO date — only meetings before this date" },
+      },
+    },
+  },
+  {
+    name: "granola_search_meetings",
+    description: "Search meeting notes and content by keyword or topic. Returns matching meetings with their notes and summaries.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Search query — topic, person name, keyword, or question about meetings" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "granola_get_transcript",
+    description: "Get the full transcript of a specific meeting, including speaker detection and timestamps. Use granola_list_meetings or granola_search_meetings first to find the meeting ID.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        meeting_id: { type: "string", description: "The meeting ID from list or search results" },
+      },
+      required: ["meeting_id"],
+    },
+  },
+  {
+    name: "granola_query",
+    description: "Ask a natural language question about your meetings. Granola's AI will search across all your meeting notes to answer. Great for questions like 'What did we decide about the pricing?' or 'What action items came out of meetings with Sarah?'",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Natural language question about your meetings" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "granola_list_folders",
+    description: "List meeting folders/categories in Granola.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+];
+
+async function executeGranolaTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "granola_list_meetings":
+        return await granolaListMeetings(input);
+      case "granola_search_meetings":
+        return await granolaGetMeetings({ query: input.query });
+      case "granola_get_transcript":
+        return await granolaGetTranscript(input.meeting_id);
+      case "granola_query":
+        return await granolaQueryMeetings(input.query);
+      case "granola_list_folders":
+        return await granolaListFolders();
+      default:
+        return JSON.stringify({ error: `Unknown Granola tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Granola operation failed" });
+  }
+}
+
 // --- Public Google Doc Tool (no OAuth needed) ---
 
 const PUBLIC_GDOC_TOOLS = [
@@ -2581,6 +2661,11 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   one_search_actions: (input) => `Searching ${input?.platform || "platform"} actions...`,
   one_get_action_knowledge: "Reading action details...",
   one_execute_action: (input) => `Running ${input?.platform || "platform"} action...`,
+  granola_list_meetings: "Checking Granola meetings...",
+  granola_search_meetings: "Searching meeting notes...",
+  granola_get_transcript: "Getting meeting transcript...",
+  granola_query: "Querying meeting notes...",
+  granola_list_folders: "Listing meeting folders...",
 };
 
 // --- Anthropic API with tool use loop ---
@@ -2630,6 +2715,7 @@ export async function callAnthropic(
   if (isTwitterRunning()) tools.push(...TWITTER_TOOLS);
   if (isBeehiivRunning()) tools.push(...BEEHIIV_TOOLS);
   if (isOneRunning()) tools.push(...ONE_TOOLS);
+  if (isGranolaRunning()) tools.push(...GRANOLA_TOOLS);
 
   // Conditionally add Google tools based on connected services
   const googleServices = getConnectedServices();
@@ -2730,6 +2816,7 @@ export async function callAnthropic(
       const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet", "twitter_lookup_user", "twitter_get_user_tweets", "twitter_quote_tweet", "twitter_like_tweet"];
       const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
       const oneToolNames = ["one_list_connections", "one_search_actions", "one_get_action_knowledge", "one_execute_action"];
+      const granolaToolNames = ["granola_list_meetings", "granola_search_meetings", "granola_get_transcript", "granola_query", "granola_list_folders"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
 
@@ -2787,6 +2874,8 @@ export async function callAnthropic(
           result = await executeBeehiivTool(toolBlock.name, toolBlock.input);
         } else if (oneToolNames.includes(toolBlock.name)) {
           result = await executeOneTool(toolBlock.name, toolBlock.input);
+        } else if (granolaToolNames.includes(toolBlock.name)) {
+          result = await executeGranolaTool(toolBlock.name, toolBlock.input);
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input, sourceContext);
         }
@@ -2914,6 +3003,7 @@ export async function callOpenAI(
   if (isTwitterRunning()) customTools.push(...TWITTER_TOOLS);
   if (isBeehiivRunning()) customTools.push(...BEEHIIV_TOOLS);
   if (isOneRunning()) customTools.push(...ONE_TOOLS);
+  if (isGranolaRunning()) customTools.push(...GRANOLA_TOOLS);
   const googleServices = getConnectedServices();
   if (googleServices) {
     if (googleServices.includes("gmail")) {
@@ -2973,6 +3063,7 @@ export async function callOpenAI(
   const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet", "twitter_lookup_user", "twitter_get_user_tweets", "twitter_quote_tweet", "twitter_like_tweet"];
   const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
   const oneToolNames = ["one_list_connections", "one_search_actions", "one_get_action_knowledge", "one_execute_action"];
+  const granolaToolNames = ["granola_list_meetings", "granola_search_meetings", "granola_get_transcript", "granola_query", "granola_list_folders"];
 
   // Extract last user message for rules-based dispatch (e.g. gmail send vs draft)
   const lastUserMsg = [...messages].reverse().find(m => m.role === "user")?.content || "";
@@ -3082,6 +3173,8 @@ export async function callOpenAI(
           result = await executeBeehiivTool(toolName, toolInput);
         } else if (oneToolNames.includes(toolName)) {
           result = await executeOneTool(toolName, toolInput);
+        } else if (granolaToolNames.includes(toolName)) {
+          result = await executeGranolaTool(toolName, toolInput);
         } else {
           result = executeSchedulingTool(toolName, toolInput, sourceContext);
         }
@@ -3506,6 +3599,20 @@ You can also list existing posts with beehiiv_list_posts and view post details w
     const platforms = getOneConnectionPlatforms();
     const oneContext = `You have access to additional third-party integrations through One. Connected platforms: ${platforms.join(", ")}. Use the one_* tools to interact with these platforms. Workflow: (1) one_list_connections to see what's available, (2) one_search_actions to find actions on a platform, (3) one_get_action_knowledge to understand required parameters, (4) one_execute_action to perform the action. These are general-purpose integrations — use your native tools (gmail_*, calendar_*, slack_*, etc.) for services you have direct integrations with, and one_* tools for everything else.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${oneContext}` : oneContext;
+  }
+
+  // Inject Granola context
+  if (isGranolaRunning()) {
+    const granolaContext = `You are connected to Granola for meeting notes. You can search meetings, get transcripts, and query across all meeting notes using the granola_* tools.
+
+When the user asks about meetings, follow-ups, or action items:
+1. Use granola_query for natural language questions (e.g. "What did we decide about pricing?")
+2. Use granola_search_meetings to find meetings by topic or person
+3. Use granola_list_meetings to browse recent meetings by date
+4. Use granola_get_transcript for the full transcript of a specific meeting
+
+These tools connect to Granola's MCP server and can search across all meeting notes, summaries, and transcripts.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${granolaContext}` : granolaContext;
   }
 
   // Inject long-term memories (skip for scheduled jobs to prevent memory contamination)
