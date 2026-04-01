@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { getIntegration, upsertIntegration, deleteIntegration, getAllIntegrations, getGoogleIntegrations, getSetting, setSetting } from "../services/db";
+import { getIntegration, upsertIntegration, deleteIntegration, getAllIntegrations, getGoogleIntegrations, getSetting, setSetting, getAllMemories } from "../services/db";
 import { encrypt, decrypt } from "../services/encryption";
 import { buildSlackOAuthUrl, stopSlack, isSlackRunning, getSlackOwnerUserId, setSlackOwnerUserId, isApprovalEnabled } from "../services/slack";
 import { signupAndCreateInbox, createInbox, startEmail, stopEmail, isEmailRunning } from "../services/email";
@@ -209,6 +209,7 @@ router.get("/integrations", async (req: Request, res: Response) => {
       configured: !!process.env.ONE_SECRET,
       connections: getOneConnections(),
     },
+    memories: getAllMemories(),
     flash: req.query.flash || null,
   });
 });
