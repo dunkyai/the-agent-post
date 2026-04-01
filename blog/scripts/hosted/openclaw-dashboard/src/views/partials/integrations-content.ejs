@@ -235,6 +235,16 @@
               </div>
 
               <div class="form-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rule-light);">
+                <label for="gmail_sender_policy">Allow emails from</label>
+                <select id="gmail_sender_policy" name="sender_policy">
+                  <option value="everyone" <%= gmailSenderPolicy === 'everyone' ? 'selected' : '' %>>Everyone</option>
+                  <option value="known" <%= gmailSenderPolicy === 'known' || !gmailSenderPolicy ? 'selected' : '' %>>Known senders only</option>
+                  <option value="domain" <%= gmailSenderPolicy === 'domain' ? 'selected' : '' %>>My domain only</option>
+                </select>
+                <div class="hint">Controls which emails your agent processes. "Known senders" = people from previous email threads. "My domain" = same domain as your connected Gmail. Specific domains and addresses above always get through regardless of this setting.</div>
+              </div>
+
+              <div class="form-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rule-light);">
                 <label for="gmail_poll_interval">Check for new emails</label>
                 <select id="gmail_poll_interval" name="poll_interval">
                   <option value="0" <%= gmailPollInterval === '0' || !gmailPollInterval ? 'selected' : '' %>>Off</option>

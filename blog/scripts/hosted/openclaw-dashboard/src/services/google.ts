@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { getIntegration, upsertIntegration, getSetting, setSetting, getGmailProcessedThread, getEmailThreadState } from "./db";
+import { getIntegration, upsertIntegration, getSetting, setSetting, getGmailProcessedThread, getEmailThreadState, isKnownSender } from "./db";
 import { encrypt, decrypt } from "./encryption";
 import { sanitizeEmailContent } from "./email";
 import { processIncomingEmail, type EmailThreadContext } from "../adapters/email";
@@ -1950,6 +1950,20 @@ export function isGmailSenderAllowed(sender: string): { allowed: boolean; replyM
 
   const everyoneTier = tiers.find(t => t.type === "everyone");
   if (everyoneTier?.enabled) {
+    // Check sender policy — restricts "everyone" tier to known senders or same domain
+    const senderPolicy = getSetting("gmail_sender_policy") || "known";
+    if (senderPolicy === "known") {
+      if (!isKnownSender(email)) {
+        return { allowed: false, replyMode: "draft" };
+      }
+    } else if (senderPolicy === "domain") {
+      // Get connected Google account domains
+      const googleAccounts = getGoogleAccounts();
+      const ownDomains = googleAccounts.map(a => a.email.split("@")[1]?.toLowerCase()).filter(Boolean);
+      if (!ownDomains.includes(domain)) {
+        return { allowed: false, replyMode: "draft" };
+      }
+    }
     return { allowed: true, replyMode: everyoneTier.reply_mode };
   }
 
