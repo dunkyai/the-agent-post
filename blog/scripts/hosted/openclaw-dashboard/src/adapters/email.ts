@@ -93,10 +93,11 @@ CLASSIFICATION RULES:
   * IMPORTANT: When someone REPLIES to an inquiry sent BY the owner/assistant — even if they are providing information — and their reply asks a question, requests a decision, or expects a response (e.g. "Which option interests you?", "When works for you?", "Let me know if you'd like to proceed"), that IS a request because the owner needs to respond.
 - "not_a_request": The email requires NO response at all. This means:
   * Newsletters, marketing, automated notifications, receipts, system alerts
+  * Cold emails, sales pitches, unsolicited outreach, partnership proposals from strangers, demo/meeting requests from unknown senders, "just checking in" from people with no prior relationship
   * Pure acknowledgments with no question: "Thanks!", "Got it", "Looks good"
   * Emails where the request is clearly directed at a DIFFERENT person (e.g. "Hey John, can you send me the report?" when the assistant is CC'd)
   * Calendar invites that need no response
-  IMPORTANT: If the sender asks ANY question directed at the owner or expects a reply, do NOT classify as "not_a_request". When in doubt between "not_a_request" and "request", lean toward "request" — it's better to draft an unnecessary response than to ignore an email that needed a reply.
+  IMPORTANT: If the sender asks ANY question directed at the owner or expects a reply FROM AN EXISTING RELATIONSHIP, do NOT classify as "not_a_request". When in doubt between "not_a_request" and "request" from a KNOWN contact, lean toward "request". But cold outreach from strangers should always be "not_a_request" — do not draft replies to unsolicited sales emails.
 - "unclear": The email might need a response but you genuinely cannot determine what the owner would want to say. This should be rare — most emails either clearly need a reply or clearly don't.
 - "needs_info": This IS clearly a request for the assistant/owner, but critical details are missing. For example: "Post this to Slack" but which channel? "Create a doc" but what content?
 

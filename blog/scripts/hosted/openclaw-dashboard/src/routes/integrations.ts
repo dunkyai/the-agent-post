@@ -114,6 +114,7 @@ router.get("/integrations", async (req: Request, res: Response) => {
     }
   } catch {}
   const gmailPollInterval = getSetting("gmail_poll_interval") || "0";
+  const gmailSenderPolicy = getSetting("gmail_sender_policy") || "known";
 
   res.render("integrations", {
     slack: {
@@ -132,6 +133,7 @@ router.get("/integrations", async (req: Request, res: Response) => {
     googleAccounts: googleAccountsList,
     gmailTiers,
     gmailPollInterval,
+    gmailSenderPolicy,
     supabase: {
       ...(integrationMap["supabase"] || { status: "disconnected", error_message: null }),
       project_url: supabaseProjectUrl,
@@ -501,6 +503,11 @@ router.post("/integrations/google/email-rules", (req: Request, res: Response) =>
     ];
 
     setSetting("gmail_email_rules", JSON.stringify({ tiers }));
+
+    // Save sender policy
+    const validPolicies = ["everyone", "known", "domain"];
+    const senderPolicy = req.body.sender_policy;
+    setSetting("gmail_sender_policy", validPolicies.includes(senderPolicy) ? senderPolicy : "known");
 
     // Save polling settings
     const { poll_interval } = req.body;
