@@ -10,6 +10,8 @@ router.get("/settings", (req: Request, res: Response) => {
   const maxTokens = getSetting("max_tokens") || "4096";
   const sessionExpiryDays = getSetting("session_expiry_days") || "30";
   const timezone = getSetting("timezone") || "America/Los_Angeles";
+  const memories = getAllMemories();
+  const tab = req.query.tab === "memories" ? "memories" : "settings";
 
   res.render("settings", {
     model,
@@ -18,6 +20,8 @@ router.get("/settings", (req: Request, res: Response) => {
     maxTokens,
     sessionExpiryDays,
     timezone,
+    memories,
+    tab,
     flash: req.query.flash || null,
   });
 });
@@ -73,11 +77,7 @@ router.get("/settings/debug", (req: Request, res: Response) => {
 
 // --- Memories management ---
 router.get("/memories", (req: Request, res: Response) => {
-  const memories = getAllMemories();
-  res.render("memories", {
-    memories,
-    flash: req.query.flash || null,
-  });
+  res.redirect(301, "/settings?tab=memories");
 });
 
 router.post("/memories/:id/delete", (req: Request, res: Response) => {
@@ -85,7 +85,7 @@ router.post("/memories/:id/delete", (req: Request, res: Response) => {
   if (!isNaN(id)) {
     deleteMemory(id);
   }
-  res.redirect(303, "/memories?flash=Memory+deleted");
+  res.redirect(303, "/settings?tab=memories&flash=Memory+deleted");
 });
 
 // Redirect old /agent routes to /settings
