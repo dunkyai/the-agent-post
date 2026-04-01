@@ -384,7 +384,7 @@ const BROWSER_TOOLS = [
   },
   {
     name: "browser_type",
-    description: "Type text into an input field on the current page. Use a CSS selector (e.g., '#email', 'input[name=\"username\"]') or the field's placeholder/label text. Use browser_screenshot first to see available fields.",
+    description: "Type text into an input field on the current page. Use a CSS selector (e.g., '#email', 'input[name=\"username\"]') or the field's placeholder/label text. Use browser_screenshot first to see available fields. NOTE: Do NOT use this for <select> dropdowns — use browser_select instead.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -392,6 +392,29 @@ const BROWSER_TOOLS = [
         text: { type: "string", description: "The text to type into the field" },
       },
       required: ["selector", "text"],
+    },
+  },
+  {
+    name: "browser_select",
+    description: "Select an option from a dropdown (<select>) element on the current page. Use a CSS selector (e.g., '#country', 'select[name=\"state\"]') and the option's visible text or value. Use browser_screenshot first to see available dropdowns and their options.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        selector: { type: "string", description: "CSS selector of the <select> element" },
+        value: { type: "string", description: "The option text or value to select" },
+      },
+      required: ["selector", "value"],
+    },
+  },
+  {
+    name: "browser_evaluate",
+    description: "Run JavaScript code directly on the current page. Use this as a last resort when browser_click, browser_type, and browser_select don't work — for example, custom JavaScript dropdowns, date pickers, or dynamically generated widgets. The script runs in the browser context with access to `document`, `window`, etc. Returns the script's return value.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        script: { type: "string", description: "JavaScript code to execute in the browser. Use document.querySelector, .value, .dispatchEvent, etc." },
+      },
+      required: ["script"],
     },
   },
   {
@@ -590,6 +613,8 @@ async function executeBrowserTool(toolName: string, input: any): Promise<string 
       browse_webpage: "navigate",
       browser_click: "click",
       browser_type: "type",
+      browser_select: "select",
+      browser_evaluate: "evaluate",
       browser_screenshot: "screenshot",
       browser_get_content: "get_content",
     };
@@ -605,6 +630,13 @@ async function executeBrowserTool(toolName: string, input: any): Promise<string 
     if (toolName === "browser_type") {
       body.selector = input.selector;
       body.text = input.text;
+    }
+    if (toolName === "browser_select") {
+      body.selector = input.selector;
+      body.value = input.value;
+    }
+    if (toolName === "browser_evaluate") {
+      body.script = input.script;
     }
 
     const res = await fetch(`${provisioningUrl}/instances/${instanceId}/browser/${action}`, {
