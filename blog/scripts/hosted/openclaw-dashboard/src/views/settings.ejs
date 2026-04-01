@@ -15,16 +15,6 @@
     <div id="tab-settings" style="display: <%= tab === 'settings' ? 'block' : 'none' %>;">
       <form method="POST" action="/settings">
         <div class="card card-compact">
-          <h3>System Prompt</h3>
-          <div class="form-group">
-            <label for="system_prompt">Custom instructions sent with every message</label>
-            <textarea id="system_prompt" name="system_prompt" rows="6" placeholder="e.g. You are a friendly assistant named Archie who works for Acme Corp..."><%= systemPrompt %></textarea>
-            <div class="hint">For power users. Context fields from Getting Started are injected automatically — this is for additional custom instructions.</div>
-          </div>
-          <button type="submit" class="btn btn-sm">Save</button>
-        </div>
-
-        <div class="card card-compact">
           <h3>Timezone</h3>
           <div class="form-group">
             <label for="timezone">Your local timezone</label>

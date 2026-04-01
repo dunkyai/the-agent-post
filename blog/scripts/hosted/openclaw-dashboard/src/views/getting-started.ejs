@@ -78,6 +78,12 @@
               <label for="context_knowledge">Knowledge</label>
               <textarea id="context_knowledge" name="context_knowledge" rows="4" placeholder="Key facts, numbers, terminology your agent should know"><%= contextKnowledge %></textarea>
             </div>
+            <div class="gs-divider"></div>
+            <div class="form-group">
+              <label for="system_prompt">System Prompt</label>
+              <textarea id="system_prompt" name="system_prompt" rows="4" placeholder="Custom instructions sent with every message (optional, for power users)"><%= systemPrompt %></textarea>
+              <span class="hint">Advanced: additional instructions beyond the context fields above. Most users can leave this blank.</span>
+            </div>
           </div>
         </div>
       </div>

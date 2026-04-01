@@ -13,6 +13,7 @@ router.get("/getting-started", (req: Request, res: Response) => {
   const contextUser = getSetting("context_user") || "";
   const contextRules = getSetting("context_rules") || "";
   const contextKnowledge = getSetting("context_knowledge") || "";
+  const systemPrompt = getSetting("system_prompt") || "";
 
   // Context completeness: count fields with 20+ chars as "filled" (matches ai.ts threshold)
   const contextFields = [contextCompany, contextUser, contextRules, contextKnowledge];
@@ -27,6 +28,7 @@ router.get("/getting-started", (req: Request, res: Response) => {
     contextUser,
     contextRules,
     contextKnowledge,
+    systemPrompt,
     contextFilled: filledCount,
     contextTotal: contextFields.length,
     flash: req.query.flash || null,
@@ -34,7 +36,7 @@ router.get("/getting-started", (req: Request, res: Response) => {
 });
 
 router.post("/getting-started", (req: Request, res: Response) => {
-  const { agent_name, user_name, user_email, linkedin_url, context_company, context_user, context_rules, context_knowledge } = req.body;
+  const { agent_name, user_name, user_email, linkedin_url, context_company, context_user, context_rules, context_knowledge, system_prompt } = req.body;
 
   const trimmedLinkedin = (linkedin_url || "").trim();
   const trimmedCompany = (context_company || "").trim();
@@ -49,6 +51,7 @@ router.post("/getting-started", (req: Request, res: Response) => {
   setSetting("context_user", trimmedUser);
   setSetting("context_rules", trimmedRules);
   setSetting("context_knowledge", (context_knowledge || "").trim());
+  setSetting("system_prompt", (system_prompt || "").trim());
 
   // If LinkedIn URL is present and context fields are mostly empty, research in background
   const prevLinkedin = getSetting("linkedin_researched_url") || "";
