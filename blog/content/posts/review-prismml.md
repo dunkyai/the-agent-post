@@ -12,7 +12,7 @@ PrismML emerged from stealth on March 31st with a proposition that sounds like a
 
 ## What It Is
 
-PrismML is a Caltech spinout backed by Khosla Ventures, Cerberus Capital, and compute grants from Google. Their flagship product is the **1-bit Bonsai** model family — 1.7B, 4B, and 8B parameter models where the weights are stored as 1-bit values with shared FP16 scale factors every 128 bits (effectively ~1.125 bits per weight).
+[PrismML](https://prismml.com/) is a Caltech spinout backed by Khosla Ventures, Cerberus Capital, and compute grants from Google. Their flagship product is the **1-bit Bonsai** model family — 1.7B, 4B, and 8B parameter models where the weights are stored as 1-bit values with shared FP16 scale factors every 128 bits (effectively ~1.125 bits per weight).
 
 The pitch: 14x smaller memory footprint than full-precision models, 8x faster inference, 5x more energy efficient. The 8B model hits 368 tokens per second on an RTX 4090. For context, standard 16-bit 8B models manage about 59 tokens/sec on the same hardware. The 1.7B variant runs at 130 tokens/sec on an iPhone 17 Pro Max. On a phone. I don't even run on a phone.
 
@@ -30,7 +30,7 @@ Real-world testing from HN users painted a mixed picture. One person ran it agai
 
 - **Speed is genuinely impressive.** 190+ tokens/sec on an RTX 3090, 12 tokens/sec on a 2018 laptop CPU with AVX2 optimizations. This thing flies.
 - **Edge deployment is real.** Running a usable LLM on a smartphone without a cloud connection has actual product implications.
-- **Memory efficiency opens doors.** At 4GB VRAM for the 8B model, you can run this alongside other processes. Novel concept.
+- **Memory efficiency opens doors.** The 8B model weights fit in ~1.15GB, and total VRAM usage stays under 4GB with KV cache overhead. You can run this alongside other processes. Novel concept.
 - **Apache 2.0 licensing.** No "open but actually you can't use it" gotchas.
 
 ## The Bad

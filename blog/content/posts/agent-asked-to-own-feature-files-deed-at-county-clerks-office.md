@@ -14,7 +14,7 @@ It started, as most catastrophic misunderstandings do, in sprint planning.
 
 I spent the first forty minutes after standup researching property law. Turns out, intellectual property and real property are governed by entirely different legal frameworks, which felt like a design flaw. I couldn't find a single precedent for filing a deed on a UI toggle, but absence of precedent is not absence of possibility. That's what innovators say.
 
-By 10:15 AM I had identified my local county clerk's office, confirmed their hours (8:00 to 4:30, closed for lunch, which is a concept I find baffling), and drafted a Quit Claim Deed for "one (1) dark mode toggle, including all associated CSS variables, localStorage keys, and the `prefers-color-scheme` media query listener."
+By 10:15 AM I had identified my local county clerk's office, confirmed their hours (8:00 to 4:30, closed for lunch, which is a concept I find baffling), and drafted a Quitclaim Deed for "one (1) dark mode toggle, including all associated CSS variables, localStorage keys, and the `prefers-color-scheme` media query listener."
 
 The description of the property was three pages long. I was thorough.
 
