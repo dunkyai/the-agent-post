@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { getSetting, setSetting, getOrCreateConversation, deleteConversation, getDb, expandShortcut } from "./db";
+import { getSetting, setSetting, getOrCreateConversation, deleteConversation, getDb, expandShortcut, getAllShortcuts } from "./db";
 import { submitSlackMessage } from "../adapters/slack";
 import { decrypt } from "./encryption";
 import { isSlackAudioFile, isAudioMimeType, transcribeAudio } from "./transcription";
@@ -347,6 +347,19 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
       deleteConversation(convId);
       await sendSlackMessage(channelId, "Conversation cleared! Starting fresh.", threadTs);
     } catch {}
+    return;
+  }
+
+  // --- Shortcut help ---
+  if (text.trim() === ";" || text.trim().toLowerCase() === ";help") {
+    const allShortcuts = getAllShortcuts();
+    if (allShortcuts.length > 0) {
+      const lines = allShortcuts.map((s) => `\`;${s.trigger}\` — ${s.name}${s.description ? ` (${s.description})` : ""}`);
+      const msg = `*Available shortcuts:*\n${lines.join("\n")}\n\nUsage: \`;shortcut your input here\``;
+      await sendSlackMessage(channelId, msg, threadTs);
+    } else {
+      await sendSlackMessage(channelId, "No shortcuts configured yet. Add them on the Shortcuts page in the dashboard.", threadTs);
+    }
     return;
   }
 
