@@ -27,8 +27,12 @@
         <% } %>
       </div>
       <div class="chat-error" id="chatError"></div>
-      <form class="chat-input-form" id="chatForm">
-        <input type="text" id="chatInput" placeholder="Type a message..." autocomplete="off" required>
+      <form class="chat-input-form" id="chatForm" style="position: relative;">
+        <div id="shortcutDropdown" style="display:none; position:absolute; bottom:100%; left:0; right:60px; background:var(--bg, #fff); border:1px solid var(--border, #e0e0e0); border-radius:8px; box-shadow:0 -4px 16px rgba(0,0,0,0.1); max-height:200px; overflow-y:auto; z-index:100; margin-bottom:4px;"></div>
+        <input type="text" id="chatInput" placeholder="Type a message... (;shortcut for quick actions)" autocomplete="off" required>
+        <button type="button" id="micBtn" class="btn mic-btn" title="Record audio message">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </button>
         <button type="submit" class="btn" id="chatSend">Send</button>
       </form>
       <div id="usageIndicator" style="text-align: center; font-size: 11px; color: var(--text-secondary); padding: 4px 0 0;"></div>
@@ -54,4 +58,199 @@
   }).catch(function() {});
 })();
 </script>
+<script>
+(function() {
+  var input = document.getElementById('chatInput');
+  var dropdown = document.getElementById('shortcutDropdown');
+  var shortcuts = [];
+  var selectedIndex = -1;
+
+  // Fetch shortcuts once
+  fetch('/shortcuts/api').then(function(r) { return r.json(); }).then(function(d) {
+    shortcuts = d.shortcuts || [];
+  }).catch(function() {});
+
+  function renderDropdown(filtered) {
+    if (!filtered.length) { dropdown.style.display = 'none'; return; }
+    selectedIndex = 0;
+    dropdown.style.display = 'block';
+    dropdown.innerHTML = filtered.map(function(s, i) {
+      return '<div class="sc-item' + (i === 0 ? ' sc-selected' : '') + '" data-trigger="' + s.trigger + '" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border, #eee);">'
+        + '<div style="font-weight:500;font-size:13px;"><span style="color:var(--accent);">;</span>' + escapeHtml(s.trigger) + ' <span style="color:var(--text-secondary);font-weight:400;font-size:12px;">— ' + escapeHtml(s.name) + '</span></div>'
+        + (s.description ? '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">' + escapeHtml(s.description) + '</div>' : '')
+        + '</div>';
+    }).join('');
+  }
+
+  function escapeHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+  function selectItem(trigger) {
+    var val = input.value;
+    var semiIdx = val.lastIndexOf(';');
+    input.value = ';' + trigger + ' ';
+    dropdown.style.display = 'none';
+    input.focus();
+  }
+
+  function updateHighlight() {
+    var items = dropdown.querySelectorAll('.sc-item');
+    items.forEach(function(el, i) {
+      el.classList.toggle('sc-selected', i === selectedIndex);
+    });
+  }
+
+  input.addEventListener('input', function() {
+    var val = this.value;
+    var semiIdx = val.lastIndexOf(';');
+    if (semiIdx === -1 || semiIdx !== 0) { dropdown.style.display = 'none'; return; }
+    var query = val.slice(semiIdx + 1).toLowerCase().split(' ')[0];
+    if (val.indexOf(' ') > semiIdx + 1) { dropdown.style.display = 'none'; return; }
+    var filtered = shortcuts.filter(function(s) {
+      return s.trigger.toLowerCase().indexOf(query) === 0
+        || s.name.toLowerCase().indexOf(query) !== -1;
+    });
+    renderDropdown(filtered);
+  });
+
+  input.addEventListener('keydown', function(e) {
+    if (dropdown.style.display === 'none') return;
+    var items = dropdown.querySelectorAll('.sc-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+      updateHighlight();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      selectedIndex = Math.max(selectedIndex - 1, 0);
+      updateHighlight();
+    } else if (e.key === 'Tab' || e.key === 'Enter') {
+      if (selectedIndex >= 0 && selectedIndex < items.length) {
+        e.preventDefault();
+        selectItem(items[selectedIndex].getAttribute('data-trigger'));
+      }
+    } else if (e.key === 'Escape') {
+      dropdown.style.display = 'none';
+    }
+  });
+
+  dropdown.addEventListener('click', function(e) {
+    var item = e.target.closest('.sc-item');
+    if (item) selectItem(item.getAttribute('data-trigger'));
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!dropdown.contains(e.target) && e.target !== input) {
+      dropdown.style.display = 'none';
+    }
+  });
+})();
+</script>
+<script>
+(function() {
+  var micBtn = document.getElementById('micBtn');
+  var chatInput = document.getElementById('chatInput');
+  var chatForm = document.getElementById('chatForm');
+  var mediaRecorder = null;
+  var audioChunks = [];
+  var recording = false;
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    micBtn.style.display = 'none';
+    return;
+  }
+
+  micBtn.addEventListener('click', async function() {
+    if (recording) {
+      // Stop recording
+      mediaRecorder.stop();
+      return;
+    }
+
+    try {
+      var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunks = [];
+      mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+      mediaRecorder.ondataavailable = function(e) {
+        if (e.data.size > 0) audioChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = async function() {
+        recording = false;
+        micBtn.classList.remove('mic-recording');
+        micBtn.title = 'Record audio message';
+        stream.getTracks().forEach(function(t) { t.stop(); });
+
+        if (audioChunks.length === 0) return;
+
+        var blob = new Blob(audioChunks, { type: 'audio/webm' });
+        var formData = new FormData();
+        formData.append('audio', blob, 'recording.webm');
+
+        chatInput.disabled = true;
+        chatInput.placeholder = 'Transcribing audio...';
+        micBtn.disabled = true;
+
+        try {
+          var res = await fetch('/chat/audio', { method: 'POST', body: formData });
+          var data = await res.json();
+          if (data.ok && data.transcript) {
+            // Show transcribed text and trigger polling (chat.js handles it)
+            chatInput.value = '';
+            chatInput.placeholder = 'Type a message... (;shortcut for quick actions)';
+            // Dispatch the same event chat.js listens for
+            var msgEvent = new CustomEvent('audioMessageSent', { detail: { taskId: data.taskId, transcript: data.transcript } });
+            document.dispatchEvent(msgEvent);
+            // Add user message to chat (same as chat.js does on submit)
+            if (window.addUserMessage) window.addUserMessage(data.transcript);
+            if (window.startPolling) window.startPolling(data.taskId);
+          } else {
+            alert(data.error || 'Failed to transcribe audio');
+          }
+        } catch (err) {
+          alert('Failed to send audio: ' + err.message);
+        } finally {
+          chatInput.disabled = false;
+          chatInput.placeholder = 'Type a message... (;shortcut for quick actions)';
+          micBtn.disabled = false;
+        }
+      };
+
+      mediaRecorder.start();
+      recording = true;
+      micBtn.classList.add('mic-recording');
+      micBtn.title = 'Stop recording';
+    } catch (err) {
+      console.error('Mic error:', err);
+      var chatError = document.getElementById('chatError');
+      if (chatError) {
+        chatError.textContent = 'Microphone access denied. Click the lock icon in the address bar → Microphone → Allow, then refresh.';
+        chatError.style.color = 'var(--danger, #DC2626)';
+      }
+    }
+  });
+})();
+</script>
+<style>
+.sc-item:hover, .sc-selected { background: var(--bg-secondary, #f5f5f5); }
+.sc-item:last-child { border-bottom: none !important; }
+.mic-btn {
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border, #e0e0e0);
+  flex-shrink: 0;
+}
+.mic-btn:hover { color: var(--fg); background: var(--bg-secondary, #f5f5f5); }
+.mic-recording {
+  color: #DC2626 !important;
+  background: #FEE2E2 !important;
+  border-color: #DC2626 !important;
+  animation: mic-pulse 1s infinite;
+}
+@keyframes mic-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+</style>
 <%- include('partials/foot') %>

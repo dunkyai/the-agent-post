@@ -267,6 +267,18 @@ export function getStaleAwaitingReplyThreads(cutoffHours: number): EmailThreadSt
     .all(cutoffHours) as EmailThreadStateRow[];
 }
 
+export function isKnownSender(email: string): boolean {
+  const row = getDb()
+    .prepare(
+      `SELECT 1 FROM email_thread_state
+       WHERE lower(latest_sender) LIKE '%' || ? || '%'
+       AND state IN ('delivered', 'processing', 'awaiting_reply')
+       LIMIT 1`
+    )
+    .get(email.toLowerCase()) as any;
+  return !!row;
+}
+
 export function getSetting(key: string): string | undefined {
   const row = getDb().prepare("SELECT value FROM settings WHERE key = ?").get(key) as
     | { value: string }

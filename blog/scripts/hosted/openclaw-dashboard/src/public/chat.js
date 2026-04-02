@@ -307,5 +307,19 @@
       });
   }
 
+  // Expose for audio recording integration
+  window.addUserMessage = function(text) { addMessage("user", text); };
+  window.startPolling = function() {
+    var thinking = document.createElement("div");
+    thinking.className = "chat-message assistant thinking-indicator";
+    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><span class="spinner"></span> <span class="thinking-text">Thinking...</span></div>';
+    messages.appendChild(thinking);
+    scrollToBottom();
+    input.disabled = true;
+    sendBtn.disabled = true;
+    sendBtn.textContent = "...";
+    pollForResult();
+  };
+
   scrollToBottom();
 })();

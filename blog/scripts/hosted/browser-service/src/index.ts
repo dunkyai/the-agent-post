@@ -1,5 +1,5 @@
 import express from "express";
-import { navigate, click, type, screenshot, getContent, closeBrowser, getActiveCount } from "./browser-manager";
+import { navigate, click, type, select, evaluate, screenshot, getContent, closeBrowser, getActiveCount } from "./browser-manager";
 import { validateUrl, checkRateLimit } from "./security";
 
 const app = express();
@@ -70,6 +70,28 @@ app.post("/browser/:instanceId/:action", async (req, res) => {
           return;
         }
         const result = await type(instanceId, selector, text);
+        res.json(result);
+        break;
+      }
+
+      case "select": {
+        const { selector, value } = req.body;
+        if (!selector || value === undefined) {
+          res.status(400).json({ error: "selector and value are required" });
+          return;
+        }
+        const result = await select(instanceId, selector, value);
+        res.json(result);
+        break;
+      }
+
+      case "evaluate": {
+        const { script } = req.body;
+        if (!script) {
+          res.status(400).json({ error: "script is required" });
+          return;
+        }
+        const result = await evaluate(instanceId, script);
         res.json(result);
         break;
       }

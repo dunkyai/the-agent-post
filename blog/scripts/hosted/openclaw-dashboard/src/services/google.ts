@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { getIntegration, upsertIntegration, getSetting, setSetting, getGmailProcessedThread, getEmailThreadState } from "./db";
+import { getIntegration, upsertIntegration, getSetting, setSetting, getGmailProcessedThread, getEmailThreadState, isKnownSender } from "./db";
 import { encrypt, decrypt } from "./encryption";
 import { sanitizeEmailContent } from "./email";
 import { processIncomingEmail, type EmailThreadContext } from "../adapters/email";
@@ -1878,87 +1878,76 @@ function extractEmailAddress(from: string): string {
   return match ? match[1] : from.toLowerCase().trim();
 }
 
-interface EmailRuleTier {
-  type: "everyone" | "domains" | "addresses";
-  enabled: boolean;
+interface GmailEmailPolicy {
+  policy: "everyone" | "known" | "domains" | "addresses" | "disabled";
   reply_mode: "draft" | "send";
-  domains?: string[];
-  addresses?: string[];
+  domains: string[];
+  addresses: string[];
 }
 
-function loadEmailRuleTiers(): EmailRuleTier[] {
+function loadGmailPolicy(): GmailEmailPolicy {
   try {
-    const raw = JSON.parse(getSetting("gmail_email_rules") || "{}");
-    // New tiered format
-    if (raw.tiers && Array.isArray(raw.tiers)) {
-      return raw.tiers;
-    }
-    // Backward compat: migrate old format
-    const oldReplyMode = (getSetting("gmail_reply_mode") || "draft") as "draft" | "send";
-    if (!raw.mode || raw.mode === "all") {
-      return [
-        { type: "everyone", enabled: true, reply_mode: oldReplyMode },
-        { type: "domains", enabled: false, reply_mode: oldReplyMode, domains: [] },
-        { type: "addresses", enabled: false, reply_mode: oldReplyMode, addresses: [] },
-      ];
-    }
-    if (raw.mode === "domains") {
-      return [
-        { type: "everyone", enabled: false, reply_mode: oldReplyMode },
-        { type: "domains", enabled: true, reply_mode: oldReplyMode, domains: raw.domains || [] },
-        { type: "addresses", enabled: false, reply_mode: oldReplyMode, addresses: [] },
-      ];
-    }
-    if (raw.mode === "addresses") {
-      return [
-        { type: "everyone", enabled: false, reply_mode: oldReplyMode },
-        { type: "domains", enabled: false, reply_mode: oldReplyMode, domains: [] },
-        { type: "addresses", enabled: true, reply_mode: oldReplyMode, addresses: raw.addresses || [] },
-      ];
+    const raw = JSON.parse(getSetting("gmail_email_policy") || "{}");
+    if (raw.policy) return raw;
+    // Migrate from old tiered format
+    const oldRules = JSON.parse(getSetting("gmail_email_rules") || "{}");
+    const oldSenderPolicy = getSetting("gmail_sender_policy") || "known";
+    if (oldRules.tiers) {
+      const everyone = oldRules.tiers.find((t: any) => t.type === "everyone");
+      const domains = oldRules.tiers.find((t: any) => t.type === "domains");
+      const addresses = oldRules.tiers.find((t: any) => t.type === "addresses");
+      if (addresses?.enabled && addresses.addresses?.length) {
+        return { policy: "addresses", reply_mode: addresses.reply_mode || "draft", domains: domains?.domains || [], addresses: addresses.addresses };
+      } else if (domains?.enabled && domains.domains?.length) {
+        return { policy: "domains", reply_mode: domains.reply_mode || "draft", domains: domains.domains, addresses: [] };
+      } else if (everyone?.enabled) {
+        return { policy: oldSenderPolicy === "everyone" ? "everyone" : "known", reply_mode: everyone.reply_mode || "draft", domains: [], addresses: [] };
+      }
+      return { policy: "disabled", reply_mode: "draft", domains: [], addresses: [] };
     }
   } catch {}
-  return [
-    { type: "everyone", enabled: true, reply_mode: "draft" },
-    { type: "domains", enabled: false, reply_mode: "draft", domains: [] },
-    { type: "addresses", enabled: false, reply_mode: "draft", addresses: [] },
-  ];
+  return { policy: "known", reply_mode: "draft", domains: [], addresses: [] };
 }
 
 /**
- * Check if a single sender is allowed by tiered rules.
- * Returns { allowed, replyMode } — most-specific tier wins.
- * Evaluation order: addresses → domains → everyone.
+ * Check if a sender is allowed by the simplified email policy.
+ * Single policy — no ambiguous tier interaction.
  */
 export function isGmailSenderAllowed(sender: string): { allowed: boolean; replyMode: "draft" | "send" } {
-  const tiers = loadEmailRuleTiers();
-  const email = extractEmailAddress(sender);
+  const policy = loadGmailPolicy();
+  const email = extractEmailAddress(sender).toLowerCase();
   const domain = email.split("@")[1];
 
-  const addressTier = tiers.find(t => t.type === "addresses");
-  if (addressTier?.enabled && addressTier.addresses?.length) {
-    if (addressTier.addresses.some(a => a.toLowerCase() === email)) {
-      return { allowed: true, replyMode: addressTier.reply_mode };
-    }
-  }
+  switch (policy.policy) {
+    case "disabled":
+      return { allowed: false, replyMode: "draft" };
 
-  const domainTier = tiers.find(t => t.type === "domains");
-  if (domainTier?.enabled && domainTier.domains?.length) {
-    if (domainTier.domains.some(d => d.toLowerCase() === domain)) {
-      return { allowed: true, replyMode: domainTier.reply_mode };
-    }
-  }
+    case "everyone":
+      return { allowed: true, replyMode: policy.reply_mode };
 
-  const everyoneTier = tiers.find(t => t.type === "everyone");
-  if (everyoneTier?.enabled) {
-    return { allowed: true, replyMode: everyoneTier.reply_mode };
-  }
+    case "known":
+      return { allowed: isKnownSender(email), replyMode: policy.reply_mode };
 
-  return { allowed: false, replyMode: "draft" };
+    case "domains":
+      if (policy.domains.some(d => d.toLowerCase() === domain)) {
+        return { allowed: true, replyMode: policy.reply_mode };
+      }
+      return { allowed: false, replyMode: "draft" };
+
+    case "addresses":
+      if (policy.addresses.some(a => a.toLowerCase() === email)) {
+        return { allowed: true, replyMode: policy.reply_mode };
+      }
+      return { allowed: false, replyMode: "draft" };
+
+    default:
+      return { allowed: false, replyMode: "draft" };
+  }
 }
 
 /**
- * Resolve the reply mode for a thread by checking ALL recipients.
- * Returns "send" only if every recipient resolves to a "send" tier.
+ * Resolve the reply mode for a thread.
+ * With simplified policy, reply_mode is global — but still check all recipients
  * If any recipient would be "draft" (or unmatched), returns "draft".
  */
 function resolveThreadReplyMode(recipientEmails: string[]): "draft" | "send" {

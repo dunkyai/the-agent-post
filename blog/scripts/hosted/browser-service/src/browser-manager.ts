@@ -181,6 +181,32 @@ export async function type(
   return { success: true };
 }
 
+export async function select(
+  instanceId: string,
+  selector: string,
+  value: string
+): Promise<{ success: boolean; selected: string }> {
+  const session = await getOrCreateSession(instanceId);
+
+  try {
+    // Try selecting by value first, then by label text
+    await session.page.selectOption(selector, { value }, { timeout: ACTION_TIMEOUT });
+  } catch {
+    try {
+      // Fall back to label text
+      await session.page.selectOption(selector, { label: value }, { timeout: ACTION_TIMEOUT });
+    } catch {
+      // Fall back to finding the select by name/label and selecting
+      await session.page
+        .getByLabel(selector)
+        .first()
+        .selectOption({ label: value }, { timeout: ACTION_TIMEOUT });
+    }
+  }
+
+  return { success: true, selected: value };
+}
+
 export async function screenshot(
   instanceId: string
 ): Promise<{ title: string; url: string; elements: any[]; screenshot: string }> {
@@ -203,6 +229,7 @@ export async function screenshot(
       placeholder?: string;
       href?: string;
       value?: string;
+      options?: string[];
     }[] = [];
 
     const interactiveSelectors = "a, button, input, select, textarea, [role='button'], [onclick]";
@@ -234,6 +261,16 @@ export async function screenshot(
         selector = `${tag}:nth-of-type(${i + 1})`;
       }
 
+      // For <select> elements, include available options
+      let options: string[] | undefined;
+      if (tag === "select") {
+        const optEls = el.querySelectorAll("option");
+        options = Array.from(optEls)
+          .map(o => o.textContent?.trim() || "")
+          .filter(o => o.length > 0)
+          .slice(0, 20);
+      }
+
       result.push({
         tag,
         ...(type && { type }),
@@ -242,6 +279,7 @@ export async function screenshot(
         ...(placeholder && { placeholder }),
         ...(href && { href: href.slice(0, 200) }),
         ...(value && { value: value.slice(0, 100) }),
+        ...(options && options.length > 0 && { options }),
       });
     });
 
@@ -258,6 +296,15 @@ export async function getContent(
   const title = await session.page.title();
   const content = await session.page.innerText("body").catch(() => "");
   return { title, url: session.page.url(), content: truncate(content) };
+}
+
+export async function evaluate(
+  instanceId: string,
+  script: string
+): Promise<{ success: boolean; result: any }> {
+  const session = await getOrCreateSession(instanceId);
+  const result = await session.page.evaluate(script);
+  return { success: true, result };
 }
 
 export async function closeBrowser(

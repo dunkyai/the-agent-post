@@ -11,7 +11,7 @@ import { startBuffer, stopBuffer, testBufferConnection, bufferListChannels, isBu
 import { startLuma, stopLuma, testLumaConnection } from "../services/luma";
 import { buildTwitterOAuthUrl, stopTwitter } from "../services/twitter";
 import { startBeehiiv, stopBeehiiv, testBeehiivConnection, fetchTemplates } from "../services/beehiiv";
-import { isOneRunning, startOne, stopOne, getOneConnections, getAuthKitData, fetchConnections } from "../services/one";
+import { buildGranolaOAuthUrl, stopGranola, isGranolaRunning } from "../services/granola";
 
 const router = Router();
 
@@ -81,35 +81,30 @@ router.get("/integrations", async (req: Request, res: Response) => {
     } catch {}
   }
 
-  // Gmail email rules + polling settings — tiered format
-  interface GmailTier { type: string; enabled: boolean; reply_mode: string; domains?: string[]; addresses?: string[] }
-  let gmailTiers: GmailTier[] = [
-    { type: "everyone", enabled: true, reply_mode: "draft" },
-    { type: "domains", enabled: false, reply_mode: "draft", domains: [] },
-    { type: "addresses", enabled: false, reply_mode: "draft", addresses: [] },
-  ];
+  // Gmail email policy — simplified single-policy format
+  interface GmailEmailPolicy { policy: string; reply_mode: string; domains: string[]; addresses: string[] }
+  let gmailEmailPolicy: GmailEmailPolicy = { policy: "known", reply_mode: "draft", domains: [], addresses: [] };
   try {
-    const raw = JSON.parse(getSetting("gmail_email_rules") || "{}");
-    if (raw.tiers && Array.isArray(raw.tiers)) {
-      gmailTiers = raw.tiers;
+    const raw = JSON.parse(getSetting("gmail_email_policy") || "{}");
+    if (raw.policy) {
+      gmailEmailPolicy = raw;
     } else {
-      // Migrate old format
-      const oldReplyMode = getSetting("gmail_reply_mode") || "draft";
-      if (raw.mode === "domains") {
-        gmailTiers = [
-          { type: "everyone", enabled: false, reply_mode: oldReplyMode },
-          { type: "domains", enabled: true, reply_mode: oldReplyMode, domains: raw.domains || [] },
-          { type: "addresses", enabled: false, reply_mode: oldReplyMode, addresses: [] },
-        ];
-      } else if (raw.mode === "addresses") {
-        gmailTiers = [
-          { type: "everyone", enabled: false, reply_mode: oldReplyMode },
-          { type: "domains", enabled: false, reply_mode: oldReplyMode, domains: [] },
-          { type: "addresses", enabled: true, reply_mode: oldReplyMode, addresses: raw.addresses || [] },
-        ];
-      } else {
-        // mode === "all" or unset
-        gmailTiers[0].reply_mode = oldReplyMode;
+      // Migrate from old tiered format
+      const oldRules = JSON.parse(getSetting("gmail_email_rules") || "{}");
+      const oldPolicy = getSetting("gmail_sender_policy") || "known";
+      if (oldRules.tiers) {
+        const everyone = oldRules.tiers.find((t: any) => t.type === "everyone");
+        const domains = oldRules.tiers.find((t: any) => t.type === "domains");
+        const addresses = oldRules.tiers.find((t: any) => t.type === "addresses");
+        if (addresses?.enabled && addresses.addresses?.length) {
+          gmailEmailPolicy = { policy: "addresses", reply_mode: addresses.reply_mode || "draft", domains: domains?.domains || [], addresses: addresses.addresses };
+        } else if (domains?.enabled && domains.domains?.length) {
+          gmailEmailPolicy = { policy: "domains", reply_mode: domains.reply_mode || "draft", domains: domains.domains, addresses: [] };
+        } else if (everyone?.enabled) {
+          gmailEmailPolicy = { policy: oldPolicy === "everyone" ? "everyone" : "known", reply_mode: everyone.reply_mode || "draft", domains: [], addresses: [] };
+        } else {
+          gmailEmailPolicy = { policy: "disabled", reply_mode: "draft", domains: [], addresses: [] };
+        }
       }
     }
   } catch {}
@@ -130,7 +125,7 @@ router.get("/integrations", async (req: Request, res: Response) => {
       filter_addresses: emailFilterAddresses,
     },
     googleAccounts: googleAccountsList,
-    gmailTiers,
+    gmailEmailPolicy,
     gmailPollInterval,
     supabase: {
       ...(integrationMap["supabase"] || { status: "disconnected", error_message: null }),
@@ -205,10 +200,7 @@ router.get("/integrations", async (req: Request, res: Response) => {
       }
       return base;
     })(),
-    one: {
-      configured: !!process.env.ONE_SECRET,
-      connections: getOneConnections(),
-    },
+    granola: integrationMap["granola"] || { status: "disconnected", error_message: null },
     memories: getAllMemories(),
     flash: req.query.flash || null,
   });
@@ -471,22 +463,15 @@ router.post("/integrations/supabase/permissions", (req: Request, res: Response) 
 
 router.post("/integrations/google/email-rules", (req: Request, res: Response) => {
   try {
-    const validReplyModes = ["draft", "send"];
-    const sanitizeReplyMode = (v: string) => validReplyModes.includes(v) ? v : "draft";
+    const validPolicies = ["everyone", "known", "domains", "addresses", "disabled"];
+    const policy = validPolicies.includes(req.body.policy) ? req.body.policy : "known";
+    const reply_mode = req.body.reply_mode === "send" ? "send" : "draft";
 
-    // Parse tier settings
-    const everyoneEnabled = req.body.tier_everyone_enabled === "on";
-    const everyoneReplyMode = sanitizeReplyMode(req.body.tier_everyone_reply_mode);
-
-    const domainsEnabled = req.body.tier_domains_enabled === "on";
-    const domainsReplyMode = sanitizeReplyMode(req.body.tier_domains_reply_mode);
     let domains: string[] = [];
     if (typeof req.body.filter_domains === "string") {
       domains = req.body.filter_domains.split(",").map((d: string) => d.trim().toLowerCase().replace(/^@/, "")).filter(Boolean);
     }
 
-    const addressesEnabled = req.body.tier_addresses_enabled === "on";
-    const addressesReplyMode = sanitizeReplyMode(req.body.tier_addresses_reply_mode);
     let addresses: string[] = [];
     if (typeof req.body.filter_addresses === "string") {
       addresses = req.body.filter_addresses.split(",").map((a: string) => a.trim().toLowerCase()).filter(Boolean);
@@ -494,13 +479,7 @@ router.post("/integrations/google/email-rules", (req: Request, res: Response) =>
       addresses = req.body.filter_addresses.map((a: string) => a.trim().toLowerCase()).filter(Boolean);
     }
 
-    const tiers = [
-      { type: "everyone", enabled: everyoneEnabled, reply_mode: everyoneReplyMode },
-      { type: "domains", enabled: domainsEnabled, reply_mode: domainsReplyMode, domains },
-      { type: "addresses", enabled: addressesEnabled, reply_mode: addressesReplyMode, addresses },
-    ];
-
-    setSetting("gmail_email_rules", JSON.stringify({ tiers }));
+    setSetting("gmail_email_policy", JSON.stringify({ policy, reply_mode, domains, addresses }));
 
     // Save polling settings
     const { poll_interval } = req.body;
@@ -808,105 +787,22 @@ router.post("/integrations/beehiiv/disconnect", (req: Request, res: Response) =>
   res.redirect(303, "/integrations?flash=Beehiiv+disconnected");
 });
 
-// --- One (withone.ai / Pica) ---
+// --- Granola ---
 
-// CORS preflight for AuthKit iframe (authkit.picaos.com → auth.withone.ai calls our endpoint)
-const AUTHKIT_ORIGINS = ["https://authkit.picaos.com", "https://auth.withone.ai"];
-router.options("/integrations/one/link-token", (req: Request, res: Response) => {
-  const origin = req.headers.origin || "";
-  if (AUTHKIT_ORIGINS.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.setHeader("Access-Control-Max-Age", "86400");
-  res.status(204).end();
-});
-
-router.post("/integrations/one/link-token", async (req: Request, res: Response) => {
-  const origin = req.headers.origin || "";
-  if (AUTHKIT_ORIGINS.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-
+router.post("/integrations/granola/connect", async (req: Request, res: Response) => {
   try {
-    const result = await getAuthKitData();
-    if (result.error) {
-      res.status(400).json({ error: result.error });
-    } else {
-      res.json(result);
-    }
+    const url = await buildGranolaOAuthUrl();
+    res.redirect(url);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to get AuthKit data";
-    res.status(500).json({ error: message });
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.redirect(303, "/integrations?flash=Granola+error:+" + encodeURIComponent(message));
   }
 });
 
-router.post("/integrations/one/connection", async (req: Request, res: Response) => {
-  try {
-    // After AuthKit LINK_SUCCESS, refresh connections from Pica
-    const connections = await fetchConnections();
-    if (connections.length === 0) {
-      // If vault fetch returned nothing, try using the connection data sent from frontend
-      const connData = req.body;
-      if (connData && connData.key && connData.platform) {
-        const single = [{
-          connection_key: connData.key,
-          platform: connData.platform,
-          display_name: connData.name || connData.platform,
-        }];
-        const config = encrypt(JSON.stringify({ connections: single }));
-        upsertIntegration("one", config, "connected");
-        startOne({ connections: single });
-        res.redirect(303, "/integrations?flash=Connected:+" + encodeURIComponent(connData.platform));
-        return;
-      }
-      res.redirect(303, "/integrations?flash=No+connections+found");
-      return;
-    }
-
-    const config = encrypt(JSON.stringify({ connections }));
-    upsertIntegration("one", config, "connected");
-    startOne({ connections });
-
-    const platforms = connections.map((c) => c.platform).join(", ");
-    res.redirect(303, "/integrations?flash=Connected:+" + encodeURIComponent(platforms));
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to save connection";
-    res.redirect(303, "/integrations?flash=One+error:+" + encodeURIComponent(message));
-  }
-});
-
-router.post("/integrations/one/disconnect-platform", async (req: Request, res: Response) => {
-  const { platform } = req.body;
-  if (!platform) {
-    res.redirect(303, "/integrations?flash=Missing+platform");
-    return;
-  }
-
-  try {
-    const current = getOneConnections();
-    const filtered = current.filter((c) => c.platform !== platform);
-
-    if (filtered.length === 0) {
-      stopOne();
-      deleteIntegration("one");
-    } else {
-      const config = encrypt(JSON.stringify({ connections: filtered }));
-      upsertIntegration("one", config, "connected");
-      startOne({ connections: filtered });
-    }
-    res.redirect(303, "/integrations?flash=" + encodeURIComponent(`${platform} disconnected`));
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to disconnect";
-    res.redirect(303, "/integrations?flash=One+error:+" + encodeURIComponent(message));
-  }
-});
-
-router.post("/integrations/one/disconnect", (req: Request, res: Response) => {
-  stopOne();
-  deleteIntegration("one");
-  res.redirect(303, "/integrations?flash=All+One+integrations+disconnected");
+router.post("/integrations/granola/disconnect", (req: Request, res: Response) => {
+  stopGranola();
+  upsertIntegration("granola", "{}", "disconnected");
+  res.redirect(303, "/integrations?flash=Granola+disconnected");
 });
 
 export default router;

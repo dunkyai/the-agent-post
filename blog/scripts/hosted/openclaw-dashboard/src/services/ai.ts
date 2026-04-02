@@ -49,10 +49,10 @@ import {
   beehiivListTemplates, beehiivCreateDraft, beehiivListPosts, beehiivGetPost,
 } from "./beehiiv";
 import {
-  isOneRunning, getOneConnections, getOneConnectionPlatforms, getConnectionKeyForPlatform,
-  listConnections as oneListConnections, searchActions as oneSearchActions,
-  getActionKnowledge as oneGetActionKnowledge, executeAction as oneExecuteAction,
-} from "./one";
+  isGranolaRunning,
+  granolaListMeetings, granolaGetMeetings, granolaGetTranscript,
+  granolaQueryMeetings, granolaListFolders,
+} from "./granola";
 
 interface AIResponse {
   role: string;
@@ -384,7 +384,7 @@ const BROWSER_TOOLS = [
   },
   {
     name: "browser_type",
-    description: "Type text into an input field on the current page. Use a CSS selector (e.g., '#email', 'input[name=\"username\"]') or the field's placeholder/label text. Use browser_screenshot first to see available fields.",
+    description: "Type text into an input field on the current page. Use a CSS selector (e.g., '#email', 'input[name=\"username\"]') or the field's placeholder/label text. Use browser_screenshot first to see available fields. NOTE: Do NOT use this for <select> dropdowns — use browser_select instead.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -392,6 +392,29 @@ const BROWSER_TOOLS = [
         text: { type: "string", description: "The text to type into the field" },
       },
       required: ["selector", "text"],
+    },
+  },
+  {
+    name: "browser_select",
+    description: "Select an option from a dropdown (<select>) element on the current page. Use a CSS selector (e.g., '#country', 'select[name=\"state\"]') and the option's visible text or value. Use browser_screenshot first to see available dropdowns and their options.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        selector: { type: "string", description: "CSS selector of the <select> element" },
+        value: { type: "string", description: "The option text or value to select" },
+      },
+      required: ["selector", "value"],
+    },
+  },
+  {
+    name: "browser_evaluate",
+    description: "Run JavaScript code directly on the current page. Use this as a last resort when browser_click, browser_type, and browser_select don't work — for example, custom JavaScript dropdowns, date pickers, or dynamically generated widgets. The script runs in the browser context with access to `document`, `window`, etc. Returns the script's return value.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        script: { type: "string", description: "JavaScript code to execute in the browser. Use document.querySelector, .value, .dispatchEvent, etc." },
+      },
+      required: ["script"],
     },
   },
   {
@@ -590,6 +613,8 @@ async function executeBrowserTool(toolName: string, input: any): Promise<string 
       browse_webpage: "navigate",
       browser_click: "click",
       browser_type: "type",
+      browser_select: "select",
+      browser_evaluate: "evaluate",
       browser_screenshot: "screenshot",
       browser_get_content: "get_content",
     };
@@ -605,6 +630,13 @@ async function executeBrowserTool(toolName: string, input: any): Promise<string 
     if (toolName === "browser_type") {
       body.selector = input.selector;
       body.text = input.text;
+    }
+    if (toolName === "browser_select") {
+      body.selector = input.selector;
+      body.value = input.value;
+    }
+    if (toolName === "browser_evaluate") {
+      body.script = input.script;
     }
 
     const res = await fetch(`${provisioningUrl}/instances/${instanceId}/browser/${action}`, {
@@ -1578,75 +1610,78 @@ async function executeBeehiivTool(toolName: string, input: any): Promise<string>
   }
 }
 
-// --- One (withone.ai) Meta-Tools ---
+// --- Granola Meeting Notes Tools ---
 
-const ONE_TOOLS = [
+const GRANOLA_TOOLS = [
   {
-    name: "one_list_connections",
-    description: "List all platforms the user has connected through One. Use this first to see what third-party services are available (e.g. HubSpot, Salesforce, Shopify, Zendesk, etc.).",
+    name: "granola_list_meetings",
+    description: "List recent meetings from Granola with their titles, dates, attendees, and summaries. Use this to find meetings with specific people or in a date range.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        created_after: { type: "string", description: "ISO date — only meetings after this date (e.g. '2026-03-01')" },
+        created_before: { type: "string", description: "ISO date — only meetings before this date" },
+      },
+    },
+  },
+  {
+    name: "granola_search_meetings",
+    description: "Search meeting notes and content by keyword or topic. Returns matching meetings with their notes and summaries.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Search query — topic, person name, keyword, or question about meetings" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "granola_get_transcript",
+    description: "Get the full transcript of a specific meeting, including speaker detection and timestamps. Use granola_list_meetings or granola_search_meetings first to find the meeting ID.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        meeting_id: { type: "string", description: "The meeting ID from list or search results" },
+      },
+      required: ["meeting_id"],
+    },
+  },
+  {
+    name: "granola_query",
+    description: "Ask a natural language question about your meetings. Granola's AI will search across all your meeting notes to answer. Great for questions like 'What did we decide about the pricing?' or 'What action items came out of meetings with Sarah?'",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Natural language question about your meetings" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "granola_list_folders",
+    description: "List meeting folders/categories in Granola.",
     input_schema: { type: "object" as const, properties: {} },
-  },
-  {
-    name: "one_search_actions",
-    description: "Search for available actions on a connected platform. Use this after one_list_connections to discover what you can do with a specific platform (e.g. 'create contact' on HubSpot, 'list orders' on Shopify).",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        platform: { type: "string", description: "The platform name (e.g. 'hubspot', 'salesforce', 'shopify')" },
-        query: { type: "string", description: "What you want to do (e.g. 'create contact', 'list deals', 'search orders')" },
-      },
-      required: ["platform", "query"],
-    },
-  },
-  {
-    name: "one_get_action_knowledge",
-    description: "Get detailed information about a specific action — required parameters, expected request body, and endpoint details. Call this before executing an action to understand exactly what data is needed.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        action_id: { type: "string", description: "The action ID from one_search_actions results" },
-      },
-      required: ["action_id"],
-    },
-  },
-  {
-    name: "one_execute_action",
-    description: "Execute an action on a connected platform. Use one_get_action_knowledge first to understand the required parameters and request format.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        platform: { type: "string", description: "The platform name (must match a connected platform)" },
-        action_id: { type: "string", description: "The action ID from one_search_actions" },
-        method: { type: "string", enum: ["GET", "POST", "PUT", "PATCH", "DELETE"], description: "HTTP method for the action" },
-        path: { type: "string", description: "API path for the action (from action knowledge)" },
-        body: { type: "object", description: "Request body (for POST/PUT/PATCH)" },
-      },
-      required: ["platform", "action_id", "method", "path"],
-    },
   },
 ];
 
-async function executeOneTool(toolName: string, input: any): Promise<string> {
+async function executeGranolaTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
-      case "one_list_connections":
-        return await oneListConnections();
-      case "one_search_actions":
-        return await oneSearchActions(input.platform, input.query);
-      case "one_get_action_knowledge":
-        return await oneGetActionKnowledge(input.action_id);
-      case "one_execute_action": {
-        const connectionKey = getConnectionKeyForPlatform(input.platform);
-        if (!connectionKey) {
-          return JSON.stringify({ error: `Platform "${input.platform}" is not connected. Use one_list_connections to see available platforms.` });
-        }
-        return await oneExecuteAction(input.method, input.path, connectionKey, input.action_id, input.body);
-      }
+      case "granola_list_meetings":
+        return await granolaListMeetings(input);
+      case "granola_search_meetings":
+        return await granolaGetMeetings({ query: input.query });
+      case "granola_get_transcript":
+        return await granolaGetTranscript(input.meeting_id);
+      case "granola_query":
+        return await granolaQueryMeetings(input.query);
+      case "granola_list_folders":
+        return await granolaListFolders();
       default:
-        return JSON.stringify({ error: `Unknown One tool: ${toolName}` });
+        return JSON.stringify({ error: `Unknown Granola tool: ${toolName}` });
     }
   } catch (err) {
-    return JSON.stringify({ error: err instanceof Error ? err.message : "One operation failed" });
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Granola operation failed" });
   }
 }
 
@@ -2545,10 +2580,11 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   create_scheduled_job: "Creating a scheduled job...",
   list_scheduled_jobs: "Listing scheduled jobs...",
   delete_scheduled_job: "Deleting a scheduled job...",
-  one_list_connections: "Checking connected platforms...",
-  one_search_actions: (input) => `Searching ${input?.platform || "platform"} actions...`,
-  one_get_action_knowledge: "Reading action details...",
-  one_execute_action: (input) => `Running ${input?.platform || "platform"} action...`,
+  granola_list_meetings: "Checking Granola meetings...",
+  granola_search_meetings: "Searching meeting notes...",
+  granola_get_transcript: "Getting meeting transcript...",
+  granola_query: "Querying meeting notes...",
+  granola_list_folders: "Listing meeting folders...",
 };
 
 // --- Anthropic API with tool use loop ---
@@ -2597,7 +2633,7 @@ export async function callAnthropic(
   if (isLumaRunning()) tools.push(...LUMA_TOOLS);
   if (isTwitterRunning()) tools.push(...TWITTER_TOOLS);
   if (isBeehiivRunning()) tools.push(...BEEHIIV_TOOLS);
-  if (isOneRunning()) tools.push(...ONE_TOOLS);
+  if (isGranolaRunning()) tools.push(...GRANOLA_TOOLS);
 
   // Conditionally add Google tools based on connected services
   const googleServices = getConnectedServices();
@@ -2636,6 +2672,28 @@ export async function callAnthropic(
     if (round > 0 && round % 10 === 0) console.log(`Tool loop round ${round}/${MAX_TOOL_ROUNDS}`);
     onStatus?.(getThinkingMessage(round));
 
+    // Strip base64 screenshots from all but the last tool_result message to prevent context overflow
+    // The AI already processed those screenshots — keeping them wastes ~100K+ tokens per image
+    const compactMessages = apiMessages.map((msg, msgIdx) => {
+      if (msg.role !== "user" || !Array.isArray(msg.content)) return msg;
+      // Only strip from messages that aren't the last user message
+      if (msgIdx === apiMessages.length - 1) return msg;
+      return {
+        ...msg,
+        content: msg.content.map((block: any) => {
+          if (block.type !== "tool_result" || !Array.isArray(block.content)) return block;
+          const hasImage = block.content.some((b: any) => b.type === "image");
+          if (!hasImage) return block;
+          return {
+            ...block,
+            content: block.content.map((b: any) =>
+              b.type === "image" ? { type: "text", text: "[screenshot — image stripped from history]" } : b
+            ),
+          };
+        }),
+      };
+    });
+
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -2647,7 +2705,7 @@ export async function callAnthropic(
         model,
         max_tokens: maxTokens,
         system: systemPrompt || undefined,
-        messages: apiMessages,
+        messages: compactMessages,
         temperature,
         tools,
       }),
@@ -2688,7 +2746,7 @@ export async function callAnthropic(
         "docs_create", "docs_read", "docs_append", "docs_insert", "docs_suggest_edit", "docs_format_text", "docs_paragraph_style", "docs_list", "docs_insert_image", "docs_replace_text",
         "sheets_create", "sheets_read", "sheets_write", "sheets_append", "sheets_list_sheets",
       ];
-      const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
+      const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_select", "browser_evaluate", "browser_screenshot", "browser_get_content"];
       const messagingToolNames = ["send_slack", "slack_channel_members", "send_lobstermail", "check_lobstermail"];
       const supabaseToolNames = ["supabase_list_tables", "supabase_describe_table", "supabase_query", "supabase_insert", "supabase_update"];
       const airtableToolNames = ["airtable_list_bases", "airtable_list_tables", "airtable_list_records"];
@@ -2697,7 +2755,7 @@ export async function callAnthropic(
       const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
       const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet", "twitter_lookup_user", "twitter_get_user_tweets", "twitter_quote_tweet", "twitter_like_tweet"];
       const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
-      const oneToolNames = ["one_list_connections", "one_search_actions", "one_get_action_knowledge", "one_execute_action"];
+      const granolaToolNames = ["granola_list_meetings", "granola_search_meetings", "granola_get_transcript", "granola_query", "granola_list_folders"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
 
@@ -2753,8 +2811,8 @@ export async function callAnthropic(
           result = await executeTwitterTool(toolBlock.name, toolBlock.input);
         } else if (beehiivToolNames.includes(toolBlock.name)) {
           result = await executeBeehiivTool(toolBlock.name, toolBlock.input);
-        } else if (oneToolNames.includes(toolBlock.name)) {
-          result = await executeOneTool(toolBlock.name, toolBlock.input);
+        } else if (granolaToolNames.includes(toolBlock.name)) {
+          result = await executeGranolaTool(toolBlock.name, toolBlock.input);
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input, sourceContext);
         }
@@ -2881,7 +2939,7 @@ export async function callOpenAI(
   if (isLumaRunning()) customTools.push(...LUMA_TOOLS);
   if (isTwitterRunning()) customTools.push(...TWITTER_TOOLS);
   if (isBeehiivRunning()) customTools.push(...BEEHIIV_TOOLS);
-  if (isOneRunning()) customTools.push(...ONE_TOOLS);
+  if (isGranolaRunning()) customTools.push(...GRANOLA_TOOLS);
   const googleServices = getConnectedServices();
   if (googleServices) {
     if (googleServices.includes("gmail")) {
@@ -2931,7 +2989,7 @@ export async function callOpenAI(
     "docs_create", "docs_read", "docs_append", "docs_insert", "docs_suggest_edit", "docs_format_text", "docs_paragraph_style", "docs_list", "docs_insert_image", "docs_replace_text",
     "sheets_create", "sheets_read", "sheets_write", "sheets_append", "sheets_list_sheets",
   ];
-  const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
+  const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_select", "browser_evaluate", "browser_screenshot", "browser_get_content"];
   const messagingToolNames = ["send_slack", "slack_channel_members", "send_lobstermail", "check_lobstermail"];
   const supabaseToolNames = ["supabase_list_tables", "supabase_describe_table", "supabase_query", "supabase_insert", "supabase_update"];
   const airtableToolNames = ["airtable_list_bases", "airtable_list_tables", "airtable_list_records"];
@@ -2940,7 +2998,7 @@ export async function callOpenAI(
   const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
   const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet", "twitter_lookup_user", "twitter_get_user_tweets", "twitter_quote_tweet", "twitter_like_tweet"];
   const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
-  const oneToolNames = ["one_list_connections", "one_search_actions", "one_get_action_knowledge", "one_execute_action"];
+  const granolaToolNames = ["granola_list_meetings", "granola_search_meetings", "granola_get_transcript", "granola_query", "granola_list_folders"];
 
   // Extract last user message for rules-based dispatch (e.g. gmail send vs draft)
   const lastUserMsg = [...messages].reverse().find(m => m.role === "user")?.content || "";
@@ -3048,8 +3106,8 @@ export async function callOpenAI(
           result = await executeTwitterTool(toolName, toolInput);
         } else if (beehiivToolNames.includes(toolName)) {
           result = await executeBeehiivTool(toolName, toolInput);
-        } else if (oneToolNames.includes(toolName)) {
-          result = await executeOneTool(toolName, toolInput);
+        } else if (granolaToolNames.includes(toolName)) {
+          result = await executeGranolaTool(toolName, toolInput);
         } else {
           result = executeSchedulingTool(toolName, toolInput, sourceContext);
         }
@@ -3469,11 +3527,19 @@ You can also list existing posts with beehiiv_list_posts and view post details w
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${beehiivContext}` : beehiivContext;
   }
 
-  // Inject One (withone.ai) context
-  if (isOneRunning()) {
-    const platforms = getOneConnectionPlatforms();
-    const oneContext = `You have access to additional third-party integrations through One. Connected platforms: ${platforms.join(", ")}. Use the one_* tools to interact with these platforms. Workflow: (1) one_list_connections to see what's available, (2) one_search_actions to find actions on a platform, (3) one_get_action_knowledge to understand required parameters, (4) one_execute_action to perform the action. These are general-purpose integrations — use your native tools (gmail_*, calendar_*, slack_*, etc.) for services you have direct integrations with, and one_* tools for everything else.`;
-    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${oneContext}` : oneContext;
+
+  // Inject Granola context
+  if (isGranolaRunning()) {
+    const granolaContext = `You are connected to Granola for meeting notes. You can search meetings, get transcripts, and query across all meeting notes using the granola_* tools.
+
+When the user asks about meetings, follow-ups, or action items:
+1. Use granola_query for natural language questions (e.g. "What did we decide about pricing?")
+2. Use granola_search_meetings to find meetings by topic or person
+3. Use granola_list_meetings to browse recent meetings by date
+4. Use granola_get_transcript for the full transcript of a specific meeting
+
+These tools connect to Granola's MCP server and can search across all meeting notes, summaries, and transcripts.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${granolaContext}` : granolaContext;
   }
 
   // Inject long-term memories (skip for scheduled jobs to prevent memory contamination)

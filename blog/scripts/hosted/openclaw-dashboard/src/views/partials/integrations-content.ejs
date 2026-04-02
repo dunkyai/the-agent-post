@@ -170,68 +170,60 @@
           <% const hasGmail = googleAccounts.some(a => a.services.includes('gmail')); %>
           <% if (hasGmail) { %>
             <%
-              const tierEveryone = gmailTiers.find(t => t.type === 'everyone') || { enabled: true, reply_mode: 'draft' };
-              const tierDomains = gmailTiers.find(t => t.type === 'domains') || { enabled: false, reply_mode: 'draft', domains: [] };
-              const tierAddresses = gmailTiers.find(t => t.type === 'addresses') || { enabled: false, reply_mode: 'draft', addresses: [] };
+              const gmailPolicy = gmailEmailPolicy || { policy: 'known', reply_mode: 'draft', domains: [], addresses: [] };
             %>
             <form method="POST" action="/integrations/google/email-rules" style="padding: 12px 0; border-bottom: 1px solid var(--rule-light);">
               <div class="form-group">
-                <label><strong>Gmail Email Rules</strong></label>
-                <div class="hint" style="margin-bottom: 8px;">Control who your agent responds to and how. Enable multiple tiers &mdash; the most specific match wins.</div>
+                <label><strong>Who should your agent respond to?</strong></label>
+                <div class="hint" style="margin-bottom: 10px;">Choose who gets a response. Emails from anyone else are ignored.</div>
 
-                <div style="display: flex; flex-direction: column; gap: 12px;">
-                  <!-- Everyone tier -->
-                  <div style="display: flex; align-items: center; gap: 8px; font-size: 14px;">
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1;">
-                      <input type="checkbox" name="tier_everyone_enabled" class="gmail-tier-checkbox" data-tier="everyone" <%= tierEveryone.enabled ? 'checked' : '' %>>
-                      <span>Everyone</span>
-                    </label>
-                    <select name="tier_everyone_reply_mode" style="font-size: 13px; padding: 4px 8px;">
-                      <option value="draft" <%= tierEveryone.reply_mode !== 'send' ? 'selected' : '' %>>Create draft</option>
-                      <option value="send" <%= tierEveryone.reply_mode === 'send' ? 'selected' : '' %>>Send immediately</option>
-                    </select>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                  <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="radio" name="policy" value="everyone" <%= gmailPolicy.policy === 'everyone' ? 'checked' : '' %> class="gmail-policy-radio" style="margin-top: 3px;">
+                    <div><strong>Everyone</strong><br><span style="font-size: 12px; color: var(--text-secondary);">Respond to all incoming emails</span></div>
+                  </label>
+
+                  <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="radio" name="policy" value="known" <%= gmailPolicy.policy === 'known' ? 'checked' : '' %> class="gmail-policy-radio" style="margin-top: 3px;">
+                    <div><strong>Known senders only</strong><br><span style="font-size: 12px; color: var(--text-secondary);">Only people from previous email threads. Cold emails are ignored.</span></div>
+                  </label>
+
+                  <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="radio" name="policy" value="domains" <%= gmailPolicy.policy === 'domains' ? 'checked' : '' %> class="gmail-policy-radio" style="margin-top: 3px;">
+                    <div><strong>Specific domains</strong><br><span style="font-size: 12px; color: var(--text-secondary);">Only emails from these domains</span></div>
+                  </label>
+                  <div id="gmail-domains-group" class="form-group" style="display: none; margin: 0 0 0 28px;">
+                    <input type="text" name="filter_domains" value="<%= (gmailPolicy.domains || []).join(', ') %>" placeholder="e.g. hustlefund.com, example.com" style="font-size: 13px;">
+                    <div class="hint">Comma-separated domains.</div>
                   </div>
 
-                  <!-- Domains tier -->
-                  <div>
-                    <div style="display: flex; align-items: center; gap: 8px; font-size: 14px;">
-                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1;">
-                        <input type="checkbox" name="tier_domains_enabled" class="gmail-tier-checkbox" data-tier="domains" <%= tierDomains.enabled ? 'checked' : '' %>>
-                        <span>All from the domain(s)</span>
-                      </label>
-                      <select name="tier_domains_reply_mode" style="font-size: 13px; padding: 4px 8px;">
-                        <option value="draft" <%= tierDomains.reply_mode !== 'send' ? 'selected' : '' %>>Create draft</option>
-                        <option value="send" <%= tierDomains.reply_mode === 'send' ? 'selected' : '' %>>Send immediately</option>
-                      </select>
+                  <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="radio" name="policy" value="addresses" <%= gmailPolicy.policy === 'addresses' ? 'checked' : '' %> class="gmail-policy-radio" style="margin-top: 3px;">
+                    <div><strong>Specific people</strong><br><span style="font-size: 12px; color: var(--text-secondary);">Only emails from these addresses</span></div>
+                  </label>
+                  <div id="gmail-addresses-group" style="display: none; margin: 0 0 0 28px;">
+                    <div style="display: flex; gap: 8px;">
+                      <input type="email" id="gmail_address_input" placeholder="alice@example.com" style="flex: 1; font-size: 13px;">
+                      <button type="button" id="gmail-add-address-btn" class="btn btn-sm" style="padding: 6px 12px;">Add</button>
                     </div>
-                    <div id="gmail-domains-group" class="form-group" style="display: none; margin: 8px 0 0 28px;">
-                      <input type="text" id="gmail_filter_domains" name="filter_domains" value="<%= (tierDomains.domains || []).join(', ') %>" placeholder="e.g. hustlefund.com, example.com" style="font-size: 13px;">
-                      <div class="hint">Comma-separated domains.</div>
-                    </div>
+                    <div id="gmail-address-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;"></div>
+                    <input type="hidden" id="gmail_filter_addresses_hidden" name="filter_addresses" value="">
                   </div>
 
-                  <!-- Addresses tier -->
-                  <div>
-                    <div style="display: flex; align-items: center; gap: 8px; font-size: 14px;">
-                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1;">
-                        <input type="checkbox" name="tier_addresses_enabled" class="gmail-tier-checkbox" data-tier="addresses" <%= tierAddresses.enabled ? 'checked' : '' %>>
-                        <span>Anyone on this list</span>
-                      </label>
-                      <select name="tier_addresses_reply_mode" style="font-size: 13px; padding: 4px 8px;">
-                        <option value="draft" <%= tierAddresses.reply_mode !== 'send' ? 'selected' : '' %>>Create draft</option>
-                        <option value="send" <%= tierAddresses.reply_mode === 'send' ? 'selected' : '' %>>Send immediately</option>
-                      </select>
-                    </div>
-                    <div id="gmail-addresses-group" style="display: none; margin: 8px 0 0 28px;">
-                      <div style="display: flex; gap: 8px;">
-                        <input type="email" id="gmail_address_input" placeholder="alice@example.com" style="flex: 1; font-size: 13px;">
-                        <button type="button" id="gmail-add-address-btn" class="btn btn-sm" style="padding: 6px 12px;">Add</button>
-                      </div>
-                      <div id="gmail-address-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;"></div>
-                      <input type="hidden" id="gmail_filter_addresses_hidden" name="filter_addresses" value="">
-                    </div>
-                  </div>
+                  <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="radio" name="policy" value="disabled" <%= gmailPolicy.policy === 'disabled' ? 'checked' : '' %> class="gmail-policy-radio" style="margin-top: 3px;">
+                    <div><strong>Nobody</strong><br><span style="font-size: 12px; color: var(--text-secondary);">Don't respond to any emails (monitoring only)</span></div>
+                  </label>
                 </div>
+              </div>
+
+              <div class="form-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rule-light);">
+                <label>When responding</label>
+                <select name="reply_mode" style="font-size: 13px; padding: 4px 8px;">
+                  <option value="draft" <%= gmailPolicy.reply_mode !== 'send' ? 'selected' : '' %>>Create draft</option>
+                  <option value="send" <%= gmailPolicy.reply_mode === 'send' ? 'selected' : '' %>>Send immediately</option>
+                </select>
+                <div class="hint">Drafts let you review before sending. "Send immediately" auto-sends the response.</div>
               </div>
 
               <div class="form-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rule-light);">
@@ -678,48 +670,39 @@
         </div>
       </details>
 
-      <!-- One (withone.ai) — hidden until Pica platforms are configured -->
-      <% if (false && one.configured) { %>
-      <details class="integration-tile" id="one-tile">
+      <!-- Granola -->
+      <details class="integration-tile">
         <summary class="integration-tile-summary">
-          <span class="integration-icon" style="background: #18181B;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M6 12h12"/></svg></span>
+          <span class="integration-icon" style="background: #1a1a2e;"><img src="/logos/granola.svg" alt="Granola" width="24" height="24"></span>
           <div class="integration-tile-info">
-            <h3>One <span style="font-size: 11px; font-weight: 400; color: var(--text-secondary);">200+ apps</span></h3>
-            <p>Connect HubSpot, Salesforce, Shopify, and more</p>
+            <h3>Granola</h3>
+            <p>AI meeting notes — search meetings, get transcripts, and follow up on action items</p>
           </div>
-          <% if (one.connections.length > 0) { %>
-            <span class="status-badge status-connected"><%= one.connections.length %> connected</span>
-          <% } else { %>
-            <span class="status-badge status-disconnected">disconnected</span>
-          <% } %>
+          <span class="status-badge status-<%= granola.status === 'connected' ? 'connected' : 'disconnected' %>">
+            <%= granola.status === 'connected' ? 'Connected' : 'Not connected' %>
+          </span>
         </summary>
-        <div class="integration-tile-body">
-          <% if (one.connections.length > 0) { %>
-            <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;">
-              <% one.connections.forEach(function(conn) { %>
-                <form method="POST" action="/integrations/one/disconnect-platform" style="margin: 0;">
-                  <input type="hidden" name="platform" value="<%= conn.platform %>">
-                  <button type="submit" class="one-pill">
-                    <%= conn.display_name || conn.platform %>
-                    <span class="one-pill-x">&times;</span>
-                  </button>
-                </form>
-              <% }); %>
-            </div>
-          <% } %>
-
-          <button type="button" class="btn" id="one-connect-btn">Connect a Platform</button>
-
-          <% if (one.connections.length > 0) { %>
-            <form method="POST" action="/integrations/one/disconnect" style="margin-top: 8px;">
-              <button type="submit" class="btn btn-danger btn-sm">Disconnect All</button>
+        <div class="integration-body">
+          <% if (granola.status === 'connected') { %>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+              Your agent can search your Granola meeting notes, get transcripts, and query across meetings.
+            </p>
+            <form method="POST" action="/integrations/granola/disconnect" onsubmit="return confirm('Disconnect Granola?')">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+            </form>
+          <% } else { %>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+              Connect your Granola account to let your agent search meeting notes, retrieve transcripts, and follow up on action items. Requires a Granola Business or Enterprise plan.
+            </p>
+            <% if (granola.error_message) { %>
+              <p style="color: var(--danger); font-size: 13px; margin-bottom: 8px;"><%= granola.error_message %></p>
+            <% } %>
+            <form method="POST" action="/integrations/granola/connect">
+              <button type="submit" class="btn btn-sm">Connect Granola</button>
             </form>
           <% } %>
-
-          <!-- AuthKit opens a full-screen iframe overlay via JS -->
         </div>
       </details>
-      <% } %>
 
     </div><!-- /integration-grid -->
   </div>
@@ -784,10 +767,10 @@
   renderTags();
 })();
 
-// Gmail email rules — tiered checkboxes
+// Gmail email rules — radio policy
 (function () {
-  var checkboxes = document.querySelectorAll(".gmail-tier-checkbox");
-  if (!checkboxes.length) return;
+  var radios = document.querySelectorAll(".gmail-policy-radio");
+  if (!radios.length) return;
 
   var domainsGroup = document.getElementById("gmail-domains-group");
   var addressesGroup = document.getElementById("gmail-addresses-group");
@@ -796,13 +779,13 @@
   var tagsContainer = document.getElementById("gmail-address-tags");
   var hiddenInput = document.getElementById("gmail_filter_addresses_hidden");
 
-  var addresses = <%= JSON.stringify((typeof tierAddresses !== 'undefined' && tierAddresses.addresses) || []) %>;
+  var addresses = <%= JSON.stringify((typeof gmailEmailPolicy !== 'undefined' && gmailEmailPolicy.addresses) || []) %>;
 
   function updateGmailVisibility() {
-    var domainsChecked = document.querySelector('.gmail-tier-checkbox[data-tier="domains"]');
-    var addressesChecked = document.querySelector('.gmail-tier-checkbox[data-tier="addresses"]');
-    domainsGroup.style.display = domainsChecked && domainsChecked.checked ? "block" : "none";
-    addressesGroup.style.display = addressesChecked && addressesChecked.checked ? "block" : "none";
+    var selected = document.querySelector('.gmail-policy-radio:checked');
+    var policy = selected ? selected.value : "known";
+    domainsGroup.style.display = policy === "domains" ? "block" : "none";
+    addressesGroup.style.display = policy === "addresses" ? "block" : "none";
   }
 
   function renderGmailTags() {
@@ -839,111 +822,12 @@
   addressInput.addEventListener("keydown", function (e) {
     if (e.key === "Enter") { e.preventDefault(); addGmailAddress(); }
   });
-  checkboxes.forEach(function (cb) {
-    cb.addEventListener("change", updateGmailVisibility);
+  radios.forEach(function (r) {
+    r.addEventListener("change", updateGmailVisibility);
   });
 
   updateGmailVisibility();
   renderGmailTags();
 })();
 
-// --- One (AuthKit via Pica) ---
-// Replicates @picahq/authkit SDK behavior: opens a full-screen iframe to
-// authkit.picaos.com with our link-token endpoint encoded in the URL.
-(function () {
-  var connectBtn = document.getElementById("one-connect-btn");
-  if (!connectBtn) return;
-
-  var AUTHKIT_BASE = "https://authkit.picaos.com";
-
-  function closeAuthKit() {
-    var el = document.getElementById("event-link");
-    if (el) el.remove();
-  }
-
-  connectBtn.addEventListener("click", function () {
-    // If already open, close
-    if (document.getElementById("event-link")) {
-      closeAuthKit();
-      return;
-    }
-
-    // Build the config the AuthKit iframe expects
-    var config = {
-      linkTokenEndpoint: window.location.origin + "/integrations/one/link-token",
-      linkHeaders: {},
-      appTheme: "light",
-    };
-
-    var encoded = btoa(JSON.stringify(config));
-    var url = AUTHKIT_BASE + "?data=" + encodeURIComponent(encoded);
-
-    // Create full-screen iframe overlay (matching SDK behavior)
-    var iframe = document.createElement("iframe");
-    iframe.id = "event-link";
-    iframe.src = url;
-    iframe.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999;border:none;background:transparent;";
-    iframe.style.display = "none";
-    iframe.style.visibility = "hidden";
-    document.body.appendChild(iframe);
-
-    iframe.onload = function () {
-      setTimeout(function () {
-        iframe.style.display = "block";
-        iframe.style.visibility = "visible";
-      }, 100);
-    };
-  });
-
-  // Listen for AuthKit postMessage events
-  window.addEventListener("message", function (event) {
-    if (!event.data || typeof event.data !== "object" || !event.data.messageType) return;
-
-    var type = event.data.messageType;
-    var message = event.data.message;
-
-    if (type === "LINK_SUCCESS") {
-      closeAuthKit();
-
-      // Send connection data to our backend, then reload
-      var body = "key=" + encodeURIComponent(message.key || "") +
-                 "&platform=" + encodeURIComponent(message.platform || "") +
-                 "&name=" + encodeURIComponent(message.name || "");
-
-      fetch("/integrations/one/connection", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body,
-      }).then(function () {
-        window.location.href = "/integrations?flash=Platform+connected";
-      }).catch(function () {
-        window.location.reload();
-      });
-    } else if (type === "LINK_ERROR") {
-      closeAuthKit();
-      connectBtn.textContent = "Connect a Platform";
-      alert("Connection failed: " + (message || "Unknown error"));
-    } else if (type === "EXIT_EVENT_LINK") {
-      closeAuthKit();
-    }
-  });
-})();
 </script>
-<style>
-.one-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  background: var(--tag-bg);
-  color: var(--accent);
-  border: 1px solid #E9D5FF;
-  border-radius: 12px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.one-pill:hover { background: #E9D5FF; }
-.one-pill-x { font-size: 15px; line-height: 1; opacity: 0.6; }
-.one-pill:hover .one-pill-x { opacity: 1; }
-</style>
