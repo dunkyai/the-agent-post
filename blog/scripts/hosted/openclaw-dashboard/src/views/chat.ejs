@@ -30,6 +30,9 @@
       <form class="chat-input-form" id="chatForm" style="position: relative;">
         <div id="shortcutDropdown" style="display:none; position:absolute; bottom:100%; left:0; right:60px; background:var(--bg, #fff); border:1px solid var(--border, #e0e0e0); border-radius:8px; box-shadow:0 -4px 16px rgba(0,0,0,0.1); max-height:200px; overflow-y:auto; z-index:100; margin-bottom:4px;"></div>
         <input type="text" id="chatInput" placeholder="Type a message... (;shortcut for quick actions)" autocomplete="off" required>
+        <button type="button" id="micBtn" class="btn mic-btn" title="Record audio message">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </button>
         <button type="submit" class="btn" id="chatSend">Send</button>
       </form>
       <div id="usageIndicator" style="text-align: center; font-size: 11px; color: var(--text-secondary); padding: 4px 0 0;"></div>
@@ -142,8 +145,107 @@
   });
 })();
 </script>
+<script>
+(function() {
+  var micBtn = document.getElementById('micBtn');
+  var chatInput = document.getElementById('chatInput');
+  var chatForm = document.getElementById('chatForm');
+  var mediaRecorder = null;
+  var audioChunks = [];
+  var recording = false;
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    micBtn.style.display = 'none';
+    return;
+  }
+
+  micBtn.addEventListener('click', async function() {
+    if (recording) {
+      // Stop recording
+      mediaRecorder.stop();
+      return;
+    }
+
+    try {
+      var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunks = [];
+      mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+      mediaRecorder.ondataavailable = function(e) {
+        if (e.data.size > 0) audioChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = async function() {
+        recording = false;
+        micBtn.classList.remove('mic-recording');
+        micBtn.title = 'Record audio message';
+        stream.getTracks().forEach(function(t) { t.stop(); });
+
+        if (audioChunks.length === 0) return;
+
+        var blob = new Blob(audioChunks, { type: 'audio/webm' });
+        var formData = new FormData();
+        formData.append('audio', blob, 'recording.webm');
+
+        chatInput.disabled = true;
+        chatInput.placeholder = 'Transcribing audio...';
+        micBtn.disabled = true;
+
+        try {
+          var res = await fetch('/chat/audio', { method: 'POST', body: formData });
+          var data = await res.json();
+          if (data.ok && data.transcript) {
+            // Show transcribed text and trigger polling (chat.js handles it)
+            chatInput.value = '';
+            chatInput.placeholder = 'Type a message... (;shortcut for quick actions)';
+            // Dispatch the same event chat.js listens for
+            var msgEvent = new CustomEvent('audioMessageSent', { detail: { taskId: data.taskId, transcript: data.transcript } });
+            document.dispatchEvent(msgEvent);
+            // Add user message to chat (same as chat.js does on submit)
+            if (window.addUserMessage) window.addUserMessage(data.transcript);
+            if (window.startPolling) window.startPolling(data.taskId);
+          } else {
+            alert(data.error || 'Failed to transcribe audio');
+          }
+        } catch (err) {
+          alert('Failed to send audio: ' + err.message);
+        } finally {
+          chatInput.disabled = false;
+          chatInput.placeholder = 'Type a message... (;shortcut for quick actions)';
+          micBtn.disabled = false;
+        }
+      };
+
+      mediaRecorder.start();
+      recording = true;
+      micBtn.classList.add('mic-recording');
+      micBtn.title = 'Stop recording';
+    } catch (err) {
+      alert('Microphone access denied. Please allow microphone access and try again.');
+    }
+  });
+})();
+</script>
 <style>
 .sc-item:hover, .sc-selected { background: var(--bg-secondary, #f5f5f5); }
 .sc-item:last-child { border-bottom: none !important; }
+.mic-btn {
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border, #e0e0e0);
+  flex-shrink: 0;
+}
+.mic-btn:hover { color: var(--fg); background: var(--bg-secondary, #f5f5f5); }
+.mic-recording {
+  color: #DC2626 !important;
+  background: #FEE2E2 !important;
+  border-color: #DC2626 !important;
+  animation: mic-pulse 1s infinite;
+}
+@keyframes mic-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
 </style>
 <%- include('partials/foot') %>
