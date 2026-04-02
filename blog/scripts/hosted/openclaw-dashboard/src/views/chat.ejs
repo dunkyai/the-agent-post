@@ -221,7 +221,12 @@
       micBtn.classList.add('mic-recording');
       micBtn.title = 'Stop recording';
     } catch (err) {
-      alert('Microphone access denied. Please allow microphone access and try again.');
+      console.error('Mic error:', err);
+      var chatError = document.getElementById('chatError');
+      if (chatError) {
+        chatError.textContent = 'Microphone access denied. Click the lock icon in the address bar → Microphone → Allow, then refresh.';
+        chatError.style.color = 'var(--danger, #DC2626)';
+      }
     }
   });
 })();
