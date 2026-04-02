@@ -81,40 +81,34 @@ router.get("/integrations", async (req: Request, res: Response) => {
     } catch {}
   }
 
-  // Gmail email rules + polling settings — tiered format
-  interface GmailTier { type: string; enabled: boolean; reply_mode: string; domains?: string[]; addresses?: string[] }
-  let gmailTiers: GmailTier[] = [
-    { type: "everyone", enabled: true, reply_mode: "draft" },
-    { type: "domains", enabled: false, reply_mode: "draft", domains: [] },
-    { type: "addresses", enabled: false, reply_mode: "draft", addresses: [] },
-  ];
+  // Gmail email policy — simplified single-policy format
+  interface GmailEmailPolicy { policy: string; reply_mode: string; domains: string[]; addresses: string[] }
+  let gmailEmailPolicy: GmailEmailPolicy = { policy: "known", reply_mode: "draft", domains: [], addresses: [] };
   try {
-    const raw = JSON.parse(getSetting("gmail_email_rules") || "{}");
-    if (raw.tiers && Array.isArray(raw.tiers)) {
-      gmailTiers = raw.tiers;
+    const raw = JSON.parse(getSetting("gmail_email_policy") || "{}");
+    if (raw.policy) {
+      gmailEmailPolicy = raw;
     } else {
-      // Migrate old format
-      const oldReplyMode = getSetting("gmail_reply_mode") || "draft";
-      if (raw.mode === "domains") {
-        gmailTiers = [
-          { type: "everyone", enabled: false, reply_mode: oldReplyMode },
-          { type: "domains", enabled: true, reply_mode: oldReplyMode, domains: raw.domains || [] },
-          { type: "addresses", enabled: false, reply_mode: oldReplyMode, addresses: [] },
-        ];
-      } else if (raw.mode === "addresses") {
-        gmailTiers = [
-          { type: "everyone", enabled: false, reply_mode: oldReplyMode },
-          { type: "domains", enabled: false, reply_mode: oldReplyMode, domains: [] },
-          { type: "addresses", enabled: true, reply_mode: oldReplyMode, addresses: raw.addresses || [] },
-        ];
-      } else {
-        // mode === "all" or unset
-        gmailTiers[0].reply_mode = oldReplyMode;
+      // Migrate from old tiered format
+      const oldRules = JSON.parse(getSetting("gmail_email_rules") || "{}");
+      const oldPolicy = getSetting("gmail_sender_policy") || "known";
+      if (oldRules.tiers) {
+        const everyone = oldRules.tiers.find((t: any) => t.type === "everyone");
+        const domains = oldRules.tiers.find((t: any) => t.type === "domains");
+        const addresses = oldRules.tiers.find((t: any) => t.type === "addresses");
+        if (addresses?.enabled && addresses.addresses?.length) {
+          gmailEmailPolicy = { policy: "addresses", reply_mode: addresses.reply_mode || "draft", domains: domains?.domains || [], addresses: addresses.addresses };
+        } else if (domains?.enabled && domains.domains?.length) {
+          gmailEmailPolicy = { policy: "domains", reply_mode: domains.reply_mode || "draft", domains: domains.domains, addresses: [] };
+        } else if (everyone?.enabled) {
+          gmailEmailPolicy = { policy: oldPolicy === "everyone" ? "everyone" : "known", reply_mode: everyone.reply_mode || "draft", domains: [], addresses: [] };
+        } else {
+          gmailEmailPolicy = { policy: "disabled", reply_mode: "draft", domains: [], addresses: [] };
+        }
       }
     }
   } catch {}
   const gmailPollInterval = getSetting("gmail_poll_interval") || "0";
-  const gmailSenderPolicy = getSetting("gmail_sender_policy") || "known";
 
   res.render("integrations", {
     slack: {
@@ -131,9 +125,8 @@ router.get("/integrations", async (req: Request, res: Response) => {
       filter_addresses: emailFilterAddresses,
     },
     googleAccounts: googleAccountsList,
-    gmailTiers,
+    gmailEmailPolicy,
     gmailPollInterval,
-    gmailSenderPolicy,
     supabase: {
       ...(integrationMap["supabase"] || { status: "disconnected", error_message: null }),
       project_url: supabaseProjectUrl,
@@ -470,22 +463,15 @@ router.post("/integrations/supabase/permissions", (req: Request, res: Response) 
 
 router.post("/integrations/google/email-rules", (req: Request, res: Response) => {
   try {
-    const validReplyModes = ["draft", "send"];
-    const sanitizeReplyMode = (v: string) => validReplyModes.includes(v) ? v : "draft";
+    const validPolicies = ["everyone", "known", "domains", "addresses", "disabled"];
+    const policy = validPolicies.includes(req.body.policy) ? req.body.policy : "known";
+    const reply_mode = req.body.reply_mode === "send" ? "send" : "draft";
 
-    // Parse tier settings
-    const everyoneEnabled = req.body.tier_everyone_enabled === "on";
-    const everyoneReplyMode = sanitizeReplyMode(req.body.tier_everyone_reply_mode);
-
-    const domainsEnabled = req.body.tier_domains_enabled === "on";
-    const domainsReplyMode = sanitizeReplyMode(req.body.tier_domains_reply_mode);
     let domains: string[] = [];
     if (typeof req.body.filter_domains === "string") {
       domains = req.body.filter_domains.split(",").map((d: string) => d.trim().toLowerCase().replace(/^@/, "")).filter(Boolean);
     }
 
-    const addressesEnabled = req.body.tier_addresses_enabled === "on";
-    const addressesReplyMode = sanitizeReplyMode(req.body.tier_addresses_reply_mode);
     let addresses: string[] = [];
     if (typeof req.body.filter_addresses === "string") {
       addresses = req.body.filter_addresses.split(",").map((a: string) => a.trim().toLowerCase()).filter(Boolean);
@@ -493,18 +479,7 @@ router.post("/integrations/google/email-rules", (req: Request, res: Response) =>
       addresses = req.body.filter_addresses.map((a: string) => a.trim().toLowerCase()).filter(Boolean);
     }
 
-    const tiers = [
-      { type: "everyone", enabled: everyoneEnabled, reply_mode: everyoneReplyMode },
-      { type: "domains", enabled: domainsEnabled, reply_mode: domainsReplyMode, domains },
-      { type: "addresses", enabled: addressesEnabled, reply_mode: addressesReplyMode, addresses },
-    ];
-
-    setSetting("gmail_email_rules", JSON.stringify({ tiers }));
-
-    // Save sender policy
-    const validPolicies = ["everyone", "known", "domain"];
-    const senderPolicy = req.body.sender_policy;
-    setSetting("gmail_sender_policy", validPolicies.includes(senderPolicy) ? senderPolicy : "known");
+    setSetting("gmail_email_policy", JSON.stringify({ policy, reply_mode, domains, addresses }));
 
     // Save polling settings
     const { poll_interval } = req.body;

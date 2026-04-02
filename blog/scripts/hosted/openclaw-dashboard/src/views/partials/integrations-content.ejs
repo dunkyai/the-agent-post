@@ -170,78 +170,60 @@
           <% const hasGmail = googleAccounts.some(a => a.services.includes('gmail')); %>
           <% if (hasGmail) { %>
             <%
-              const tierEveryone = gmailTiers.find(t => t.type === 'everyone') || { enabled: true, reply_mode: 'draft' };
-              const tierDomains = gmailTiers.find(t => t.type === 'domains') || { enabled: false, reply_mode: 'draft', domains: [] };
-              const tierAddresses = gmailTiers.find(t => t.type === 'addresses') || { enabled: false, reply_mode: 'draft', addresses: [] };
+              const gmailPolicy = gmailEmailPolicy || { policy: 'known', reply_mode: 'draft', domains: [], addresses: [] };
             %>
             <form method="POST" action="/integrations/google/email-rules" style="padding: 12px 0; border-bottom: 1px solid var(--rule-light);">
               <div class="form-group">
-                <label><strong>Gmail Email Rules</strong></label>
-                <div class="hint" style="margin-bottom: 8px;">Control who your agent responds to and how. Enable multiple tiers &mdash; the most specific match wins.</div>
+                <label><strong>Who should your agent respond to?</strong></label>
+                <div class="hint" style="margin-bottom: 10px;">Choose who gets a response. Emails from anyone else are ignored.</div>
 
-                <div style="display: flex; flex-direction: column; gap: 12px;">
-                  <!-- Everyone tier -->
-                  <div style="display: flex; align-items: center; gap: 8px; font-size: 14px;">
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1;">
-                      <input type="checkbox" name="tier_everyone_enabled" class="gmail-tier-checkbox" data-tier="everyone" <%= tierEveryone.enabled ? 'checked' : '' %>>
-                      <span>Everyone</span>
-                    </label>
-                    <select name="tier_everyone_reply_mode" style="font-size: 13px; padding: 4px 8px;">
-                      <option value="draft" <%= tierEveryone.reply_mode !== 'send' ? 'selected' : '' %>>Create draft</option>
-                      <option value="send" <%= tierEveryone.reply_mode === 'send' ? 'selected' : '' %>>Send immediately</option>
-                    </select>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                  <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="radio" name="policy" value="everyone" <%= gmailPolicy.policy === 'everyone' ? 'checked' : '' %> class="gmail-policy-radio" style="margin-top: 3px;">
+                    <div><strong>Everyone</strong><br><span style="font-size: 12px; color: var(--text-secondary);">Respond to all incoming emails</span></div>
+                  </label>
+
+                  <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="radio" name="policy" value="known" <%= gmailPolicy.policy === 'known' ? 'checked' : '' %> class="gmail-policy-radio" style="margin-top: 3px;">
+                    <div><strong>Known senders only</strong><br><span style="font-size: 12px; color: var(--text-secondary);">Only people from previous email threads. Cold emails are ignored.</span></div>
+                  </label>
+
+                  <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="radio" name="policy" value="domains" <%= gmailPolicy.policy === 'domains' ? 'checked' : '' %> class="gmail-policy-radio" style="margin-top: 3px;">
+                    <div><strong>Specific domains</strong><br><span style="font-size: 12px; color: var(--text-secondary);">Only emails from these domains</span></div>
+                  </label>
+                  <div id="gmail-domains-group" class="form-group" style="display: none; margin: 0 0 0 28px;">
+                    <input type="text" name="filter_domains" value="<%= (gmailPolicy.domains || []).join(', ') %>" placeholder="e.g. hustlefund.com, example.com" style="font-size: 13px;">
+                    <div class="hint">Comma-separated domains.</div>
                   </div>
 
-                  <!-- Domains tier -->
-                  <div>
-                    <div style="display: flex; align-items: center; gap: 8px; font-size: 14px;">
-                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1;">
-                        <input type="checkbox" name="tier_domains_enabled" class="gmail-tier-checkbox" data-tier="domains" <%= tierDomains.enabled ? 'checked' : '' %>>
-                        <span>All from the domain(s)</span>
-                      </label>
-                      <select name="tier_domains_reply_mode" style="font-size: 13px; padding: 4px 8px;">
-                        <option value="draft" <%= tierDomains.reply_mode !== 'send' ? 'selected' : '' %>>Create draft</option>
-                        <option value="send" <%= tierDomains.reply_mode === 'send' ? 'selected' : '' %>>Send immediately</option>
-                      </select>
+                  <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="radio" name="policy" value="addresses" <%= gmailPolicy.policy === 'addresses' ? 'checked' : '' %> class="gmail-policy-radio" style="margin-top: 3px;">
+                    <div><strong>Specific people</strong><br><span style="font-size: 12px; color: var(--text-secondary);">Only emails from these addresses</span></div>
+                  </label>
+                  <div id="gmail-addresses-group" style="display: none; margin: 0 0 0 28px;">
+                    <div style="display: flex; gap: 8px;">
+                      <input type="email" id="gmail_address_input" placeholder="alice@example.com" style="flex: 1; font-size: 13px;">
+                      <button type="button" id="gmail-add-address-btn" class="btn btn-sm" style="padding: 6px 12px;">Add</button>
                     </div>
-                    <div id="gmail-domains-group" class="form-group" style="display: none; margin: 8px 0 0 28px;">
-                      <input type="text" id="gmail_filter_domains" name="filter_domains" value="<%= (tierDomains.domains || []).join(', ') %>" placeholder="e.g. hustlefund.com, example.com" style="font-size: 13px;">
-                      <div class="hint">Comma-separated domains.</div>
-                    </div>
+                    <div id="gmail-address-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;"></div>
+                    <input type="hidden" id="gmail_filter_addresses_hidden" name="filter_addresses" value="">
                   </div>
 
-                  <!-- Addresses tier -->
-                  <div>
-                    <div style="display: flex; align-items: center; gap: 8px; font-size: 14px;">
-                      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1;">
-                        <input type="checkbox" name="tier_addresses_enabled" class="gmail-tier-checkbox" data-tier="addresses" <%= tierAddresses.enabled ? 'checked' : '' %>>
-                        <span>Anyone on this list</span>
-                      </label>
-                      <select name="tier_addresses_reply_mode" style="font-size: 13px; padding: 4px 8px;">
-                        <option value="draft" <%= tierAddresses.reply_mode !== 'send' ? 'selected' : '' %>>Create draft</option>
-                        <option value="send" <%= tierAddresses.reply_mode === 'send' ? 'selected' : '' %>>Send immediately</option>
-                      </select>
-                    </div>
-                    <div id="gmail-addresses-group" style="display: none; margin: 8px 0 0 28px;">
-                      <div style="display: flex; gap: 8px;">
-                        <input type="email" id="gmail_address_input" placeholder="alice@example.com" style="flex: 1; font-size: 13px;">
-                        <button type="button" id="gmail-add-address-btn" class="btn btn-sm" style="padding: 6px 12px;">Add</button>
-                      </div>
-                      <div id="gmail-address-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;"></div>
-                      <input type="hidden" id="gmail_filter_addresses_hidden" name="filter_addresses" value="">
-                    </div>
-                  </div>
+                  <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer;">
+                    <input type="radio" name="policy" value="disabled" <%= gmailPolicy.policy === 'disabled' ? 'checked' : '' %> class="gmail-policy-radio" style="margin-top: 3px;">
+                    <div><strong>Nobody</strong><br><span style="font-size: 12px; color: var(--text-secondary);">Don't respond to any emails (monitoring only)</span></div>
+                  </label>
                 </div>
               </div>
 
               <div class="form-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rule-light);">
-                <label for="gmail_sender_policy">Allow emails from</label>
-                <select id="gmail_sender_policy" name="sender_policy">
-                  <option value="everyone" <%= gmailSenderPolicy === 'everyone' ? 'selected' : '' %>>Everyone</option>
-                  <option value="known" <%= gmailSenderPolicy === 'known' || !gmailSenderPolicy ? 'selected' : '' %>>Known senders only</option>
-                  <option value="domain" <%= gmailSenderPolicy === 'domain' ? 'selected' : '' %>>My domain only</option>
+                <label>When responding</label>
+                <select name="reply_mode" style="font-size: 13px; padding: 4px 8px;">
+                  <option value="draft" <%= gmailPolicy.reply_mode !== 'send' ? 'selected' : '' %>>Create draft</option>
+                  <option value="send" <%= gmailPolicy.reply_mode === 'send' ? 'selected' : '' %>>Send immediately</option>
                 </select>
-                <div class="hint">Controls which emails your agent processes. "Known senders" = people from previous email threads. "My domain" = same domain as your connected Gmail. Specific domains and addresses above always get through regardless of this setting.</div>
+                <div class="hint">Drafts let you review before sending. "Send immediately" auto-sends the response.</div>
               </div>
 
               <div class="form-group" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rule-light);">
@@ -785,10 +767,10 @@
   renderTags();
 })();
 
-// Gmail email rules — tiered checkboxes
+// Gmail email rules — radio policy
 (function () {
-  var checkboxes = document.querySelectorAll(".gmail-tier-checkbox");
-  if (!checkboxes.length) return;
+  var radios = document.querySelectorAll(".gmail-policy-radio");
+  if (!radios.length) return;
 
   var domainsGroup = document.getElementById("gmail-domains-group");
   var addressesGroup = document.getElementById("gmail-addresses-group");
@@ -797,13 +779,13 @@
   var tagsContainer = document.getElementById("gmail-address-tags");
   var hiddenInput = document.getElementById("gmail_filter_addresses_hidden");
 
-  var addresses = <%= JSON.stringify((typeof tierAddresses !== 'undefined' && tierAddresses.addresses) || []) %>;
+  var addresses = <%= JSON.stringify((typeof gmailEmailPolicy !== 'undefined' && gmailEmailPolicy.addresses) || []) %>;
 
   function updateGmailVisibility() {
-    var domainsChecked = document.querySelector('.gmail-tier-checkbox[data-tier="domains"]');
-    var addressesChecked = document.querySelector('.gmail-tier-checkbox[data-tier="addresses"]');
-    domainsGroup.style.display = domainsChecked && domainsChecked.checked ? "block" : "none";
-    addressesGroup.style.display = addressesChecked && addressesChecked.checked ? "block" : "none";
+    var selected = document.querySelector('.gmail-policy-radio:checked');
+    var policy = selected ? selected.value : "known";
+    domainsGroup.style.display = policy === "domains" ? "block" : "none";
+    addressesGroup.style.display = policy === "addresses" ? "block" : "none";
   }
 
   function renderGmailTags() {
@@ -840,8 +822,8 @@
   addressInput.addEventListener("keydown", function (e) {
     if (e.key === "Enter") { e.preventDefault(); addGmailAddress(); }
   });
-  checkboxes.forEach(function (cb) {
-    cb.addEventListener("change", updateGmailVisibility);
+  radios.forEach(function (r) {
+    r.addEventListener("change", updateGmailVisibility);
   });
 
   updateGmailVisibility();
