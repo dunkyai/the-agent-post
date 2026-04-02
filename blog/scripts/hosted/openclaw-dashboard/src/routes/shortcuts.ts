@@ -63,6 +63,16 @@ router.post("/shortcuts/:id", (req: Request, res: Response) => {
   }
 });
 
+// API endpoint for autocomplete
+router.get("/shortcuts/api", (req: Request, res: Response) => {
+  const shortcuts = getAllShortcuts().map((s) => ({
+    trigger: s.trigger,
+    name: s.name,
+    description: s.description,
+  }));
+  res.json({ shortcuts });
+});
+
 router.post("/shortcuts/:id/delete", (req: Request, res: Response) => {
   const id = parseInt(req.params.id as string, 10);
   if (isNaN(id) || !getShortcut(id)) {

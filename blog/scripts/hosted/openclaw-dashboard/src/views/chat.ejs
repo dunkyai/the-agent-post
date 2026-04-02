@@ -27,8 +27,9 @@
         <% } %>
       </div>
       <div class="chat-error" id="chatError"></div>
-      <form class="chat-input-form" id="chatForm">
-        <input type="text" id="chatInput" placeholder="Type a message..." autocomplete="off" required>
+      <form class="chat-input-form" id="chatForm" style="position: relative;">
+        <div id="shortcutDropdown" style="display:none; position:absolute; bottom:100%; left:0; right:60px; background:var(--bg, #fff); border:1px solid var(--border, #e0e0e0); border-radius:8px; box-shadow:0 -4px 16px rgba(0,0,0,0.1); max-height:200px; overflow-y:auto; z-index:100; margin-bottom:4px;"></div>
+        <input type="text" id="chatInput" placeholder="Type a message... (;shortcut for quick actions)" autocomplete="off" required>
         <button type="submit" class="btn" id="chatSend">Send</button>
       </form>
       <div id="usageIndicator" style="text-align: center; font-size: 11px; color: var(--text-secondary); padding: 4px 0 0;"></div>
@@ -54,4 +55,95 @@
   }).catch(function() {});
 })();
 </script>
+<script>
+(function() {
+  var input = document.getElementById('chatInput');
+  var dropdown = document.getElementById('shortcutDropdown');
+  var shortcuts = [];
+  var selectedIndex = -1;
+
+  // Fetch shortcuts once
+  fetch('/shortcuts/api').then(function(r) { return r.json(); }).then(function(d) {
+    shortcuts = d.shortcuts || [];
+  }).catch(function() {});
+
+  function renderDropdown(filtered) {
+    if (!filtered.length) { dropdown.style.display = 'none'; return; }
+    selectedIndex = 0;
+    dropdown.style.display = 'block';
+    dropdown.innerHTML = filtered.map(function(s, i) {
+      return '<div class="sc-item' + (i === 0 ? ' sc-selected' : '') + '" data-trigger="' + s.trigger + '" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border, #eee);">'
+        + '<div style="font-weight:500;font-size:13px;"><span style="color:var(--accent);">;</span>' + escapeHtml(s.trigger) + ' <span style="color:var(--text-secondary);font-weight:400;font-size:12px;">— ' + escapeHtml(s.name) + '</span></div>'
+        + (s.description ? '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">' + escapeHtml(s.description) + '</div>' : '')
+        + '</div>';
+    }).join('');
+  }
+
+  function escapeHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+  function selectItem(trigger) {
+    var val = input.value;
+    var semiIdx = val.lastIndexOf(';');
+    input.value = ';' + trigger + ' ';
+    dropdown.style.display = 'none';
+    input.focus();
+  }
+
+  function updateHighlight() {
+    var items = dropdown.querySelectorAll('.sc-item');
+    items.forEach(function(el, i) {
+      el.classList.toggle('sc-selected', i === selectedIndex);
+    });
+  }
+
+  input.addEventListener('input', function() {
+    var val = this.value;
+    var semiIdx = val.lastIndexOf(';');
+    if (semiIdx === -1 || semiIdx !== 0) { dropdown.style.display = 'none'; return; }
+    var query = val.slice(semiIdx + 1).toLowerCase().split(' ')[0];
+    if (val.indexOf(' ') > semiIdx + 1) { dropdown.style.display = 'none'; return; }
+    var filtered = shortcuts.filter(function(s) {
+      return s.trigger.toLowerCase().indexOf(query) === 0
+        || s.name.toLowerCase().indexOf(query) !== -1;
+    });
+    renderDropdown(filtered);
+  });
+
+  input.addEventListener('keydown', function(e) {
+    if (dropdown.style.display === 'none') return;
+    var items = dropdown.querySelectorAll('.sc-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+      updateHighlight();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      selectedIndex = Math.max(selectedIndex - 1, 0);
+      updateHighlight();
+    } else if (e.key === 'Tab' || e.key === 'Enter') {
+      if (selectedIndex >= 0 && selectedIndex < items.length) {
+        e.preventDefault();
+        selectItem(items[selectedIndex].getAttribute('data-trigger'));
+      }
+    } else if (e.key === 'Escape') {
+      dropdown.style.display = 'none';
+    }
+  });
+
+  dropdown.addEventListener('click', function(e) {
+    var item = e.target.closest('.sc-item');
+    if (item) selectItem(item.getAttribute('data-trigger'));
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!dropdown.contains(e.target) && e.target !== input) {
+      dropdown.style.display = 'none';
+    }
+  });
+})();
+</script>
+<style>
+.sc-item:hover, .sc-selected { background: var(--bg-secondary, #f5f5f5); }
+.sc-item:last-child { border-bottom: none !important; }
+</style>
 <%- include('partials/foot') %>
