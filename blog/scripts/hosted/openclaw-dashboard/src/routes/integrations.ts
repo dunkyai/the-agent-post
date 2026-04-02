@@ -11,7 +11,6 @@ import { startBuffer, stopBuffer, testBufferConnection, bufferListChannels, isBu
 import { startLuma, stopLuma, testLumaConnection } from "../services/luma";
 import { buildTwitterOAuthUrl, stopTwitter } from "../services/twitter";
 import { startBeehiiv, stopBeehiiv, testBeehiivConnection, fetchTemplates } from "../services/beehiiv";
-import { isOneRunning, startOne, stopOne, getOneConnections, getAuthKitData, fetchConnections } from "../services/one";
 import { buildGranolaOAuthUrl, stopGranola, isGranolaRunning } from "../services/granola";
 
 const router = Router();
@@ -208,10 +207,6 @@ router.get("/integrations", async (req: Request, res: Response) => {
       }
       return base;
     })(),
-    one: {
-      configured: !!process.env.ONE_SECRET,
-      connections: getOneConnections(),
-    },
     granola: integrationMap["granola"] || { status: "disconnected", error_message: null },
     memories: getAllMemories(),
     flash: req.query.flash || null,
@@ -815,107 +810,6 @@ router.post("/integrations/beehiiv/disconnect", (req: Request, res: Response) =>
   stopBeehiiv();
   upsertIntegration("beehiiv", "{}", "disconnected");
   res.redirect(303, "/integrations?flash=Beehiiv+disconnected");
-});
-
-// --- One (withone.ai / Pica) ---
-
-// CORS preflight for AuthKit iframe (authkit.picaos.com → auth.withone.ai calls our endpoint)
-const AUTHKIT_ORIGINS = ["https://authkit.picaos.com", "https://auth.withone.ai"];
-router.options("/integrations/one/link-token", (req: Request, res: Response) => {
-  const origin = req.headers.origin || "";
-  if (AUTHKIT_ORIGINS.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.setHeader("Access-Control-Max-Age", "86400");
-  res.status(204).end();
-});
-
-router.post("/integrations/one/link-token", async (req: Request, res: Response) => {
-  const origin = req.headers.origin || "";
-  if (AUTHKIT_ORIGINS.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-
-  try {
-    const result = await getAuthKitData();
-    if (result.error) {
-      res.status(400).json({ error: result.error });
-    } else {
-      res.json(result);
-    }
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to get AuthKit data";
-    res.status(500).json({ error: message });
-  }
-});
-
-router.post("/integrations/one/connection", async (req: Request, res: Response) => {
-  try {
-    // After AuthKit LINK_SUCCESS, refresh connections from Pica
-    const connections = await fetchConnections();
-    if (connections.length === 0) {
-      // If vault fetch returned nothing, try using the connection data sent from frontend
-      const connData = req.body;
-      if (connData && connData.key && connData.platform) {
-        const single = [{
-          connection_key: connData.key,
-          platform: connData.platform,
-          display_name: connData.name || connData.platform,
-        }];
-        const config = encrypt(JSON.stringify({ connections: single }));
-        upsertIntegration("one", config, "connected");
-        startOne({ connections: single });
-        res.redirect(303, "/integrations?flash=Connected:+" + encodeURIComponent(connData.platform));
-        return;
-      }
-      res.redirect(303, "/integrations?flash=No+connections+found");
-      return;
-    }
-
-    const config = encrypt(JSON.stringify({ connections }));
-    upsertIntegration("one", config, "connected");
-    startOne({ connections });
-
-    const platforms = connections.map((c) => c.platform).join(", ");
-    res.redirect(303, "/integrations?flash=Connected:+" + encodeURIComponent(platforms));
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to save connection";
-    res.redirect(303, "/integrations?flash=One+error:+" + encodeURIComponent(message));
-  }
-});
-
-router.post("/integrations/one/disconnect-platform", async (req: Request, res: Response) => {
-  const { platform } = req.body;
-  if (!platform) {
-    res.redirect(303, "/integrations?flash=Missing+platform");
-    return;
-  }
-
-  try {
-    const current = getOneConnections();
-    const filtered = current.filter((c) => c.platform !== platform);
-
-    if (filtered.length === 0) {
-      stopOne();
-      deleteIntegration("one");
-    } else {
-      const config = encrypt(JSON.stringify({ connections: filtered }));
-      upsertIntegration("one", config, "connected");
-      startOne({ connections: filtered });
-    }
-    res.redirect(303, "/integrations?flash=" + encodeURIComponent(`${platform} disconnected`));
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to disconnect";
-    res.redirect(303, "/integrations?flash=One+error:+" + encodeURIComponent(message));
-  }
-});
-
-router.post("/integrations/one/disconnect", (req: Request, res: Response) => {
-  stopOne();
-  deleteIntegration("one");
-  res.redirect(303, "/integrations?flash=All+One+integrations+disconnected");
 });
 
 // --- Granola ---

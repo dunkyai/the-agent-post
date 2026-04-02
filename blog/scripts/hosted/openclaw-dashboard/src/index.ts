@@ -174,19 +174,6 @@ async function reconnectIntegrations() {
     console.error("Failed to reconnect Beehiiv:", err instanceof Error ? err.message : err);
   }
 
-  // One (withone.ai)
-  try {
-    const one = getIntegration("one");
-    if (one && one.status === "connected") {
-      const config = JSON.parse(decrypt(one.config));
-      const { startOne } = require("./services/one");
-      startOne(config);
-      console.log(`One reconnected (${config.connections?.length || 0} platform(s))`);
-    }
-  } catch (err: unknown) {
-    console.error("Failed to reconnect One:", err instanceof Error ? err.message : err);
-  }
-
   // Granola
   try {
     const granola = getIntegration("granola");

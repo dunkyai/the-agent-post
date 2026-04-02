@@ -49,11 +49,6 @@ import {
   beehiivListTemplates, beehiivCreateDraft, beehiivListPosts, beehiivGetPost,
 } from "./beehiiv";
 import {
-  isOneRunning, getOneConnections, getOneConnectionPlatforms, getConnectionKeyForPlatform,
-  listConnections as oneListConnections, searchActions as oneSearchActions,
-  getActionKnowledge as oneGetActionKnowledge, executeAction as oneExecuteAction,
-} from "./one";
-import {
   isGranolaRunning,
   granolaListMeetings, granolaGetMeetings, granolaGetTranscript,
   granolaQueryMeetings, granolaListFolders,
@@ -1615,78 +1610,6 @@ async function executeBeehiivTool(toolName: string, input: any): Promise<string>
   }
 }
 
-// --- One (withone.ai) Meta-Tools ---
-
-const ONE_TOOLS = [
-  {
-    name: "one_list_connections",
-    description: "List all platforms the user has connected through One. Use this first to see what third-party services are available (e.g. HubSpot, Salesforce, Shopify, Zendesk, etc.).",
-    input_schema: { type: "object" as const, properties: {} },
-  },
-  {
-    name: "one_search_actions",
-    description: "Search for available actions on a connected platform. Use this after one_list_connections to discover what you can do with a specific platform (e.g. 'create contact' on HubSpot, 'list orders' on Shopify).",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        platform: { type: "string", description: "The platform name (e.g. 'hubspot', 'salesforce', 'shopify')" },
-        query: { type: "string", description: "What you want to do (e.g. 'create contact', 'list deals', 'search orders')" },
-      },
-      required: ["platform", "query"],
-    },
-  },
-  {
-    name: "one_get_action_knowledge",
-    description: "Get detailed information about a specific action — required parameters, expected request body, and endpoint details. Call this before executing an action to understand exactly what data is needed.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        action_id: { type: "string", description: "The action ID from one_search_actions results" },
-      },
-      required: ["action_id"],
-    },
-  },
-  {
-    name: "one_execute_action",
-    description: "Execute an action on a connected platform. Use one_get_action_knowledge first to understand the required parameters and request format.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        platform: { type: "string", description: "The platform name (must match a connected platform)" },
-        action_id: { type: "string", description: "The action ID from one_search_actions" },
-        method: { type: "string", enum: ["GET", "POST", "PUT", "PATCH", "DELETE"], description: "HTTP method for the action" },
-        path: { type: "string", description: "API path for the action (from action knowledge)" },
-        body: { type: "object", description: "Request body (for POST/PUT/PATCH)" },
-      },
-      required: ["platform", "action_id", "method", "path"],
-    },
-  },
-];
-
-async function executeOneTool(toolName: string, input: any): Promise<string> {
-  try {
-    switch (toolName) {
-      case "one_list_connections":
-        return await oneListConnections();
-      case "one_search_actions":
-        return await oneSearchActions(input.platform, input.query);
-      case "one_get_action_knowledge":
-        return await oneGetActionKnowledge(input.action_id);
-      case "one_execute_action": {
-        const connectionKey = getConnectionKeyForPlatform(input.platform);
-        if (!connectionKey) {
-          return JSON.stringify({ error: `Platform "${input.platform}" is not connected. Use one_list_connections to see available platforms.` });
-        }
-        return await oneExecuteAction(input.method, input.path, connectionKey, input.action_id, input.body);
-      }
-      default:
-        return JSON.stringify({ error: `Unknown One tool: ${toolName}` });
-    }
-  } catch (err) {
-    return JSON.stringify({ error: err instanceof Error ? err.message : "One operation failed" });
-  }
-}
-
 // --- Granola Meeting Notes Tools ---
 
 const GRANOLA_TOOLS = [
@@ -2657,10 +2580,6 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   create_scheduled_job: "Creating a scheduled job...",
   list_scheduled_jobs: "Listing scheduled jobs...",
   delete_scheduled_job: "Deleting a scheduled job...",
-  one_list_connections: "Checking connected platforms...",
-  one_search_actions: (input) => `Searching ${input?.platform || "platform"} actions...`,
-  one_get_action_knowledge: "Reading action details...",
-  one_execute_action: (input) => `Running ${input?.platform || "platform"} action...`,
   granola_list_meetings: "Checking Granola meetings...",
   granola_search_meetings: "Searching meeting notes...",
   granola_get_transcript: "Getting meeting transcript...",
@@ -2714,7 +2633,6 @@ export async function callAnthropic(
   if (isLumaRunning()) tools.push(...LUMA_TOOLS);
   if (isTwitterRunning()) tools.push(...TWITTER_TOOLS);
   if (isBeehiivRunning()) tools.push(...BEEHIIV_TOOLS);
-  if (isOneRunning()) tools.push(...ONE_TOOLS);
   if (isGranolaRunning()) tools.push(...GRANOLA_TOOLS);
 
   // Conditionally add Google tools based on connected services
@@ -2754,6 +2672,28 @@ export async function callAnthropic(
     if (round > 0 && round % 10 === 0) console.log(`Tool loop round ${round}/${MAX_TOOL_ROUNDS}`);
     onStatus?.(getThinkingMessage(round));
 
+    // Strip base64 screenshots from all but the last tool_result message to prevent context overflow
+    // The AI already processed those screenshots — keeping them wastes ~100K+ tokens per image
+    const compactMessages = apiMessages.map((msg, msgIdx) => {
+      if (msg.role !== "user" || !Array.isArray(msg.content)) return msg;
+      // Only strip from messages that aren't the last user message
+      if (msgIdx === apiMessages.length - 1) return msg;
+      return {
+        ...msg,
+        content: msg.content.map((block: any) => {
+          if (block.type !== "tool_result" || !Array.isArray(block.content)) return block;
+          const hasImage = block.content.some((b: any) => b.type === "image");
+          if (!hasImage) return block;
+          return {
+            ...block,
+            content: block.content.map((b: any) =>
+              b.type === "image" ? { type: "text", text: "[screenshot — image stripped from history]" } : b
+            ),
+          };
+        }),
+      };
+    });
+
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -2765,7 +2705,7 @@ export async function callAnthropic(
         model,
         max_tokens: maxTokens,
         system: systemPrompt || undefined,
-        messages: apiMessages,
+        messages: compactMessages,
         temperature,
         tools,
       }),
@@ -2806,7 +2746,7 @@ export async function callAnthropic(
         "docs_create", "docs_read", "docs_append", "docs_insert", "docs_suggest_edit", "docs_format_text", "docs_paragraph_style", "docs_list", "docs_insert_image", "docs_replace_text",
         "sheets_create", "sheets_read", "sheets_write", "sheets_append", "sheets_list_sheets",
       ];
-      const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
+      const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_select", "browser_evaluate", "browser_screenshot", "browser_get_content"];
       const messagingToolNames = ["send_slack", "slack_channel_members", "send_lobstermail", "check_lobstermail"];
       const supabaseToolNames = ["supabase_list_tables", "supabase_describe_table", "supabase_query", "supabase_insert", "supabase_update"];
       const airtableToolNames = ["airtable_list_bases", "airtable_list_tables", "airtable_list_records"];
@@ -2815,7 +2755,6 @@ export async function callAnthropic(
       const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
       const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet", "twitter_lookup_user", "twitter_get_user_tweets", "twitter_quote_tweet", "twitter_like_tweet"];
       const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
-      const oneToolNames = ["one_list_connections", "one_search_actions", "one_get_action_knowledge", "one_execute_action"];
       const granolaToolNames = ["granola_list_meetings", "granola_search_meetings", "granola_get_transcript", "granola_query", "granola_list_folders"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
@@ -2872,8 +2811,6 @@ export async function callAnthropic(
           result = await executeTwitterTool(toolBlock.name, toolBlock.input);
         } else if (beehiivToolNames.includes(toolBlock.name)) {
           result = await executeBeehiivTool(toolBlock.name, toolBlock.input);
-        } else if (oneToolNames.includes(toolBlock.name)) {
-          result = await executeOneTool(toolBlock.name, toolBlock.input);
         } else if (granolaToolNames.includes(toolBlock.name)) {
           result = await executeGranolaTool(toolBlock.name, toolBlock.input);
         } else {
@@ -3002,7 +2939,6 @@ export async function callOpenAI(
   if (isLumaRunning()) customTools.push(...LUMA_TOOLS);
   if (isTwitterRunning()) customTools.push(...TWITTER_TOOLS);
   if (isBeehiivRunning()) customTools.push(...BEEHIIV_TOOLS);
-  if (isOneRunning()) customTools.push(...ONE_TOOLS);
   if (isGranolaRunning()) customTools.push(...GRANOLA_TOOLS);
   const googleServices = getConnectedServices();
   if (googleServices) {
@@ -3053,7 +2989,7 @@ export async function callOpenAI(
     "docs_create", "docs_read", "docs_append", "docs_insert", "docs_suggest_edit", "docs_format_text", "docs_paragraph_style", "docs_list", "docs_insert_image", "docs_replace_text",
     "sheets_create", "sheets_read", "sheets_write", "sheets_append", "sheets_list_sheets",
   ];
-  const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_screenshot", "browser_get_content"];
+  const browserToolNames = ["browse_webpage", "browser_click", "browser_type", "browser_select", "browser_evaluate", "browser_screenshot", "browser_get_content"];
   const messagingToolNames = ["send_slack", "slack_channel_members", "send_lobstermail", "check_lobstermail"];
   const supabaseToolNames = ["supabase_list_tables", "supabase_describe_table", "supabase_query", "supabase_insert", "supabase_update"];
   const airtableToolNames = ["airtable_list_bases", "airtable_list_tables", "airtable_list_records"];
@@ -3062,7 +2998,6 @@ export async function callOpenAI(
   const lumaToolNames = ["luma_list_events", "luma_get_event", "luma_create_event", "luma_update_event", "luma_get_guests", "luma_add_guests", "luma_send_invites"];
   const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet", "twitter_lookup_user", "twitter_get_user_tweets", "twitter_quote_tweet", "twitter_like_tweet"];
   const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
-  const oneToolNames = ["one_list_connections", "one_search_actions", "one_get_action_knowledge", "one_execute_action"];
   const granolaToolNames = ["granola_list_meetings", "granola_search_meetings", "granola_get_transcript", "granola_query", "granola_list_folders"];
 
   // Extract last user message for rules-based dispatch (e.g. gmail send vs draft)
@@ -3171,8 +3106,6 @@ export async function callOpenAI(
           result = await executeTwitterTool(toolName, toolInput);
         } else if (beehiivToolNames.includes(toolName)) {
           result = await executeBeehiivTool(toolName, toolInput);
-        } else if (oneToolNames.includes(toolName)) {
-          result = await executeOneTool(toolName, toolInput);
         } else if (granolaToolNames.includes(toolName)) {
           result = await executeGranolaTool(toolName, toolInput);
         } else {
@@ -3594,12 +3527,6 @@ You can also list existing posts with beehiiv_list_posts and view post details w
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${beehiivContext}` : beehiivContext;
   }
 
-  // Inject One (withone.ai) context
-  if (isOneRunning()) {
-    const platforms = getOneConnectionPlatforms();
-    const oneContext = `You have access to additional third-party integrations through One. Connected platforms: ${platforms.join(", ")}. Use the one_* tools to interact with these platforms. Workflow: (1) one_list_connections to see what's available, (2) one_search_actions to find actions on a platform, (3) one_get_action_knowledge to understand required parameters, (4) one_execute_action to perform the action. These are general-purpose integrations — use your native tools (gmail_*, calendar_*, slack_*, etc.) for services you have direct integrations with, and one_* tools for everything else.`;
-    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${oneContext}` : oneContext;
-  }
 
   // Inject Granola context
   if (isGranolaRunning()) {
