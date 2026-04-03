@@ -832,7 +832,9 @@ export function expandShortcut(message: string, hasAttachments = false): { short
   const trimmed = message.trim();
 
   // Find ;trigger anywhere in the text (may be preceded by transcription, @mentions, etc.)
-  const match = trimmed.match(/(?:^|\s);(\S+)/);
+  // Also match spoken "semicolon trigger" from audio transcription
+  let normalized = trimmed.replace(/\bsemicolon\s+/gi, ";");
+  const match = normalized.match(/(?:^|\s);(\S+)/);
   if (!match) return null;
 
   const trigger = match[1].toLowerCase();
@@ -840,10 +842,10 @@ export function expandShortcut(message: string, hasAttachments = false): { short
   if (!shortcut) return null;
 
   // Text before the ;trigger (e.g. audio transcriptions) and after it are both context
-  const matchStart = trimmed.indexOf(match[0]);
+  const matchStart = normalized.indexOf(match[0]);
   const matchEnd = matchStart + match[0].length;
-  const before = trimmed.slice(0, matchStart).trim();
-  const after = trimmed.slice(matchEnd).trim();
+  const before = normalized.slice(0, matchStart).trim();
+  const after = normalized.slice(matchEnd).trim();
   const input = [before, after].filter(Boolean).join("\n\n");
   let expanded = shortcut.prompt;
   const hasInputPlaceholder = expanded.includes("{{input}}");
