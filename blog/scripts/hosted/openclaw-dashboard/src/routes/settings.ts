@@ -11,7 +11,7 @@ router.get("/settings", (req: Request, res: Response) => {
   const sessionExpiryDays = getSetting("session_expiry_days") || "30";
   const timezone = getSetting("timezone") || "America/Los_Angeles";
   const memories = getAllMemories();
-  const tab = req.query.tab === "memories" ? "memories" : "settings";
+  const tab = req.query.tab === "memories" ? "memories" : "details";
 
   res.render("settings", {
     model,

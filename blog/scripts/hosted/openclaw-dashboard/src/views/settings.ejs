@@ -6,13 +6,14 @@
     <%- include('partials/flash', { flash }) %>
 
     <div class="tab-bar" style="display: flex; gap: 0; margin-bottom: 16px; border-bottom: 2px solid var(--border, #e0e0e0);">
-      <a href="/settings?tab=settings" class="tab-link<%= tab === 'settings' ? ' tab-active' : '' %>">Settings</a>
       <a href="/integrations" class="tab-link">Integrations</a>
+      <a href="/shortcuts" class="tab-link">Shortcuts</a>
+      <a href="/settings?tab=details" class="tab-link<%= tab === 'details' ? ' tab-active' : '' %>">Details</a>
       <a href="/settings?tab=memories" class="tab-link<%= tab === 'memories' ? ' tab-active' : '' %>">Memories (<%= memories.length %>)</a>
     </div>
 
-    <!-- SETTINGS TAB -->
-    <div id="tab-settings" style="display: <%= tab === 'settings' ? 'block' : 'none' %>;">
+    <!-- DETAILS TAB -->
+    <div id="tab-details" style="display: <%= tab === 'details' ? 'block' : 'none' %>;">
       <form method="POST" action="/settings">
         <div class="card card-compact">
           <h3>Timezone</h3>

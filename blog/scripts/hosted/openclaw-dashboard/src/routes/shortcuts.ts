@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { getAllShortcuts, getShortcut, createShortcut, updateShortcut, deleteShortcut } from "../services/db";
+import { getAllShortcuts, getShortcut, createShortcut, updateShortcut, deleteShortcut, getAllMemories } from "../services/db";
 
 const router = Router();
 
@@ -7,6 +7,7 @@ router.get("/shortcuts", (req: Request, res: Response) => {
   const shortcuts = getAllShortcuts();
   res.render("shortcuts", {
     shortcuts,
+    memories: getAllMemories(),
     active: "shortcuts",
     flash: req.query.flash || null,
   });
