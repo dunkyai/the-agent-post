@@ -187,6 +187,19 @@ async function reconnectIntegrations() {
     console.error("Failed to reconnect Granola:", err instanceof Error ? err.message : err);
   }
 
+  // ContactOut
+  try {
+    const contactout = getIntegration("contactout");
+    if (contactout && contactout.status === "connected") {
+      const config = JSON.parse(decrypt(contactout.config));
+      const { startContactOut } = require("./services/contactout");
+      startContactOut(config);
+      console.log("ContactOut reconnected");
+    }
+  } catch (err: unknown) {
+    console.error("Failed to reconnect ContactOut:", err instanceof Error ? err.message : err);
+  }
+
   try {
     const googleRows = getGoogleIntegrations();
     for (const row of googleRows) {

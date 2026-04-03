@@ -12,6 +12,7 @@ import { startLuma, stopLuma, testLumaConnection } from "../services/luma";
 import { buildTwitterOAuthUrl, stopTwitter } from "../services/twitter";
 import { startBeehiiv, stopBeehiiv, testBeehiivConnection, fetchTemplates } from "../services/beehiiv";
 import { buildGranolaOAuthUrl, stopGranola, isGranolaRunning } from "../services/granola";
+import { startContactOut, stopContactOut, isContactOutRunning, testContactOutConnection } from "../services/contactout";
 
 const router = Router();
 
@@ -201,6 +202,7 @@ router.get("/integrations", async (req: Request, res: Response) => {
       return base;
     })(),
     granola: integrationMap["granola"] || { status: "disconnected", error_message: null },
+    contactout: integrationMap["contactout"] || { status: "disconnected", error_message: null },
     memories: getAllMemories(),
     flash: req.query.flash || null,
   });
@@ -803,6 +805,34 @@ router.post("/integrations/granola/disconnect", (req: Request, res: Response) =>
   stopGranola();
   upsertIntegration("granola", "{}", "disconnected");
   res.redirect(303, "/integrations?flash=Granola+disconnected");
+});
+
+// --- ContactOut ---
+
+router.post("/integrations/contactout/connect", async (req: Request, res: Response) => {
+  const { api_token } = req.body;
+  if (!api_token?.trim()) {
+    res.redirect(303, "/integrations?flash=ContactOut+API+token+is+required");
+    return;
+  }
+
+  try {
+    await testContactOutConnection(api_token.trim());
+    const config = encrypt(JSON.stringify({ api_token: api_token.trim() }));
+    upsertIntegration("contactout", config, "connected");
+    startContactOut({ api_token: api_token.trim() });
+    res.redirect(303, "/integrations?flash=ContactOut+connected+successfully");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Connection failed";
+    upsertIntegration("contactout", "{}", "error", message);
+    res.redirect(303, "/integrations?flash=ContactOut+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/contactout/disconnect", (req: Request, res: Response) => {
+  stopContactOut();
+  upsertIntegration("contactout", "{}", "disconnected");
+  res.redirect(303, "/integrations?flash=ContactOut+disconnected");
 });
 
 export default router;
