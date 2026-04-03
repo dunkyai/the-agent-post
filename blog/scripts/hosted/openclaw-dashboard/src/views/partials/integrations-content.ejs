@@ -704,6 +704,45 @@
         </div>
       </details>
 
+      <!-- ContactOut -->
+      <details class="integration-tile">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #6C63FF;"><span style="font-size: 16px; color: #fff; font-weight: bold;">CO</span></span>
+          <div class="integration-tile-info">
+            <h3>ContactOut</h3>
+            <p>Find contact info for people — emails, phone numbers, and professional profiles</p>
+          </div>
+          <span class="status-badge status-<%= contactout.status === 'connected' ? 'connected' : 'disconnected' %>">
+            <%= contactout.status === 'connected' ? 'Connected' : 'Not connected' %>
+          </span>
+        </summary>
+        <div class="integration-body">
+          <% if (contactout.status === 'connected') { %>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+              Your agent can search for people by name, look up contact info, find decision makers at companies, and verify email addresses.
+            </p>
+            <form method="POST" action="/integrations/contactout/disconnect" onsubmit="return confirm('Disconnect ContactOut?')">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+            </form>
+          <% } else { %>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+              Connect ContactOut to let your agent search for people's contact information — emails, phone numbers, and professional profiles. Requires a ContactOut API token.
+            </p>
+            <% if (contactout.error_message) { %>
+              <p style="color: var(--danger); font-size: 13px; margin-bottom: 8px;"><%= contactout.error_message %></p>
+            <% } %>
+            <form method="POST" action="/integrations/contactout/connect">
+              <div class="form-group">
+                <label for="contactout_api_token">API Token</label>
+                <input type="password" id="contactout_api_token" name="api_token" placeholder="Your ContactOut API token" required>
+                <div class="hint">Get your API token from your ContactOut account settings or by contacting their sales team.</div>
+              </div>
+              <button type="submit" class="btn btn-sm">Connect</button>
+            </form>
+          <% } %>
+        </div>
+      </details>
+
     </div><!-- /integration-grid -->
   </div>
 </div>
