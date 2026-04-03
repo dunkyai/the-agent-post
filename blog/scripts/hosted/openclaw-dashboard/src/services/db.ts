@@ -172,15 +172,25 @@ function initSchema(): void {
       name TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
       prompt TEXT NOT NULL,
+      continuation_prompt TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_shortcuts_trigger ON shortcuts(trigger);
+
+    CREATE TABLE IF NOT EXISTS pending_continuations (
+      thread_id TEXT PRIMARY KEY,
+      shortcut_id INTEGER NOT NULL,
+      context TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (shortcut_id) REFERENCES shortcuts(id) ON DELETE CASCADE
+    );
   `);
 
   // Migrations: add columns to existing tables
   try { db.exec("ALTER TABLE scheduled_jobs ADD COLUMN run_once INTEGER NOT NULL DEFAULT 0"); } catch {}
   try { db.exec("ALTER TABLE email_thread_state ADD COLUMN reply_mode TEXT NOT NULL DEFAULT 'draft'"); } catch {}
+  try { db.exec("ALTER TABLE shortcuts ADD COLUMN continuation_prompt TEXT"); } catch {}
 }
 
 export function getGmailProcessedThread(threadId: string): { last_message_id: string } | undefined {
@@ -794,6 +804,7 @@ export interface Shortcut {
   name: string;
   description: string;
   prompt: string;
+  continuation_prompt: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -810,19 +821,20 @@ export function getShortcutByTrigger(trigger: string): Shortcut | undefined {
   return getDb().prepare("SELECT * FROM shortcuts WHERE trigger = ?").get(trigger) as Shortcut | undefined;
 }
 
-export function createShortcut(trigger: string, name: string, description: string, prompt: string): void {
+export function createShortcut(trigger: string, name: string, description: string, prompt: string, continuationPrompt?: string): void {
   getDb()
-    .prepare("INSERT INTO shortcuts (trigger, name, description, prompt) VALUES (?, ?, ?, ?)")
-    .run(trigger, name, description, prompt);
+    .prepare("INSERT INTO shortcuts (trigger, name, description, prompt, continuation_prompt) VALUES (?, ?, ?, ?, ?)")
+    .run(trigger, name, description, prompt, continuationPrompt || null);
 }
 
-export function updateShortcut(id: number, updates: { trigger?: string; name?: string; description?: string; prompt?: string }): void {
+export function updateShortcut(id: number, updates: { trigger?: string; name?: string; description?: string; prompt?: string; continuation_prompt?: string | null }): void {
   const fields: string[] = [];
   const values: any[] = [];
   if (updates.trigger !== undefined) { fields.push("trigger = ?"); values.push(updates.trigger); }
   if (updates.name !== undefined) { fields.push("name = ?"); values.push(updates.name); }
   if (updates.description !== undefined) { fields.push("description = ?"); values.push(updates.description); }
   if (updates.prompt !== undefined) { fields.push("prompt = ?"); values.push(updates.prompt); }
+  if (updates.continuation_prompt !== undefined) { fields.push("continuation_prompt = ?"); values.push(updates.continuation_prompt); }
   if (fields.length === 0) return;
   fields.push("updated_at = datetime('now')");
   values.push(id);
@@ -831,6 +843,24 @@ export function updateShortcut(id: number, updates: { trigger?: string; name?: s
 
 export function deleteShortcut(id: number): void {
   getDb().prepare("DELETE FROM shortcuts WHERE id = ?").run(id);
+}
+
+// --- Pending Continuations ---
+
+export function setPendingContinuation(threadId: string, shortcutId: number, context: Record<string, any> = {}): void {
+  getDb()
+    .prepare("INSERT OR REPLACE INTO pending_continuations (thread_id, shortcut_id, context) VALUES (?, ?, ?)")
+    .run(threadId, shortcutId, JSON.stringify(context));
+}
+
+export function getPendingContinuation(threadId: string): { shortcut_id: number; context: string } | undefined {
+  return getDb()
+    .prepare("SELECT shortcut_id, context FROM pending_continuations WHERE thread_id = ?")
+    .get(threadId) as { shortcut_id: number; context: string } | undefined;
+}
+
+export function deletePendingContinuation(threadId: string): void {
+  getDb().prepare("DELETE FROM pending_continuations WHERE thread_id = ?").run(threadId);
 }
 
 /**
@@ -868,12 +898,15 @@ export function expandShortcut(message: string, hasAttachments = false): { short
   }
 
   // Wrap with strict execution instructions — remove AI judgement about which steps to follow
-  expanded = `[SHORTCUT WORKFLOW: "${shortcut.name}"]\n\n`
+  const phaseNote = shortcut.continuation_prompt
+    ? `\n\nIMPORTANT: This is Phase 1 of a 2-phase workflow. After completing these steps, ask the user to review the output and reply when ready to proceed. Do NOT execute Phase 2 actions (publishing, posting, sending) — that happens after approval.`
+    : "";
+  expanded = `[SHORTCUT WORKFLOW: "${shortcut.name}"${shortcut.continuation_prompt ? " — Phase 1" : ""}]\n\n`
     + `The following is a predefined workflow. You MUST execute EVERY instruction below literally and in order. `
     + `Do NOT skip, combine, or reinterpret any step. Do NOT put content inline that the instructions say to put in a document or other tool. `
     + `If the instructions say to create a Google Doc, you MUST call the google_docs_create tool. `
     + `If the instructions say to post a link, you MUST include the link in your response. `
-    + `Complete every step before responding.\n\n`
+    + `Complete every step before responding.${phaseNote}\n\n`
     + `INSTRUCTIONS:\n${expanded}`;
 
   return { shortcut, expanded };

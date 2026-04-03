@@ -29,10 +29,17 @@
           <input type="text" name="description" placeholder="Short description of what this shortcut does">
         </div>
         <div class="form-group">
-          <label>Prompt Template</label>
+          <label>Prompt Template (Phase 1)</label>
           <textarea name="prompt" rows="5" placeholder="The full prompt to send to the AI. Use {{input}} for any text the user types after the trigger." required></textarea>
           <p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0 0;">
             <code>{{input}}</code> = text after trigger &nbsp;&middot;&nbsp; <code>{{attachments}}</code> = "with attached files" if files present
+          </p>
+        </div>
+        <div class="form-group">
+          <label>Phase 2 — After Approval <span style="font-size: 11px; color: var(--text-secondary);">(optional)</span></label>
+          <textarea name="continuation_prompt" rows="3" placeholder="Runs when the user replies in the thread after Phase 1. Leave blank for single-step shortcuts."></textarea>
+          <p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0 0;">
+            The agent will pause after Phase 1 and ask for approval. When the user replies, Phase 2 runs.
           </p>
         </div>
         <button type="submit" class="btn">Create Shortcut</button>
@@ -84,10 +91,17 @@
               <input type="text" name="description" value="<%= sc.description %>">
             </div>
             <div class="form-group">
-              <label>Prompt Template</label>
+              <label>Prompt Template (Phase 1)</label>
               <textarea name="prompt" rows="5" required><%= sc.prompt %></textarea>
               <p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0 0;">
                 <code>{{input}}</code> = text after trigger &nbsp;&middot;&nbsp; <code>{{attachments}}</code> = "with attached files" if files present
+              </p>
+            </div>
+            <div class="form-group">
+              <label>Phase 2 — After Approval <span style="font-size: 11px; color: var(--text-secondary);">(optional)</span></label>
+              <textarea name="continuation_prompt" rows="3"><%= sc.continuation_prompt || '' %></textarea>
+              <p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0 0;">
+                Runs when the user replies in the thread after Phase 1. Leave blank for single-step shortcuts.
               </p>
             </div>
             <button type="submit" class="btn">Save</button>

@@ -27,7 +27,8 @@ router.post("/shortcuts", (req: Request, res: Response) => {
   }
 
   try {
-    createShortcut(cleanTrigger, name.trim(), (description || "").trim(), prompt.trim());
+    const contPrompt = req.body.continuation_prompt?.trim() || undefined;
+    createShortcut(cleanTrigger, name.trim(), (description || "").trim(), prompt.trim(), contPrompt);
     res.redirect(303, "/shortcuts?flash=Shortcut+created");
   } catch (err: any) {
     const msg = err.message?.includes("UNIQUE") ? "A shortcut with that trigger already exists" : "Failed to create shortcut";
@@ -50,11 +51,13 @@ router.post("/shortcuts/:id", (req: Request, res: Response) => {
 
   const cleanTrigger = trigger.trim().replace(/^;/, "").toLowerCase();
   try {
+    const contPrompt = req.body.continuation_prompt?.trim() || null;
     updateShortcut(id, {
       trigger: cleanTrigger,
       name: name.trim(),
       description: (description || "").trim(),
       prompt: prompt.trim(),
+      continuation_prompt: contPrompt,
     });
     res.redirect(303, "/shortcuts?flash=Shortcut+updated");
   } catch (err: any) {

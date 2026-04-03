@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { getSetting, setSetting, getOrCreateConversation, deleteConversation, getDb, expandShortcut, getAllShortcuts } from "./db";
+import { getSetting, setSetting, getOrCreateConversation, deleteConversation, getDb, expandShortcut, getAllShortcuts, getShortcut, getPendingContinuation, setPendingContinuation, deletePendingContinuation } from "./db";
 import { submitSlackMessage } from "../adapters/slack";
 import { decrypt } from "./encryption";
 import { isSlackAudioFile, isAudioMimeType, transcribeAudio } from "./transcription";
@@ -363,12 +363,36 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
     return;
   }
 
+  // --- Continuation check: if this thread has a pending Phase 2, run it ---
+  let isContinuation = false;
+  const pendingCont = getPendingContinuation(externalId);
+  if (pendingCont) {
+    const shortcut = getShortcut(pendingCont.shortcut_id);
+    if (shortcut?.continuation_prompt) {
+      deletePendingContinuation(externalId);
+      // Expand continuation prompt with the user's reply as input
+      let contPrompt = shortcut.continuation_prompt;
+      contPrompt = contPrompt.replace(/\{\{input\}\}/g, text);
+      text = `[SHORTCUT WORKFLOW: "${shortcut.name}" — Phase 2]\n\n`
+        + `The user has reviewed the Phase 1 output and replied. Execute Phase 2 now.\n`
+        + `User's reply: "${text}"\n\n`
+        + `INSTRUCTIONS:\n${contPrompt}`;
+      isContinuation = true;
+      console.log(`[slack] Continuation of ;${shortcut.trigger} triggered for thread ${externalId}`);
+    }
+  }
+
   // --- Shortcut expansion ---
   const hasAttachments = (event.files || []).length > 0;
-  const shortcutMatch = expandShortcut(text, hasAttachments);
+  let shortcutMatch = !isContinuation ? expandShortcut(text, hasAttachments) : null;
   if (shortcutMatch) {
     text = shortcutMatch.expanded;
     console.log(`[slack] Shortcut ;${shortcutMatch.shortcut.trigger} expanded for user ${userId}`);
+    // If this shortcut has a continuation, save it for this thread
+    if (shortcutMatch.shortcut.continuation_prompt) {
+      setPendingContinuation(externalId, shortcutMatch.shortcut.id);
+      console.log(`[slack] Pending continuation saved for thread ${externalId}`);
+    }
   }
 
   // --- Approval gate for non-owner users ---
