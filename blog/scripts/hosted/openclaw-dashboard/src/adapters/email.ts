@@ -205,9 +205,14 @@ export async function processIncomingEmail(ctx: EmailThreadContext): Promise<voi
     }
 
     // --- Shortcut detection: skip triage if email starts with ;trigger ---
+    // Security: only allow shortcuts from the user's own email (not external senders)
+    const userEmail = getSetting("user_email")?.toLowerCase();
+    const senderEmail = extractEmail(ctx.latestSender);
+    const isOwnEmail = userEmail && senderEmail === userEmail;
+    const isOwnAccount = senderEmail === ctx.ownEmail.toLowerCase();
     const latestBody = ctx.threadMessages[ctx.threadMessages.length - 1]?.body || "";
     const hasAttachments = (ctx.threadMessages[ctx.threadMessages.length - 1]?.attachments || []).length > 0;
-    const emailShortcut = expandShortcut(latestBody.trim(), hasAttachments);
+    const emailShortcut = (isOwnEmail || isOwnAccount) ? expandShortcut(latestBody.trim(), hasAttachments) : null;
     if (emailShortcut) {
       console.log(`[email-adapter] Shortcut ;${emailShortcut.shortcut.trigger} detected in thread ${threadId}`);
       upsertEmailThreadState(threadId, accountId, {

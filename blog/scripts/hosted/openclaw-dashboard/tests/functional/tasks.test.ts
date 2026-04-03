@@ -10,10 +10,10 @@ describe("Tasks", () => {
     cookie = getAuthCookie();
   });
 
-  it("GET /tasks renders tasks page", async () => {
+  it("GET /tasks redirects to jobs page", async () => {
     const app = getTestApp();
     const res = await app.get("/tasks").set("Cookie", cookie);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(301);
   });
 
   it("GET /tasks/api returns paginated JSON", async () => {

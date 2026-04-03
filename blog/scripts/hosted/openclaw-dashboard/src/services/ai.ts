@@ -2223,7 +2223,7 @@ function checkGmailRecipientRules(to?: string, cc?: string): string | null {
   return null;
 }
 
-async function executeGoogleTool(toolName: string, input: any, userRawInput?: string): Promise<string> {
+async function executeGoogleTool(toolName: string, input: any, userRawInput?: string, sourceContext?: SourceContext): Promise<string> {
   if (!isGoogleRunning()) {
     return JSON.stringify({ error: "Google is not connected. Ask the user to connect Google in the integrations page." });
   }
@@ -2242,6 +2242,18 @@ async function executeGoogleTool(toolName: string, input: any, userRawInput?: st
       case "gmail_create_draft": {
         const ruleCheck = checkGmailRecipientRules(input.to, input.cc);
         if (ruleCheck) return ruleCheck;
+
+        // Security: email tasks from external senders are forced to draft — code-level enforcement
+        if (sourceContext?.sourceChannel === "email" && !sourceContext?.isOwnEmail) {
+          const draftResult = await gmailCreateDraft(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
+          const parsed = JSON.parse(draftResult);
+          if (parsed.success) {
+            parsed.action = "drafted";
+            parsed.note = "Email-triggered tasks always create drafts for security. Review and send from Gmail.";
+          }
+          return JSON.stringify(parsed);
+        }
+
         // Rules-based: detect user intent from raw input, then apply setting
         // User said "draft" → always draft (regardless of setting)
         // User didn't say "draft" → check reply_mode setting to decide
@@ -2594,6 +2606,8 @@ export type ToolCallCallback = (toolName: string, input: Record<string, unknown>
 export interface SourceContext {
   channelId?: string;
   threadTs?: string;
+  sourceChannel?: string; // "chat" | "slack" | "email" — used to restrict tools for email-triggered tasks
+  isOwnEmail?: boolean;   // true when email task was sent by the user themselves — gets full tool access
 }
 
 export async function callAnthropic(
@@ -2618,21 +2632,25 @@ export async function callAnthropic(
     ...IMAGE_SEARCH_TOOLS,
   ];
 
+  // Security: email tasks from external senders get restricted tools (no send/write)
+  // Emails from the user themselves get full tool access
+  const isExternalEmailTask = sourceContext?.sourceChannel === "email" && !sourceContext?.isOwnEmail;
+
   // Conditionally add messaging tools based on connected integrations
-  if (isSlackRunning()) tools.push(...SLACK_MESSAGING_TOOLS);
-  if (isEmailRunning()) tools.push(...EMAIL_MESSAGING_TOOLS);
+  if (isSlackRunning() && !isExternalEmailTask) tools.push(...SLACK_MESSAGING_TOOLS);
+  if (isEmailRunning() && !isExternalEmailTask) tools.push(...EMAIL_MESSAGING_TOOLS);
   if (isSupabaseRunning()) {
     const perms = getSupabasePermissions();
     tools.push(...SUPABASE_READ_TOOLS);
-    if (perms.includes("insert")) tools.push(...SUPABASE_INSERT_TOOLS);
-    if (perms.includes("update")) tools.push(...SUPABASE_UPDATE_TOOLS);
+    if (perms.includes("insert") && !isExternalEmailTask) tools.push(...SUPABASE_INSERT_TOOLS);
+    if (perms.includes("update") && !isExternalEmailTask) tools.push(...SUPABASE_UPDATE_TOOLS);
   }
   if (isAirtableRunning()) tools.push(...AIRTABLE_TOOLS);
   if (isNotionRunning()) tools.push(...NOTION_TOOLS);
-  if (isBufferRunning()) tools.push(...BUFFER_TOOLS);
-  if (isLumaRunning()) tools.push(...LUMA_TOOLS);
-  if (isTwitterRunning()) tools.push(...TWITTER_TOOLS);
-  if (isBeehiivRunning()) tools.push(...BEEHIIV_TOOLS);
+  if (isBufferRunning() && !isExternalEmailTask) tools.push(...BUFFER_TOOLS);
+  if (isLumaRunning() && !isExternalEmailTask) tools.push(...LUMA_TOOLS);
+  if (isTwitterRunning() && !isExternalEmailTask) tools.push(...TWITTER_TOOLS);
+  if (isBeehiivRunning() && !isExternalEmailTask) tools.push(...BEEHIIV_TOOLS);
   if (isGranolaRunning()) tools.push(...GRANOLA_TOOLS);
 
   // Conditionally add Google tools based on connected services
@@ -2642,11 +2660,11 @@ export async function callAnthropic(
       tools.push(...GOOGLE_GMAIL_TOOLS);
       if (googleServices.includes("gmail_send")) tools.push(...GOOGLE_GMAIL_SEND_TOOLS);
     }
-    if (googleServices.includes("calendar")) tools.push(...GOOGLE_CALENDAR_TOOLS);
+    if (googleServices.includes("calendar") && !isExternalEmailTask) tools.push(...GOOGLE_CALENDAR_TOOLS);
     if (googleServices.includes("drive")) tools.push(...GOOGLE_DRIVE_TOOLS);
     if (googleServices.includes("contacts")) tools.push(...GOOGLE_CONTACTS_TOOLS);
     if (googleServices.includes("docs")) tools.push(...GOOGLE_DOCS_TOOLS);
-    if (googleServices.includes("sheets")) tools.push(...GOOGLE_SHEETS_TOOLS);
+    if (googleServices.includes("sheets") && !isExternalEmailTask) tools.push(...GOOGLE_SHEETS_TOOLS);
   }
 
   // Only add public Google Doc tool if Drive is not connected (Drive has full OAuth access)
@@ -2796,7 +2814,7 @@ export async function callAnthropic(
         } else if (messagingToolNames.includes(toolBlock.name)) {
           result = await executeMessagingTool(toolBlock.name, toolBlock.input);
         } else if (googleToolNames.includes(toolBlock.name)) {
-          result = await executeGoogleTool(toolBlock.name, toolBlock.input, lastUserMsg);
+          result = await executeGoogleTool(toolBlock.name, toolBlock.input, lastUserMsg, sourceContext);
         } else if (supabaseToolNames.includes(toolBlock.name)) {
           result = await executeSupabaseTool(toolBlock.name, toolBlock.input);
         } else if (airtableToolNames.includes(toolBlock.name)) {
@@ -2925,20 +2943,23 @@ export async function callOpenAI(
     ...BROWSER_TOOLS,
     ...IMAGE_SEARCH_TOOLS,
   ];
-  if (isSlackRunning()) customTools.push(...SLACK_MESSAGING_TOOLS);
-  if (isEmailRunning()) customTools.push(...EMAIL_MESSAGING_TOOLS);
+  // Security: email tasks from external senders get restricted tools
+  const isExternalEmailTask = sourceContext?.sourceChannel === "email" && !sourceContext?.isOwnEmail;
+
+  if (isSlackRunning() && !isExternalEmailTask) customTools.push(...SLACK_MESSAGING_TOOLS);
+  if (isEmailRunning() && !isExternalEmailTask) customTools.push(...EMAIL_MESSAGING_TOOLS);
   if (isSupabaseRunning()) {
     const perms = getSupabasePermissions();
     customTools.push(...SUPABASE_READ_TOOLS);
-    if (perms.includes("insert")) customTools.push(...SUPABASE_INSERT_TOOLS);
-    if (perms.includes("update")) customTools.push(...SUPABASE_UPDATE_TOOLS);
+    if (perms.includes("insert") && !isExternalEmailTask) customTools.push(...SUPABASE_INSERT_TOOLS);
+    if (perms.includes("update") && !isExternalEmailTask) customTools.push(...SUPABASE_UPDATE_TOOLS);
   }
   if (isAirtableRunning()) customTools.push(...AIRTABLE_TOOLS);
   if (isNotionRunning()) customTools.push(...NOTION_TOOLS);
-  if (isBufferRunning()) customTools.push(...BUFFER_TOOLS);
-  if (isLumaRunning()) customTools.push(...LUMA_TOOLS);
-  if (isTwitterRunning()) customTools.push(...TWITTER_TOOLS);
-  if (isBeehiivRunning()) customTools.push(...BEEHIIV_TOOLS);
+  if (isBufferRunning() && !isExternalEmailTask) customTools.push(...BUFFER_TOOLS);
+  if (isLumaRunning() && !isExternalEmailTask) customTools.push(...LUMA_TOOLS);
+  if (isTwitterRunning() && !isExternalEmailTask) customTools.push(...TWITTER_TOOLS);
+  if (isBeehiivRunning() && !isExternalEmailTask) customTools.push(...BEEHIIV_TOOLS);
   if (isGranolaRunning()) customTools.push(...GRANOLA_TOOLS);
   const googleServices = getConnectedServices();
   if (googleServices) {
@@ -2946,11 +2967,11 @@ export async function callOpenAI(
       customTools.push(...GOOGLE_GMAIL_TOOLS);
       if (googleServices.includes("gmail_send")) customTools.push(...GOOGLE_GMAIL_SEND_TOOLS);
     }
-    if (googleServices.includes("calendar")) customTools.push(...GOOGLE_CALENDAR_TOOLS);
+    if (googleServices.includes("calendar") && !isExternalEmailTask) customTools.push(...GOOGLE_CALENDAR_TOOLS);
     if (googleServices.includes("drive")) customTools.push(...GOOGLE_DRIVE_TOOLS);
     if (googleServices.includes("contacts")) customTools.push(...GOOGLE_CONTACTS_TOOLS);
     if (googleServices.includes("docs")) customTools.push(...GOOGLE_DOCS_TOOLS);
-    if (googleServices.includes("sheets")) customTools.push(...GOOGLE_SHEETS_TOOLS);
+    if (googleServices.includes("sheets") && !isExternalEmailTask) customTools.push(...GOOGLE_SHEETS_TOOLS);
   }
   if (!googleServices || !googleServices.includes("drive")) {
     customTools.push(...PUBLIC_GDOC_TOOLS);
@@ -3091,7 +3112,7 @@ export async function callOpenAI(
         } else if (messagingToolNames.includes(toolName)) {
           result = await executeMessagingTool(toolName, toolInput);
         } else if (googleToolNames.includes(toolName)) {
-          result = await executeGoogleTool(toolName, toolInput, lastUserMsg);
+          result = await executeGoogleTool(toolName, toolInput, lastUserMsg, sourceContext);
         } else if (supabaseToolNames.includes(toolName)) {
           result = await executeSupabaseTool(toolName, toolInput);
         } else if (airtableToolNames.includes(toolName)) {

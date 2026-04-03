@@ -13,7 +13,7 @@ describe("Security headers", () => {
     expect(res.headers["x-xss-protection"]).toBe("1; mode=block");
     expect(res.headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
     expect(res.headers["strict-transport-security"]).toBe("max-age=31536000; includeSubDomains");
-    expect(res.headers["permissions-policy"]).toBe("camera=(), microphone=(), geolocation=()");
+    expect(res.headers["permissions-policy"]).toBe("camera=(), microphone=(self), geolocation=()");
     expect(res.headers["content-security-policy"]).toContain("default-src 'self'");
   });
 

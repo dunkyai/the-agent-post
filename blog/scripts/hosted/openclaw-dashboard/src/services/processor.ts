@@ -147,11 +147,27 @@ export async function processTask(
       });
     };
 
-    // Build source context for Slack thread delivery
-    const sourceContext: SourceContext | undefined =
-      task.input.source_channel === "slack" && task.input.metadata?.channelId
+    // Build source context (Slack thread delivery + source channel for security restrictions)
+    // For email tasks: check if sender is the user's own email (full tools) or external (restricted)
+    let isOwnEmail = false;
+    if (task.input.source_channel === "email") {
+      const senderRaw = (task.input.metadata?.latestSender as string || "").toLowerCase();
+      const senderEmail = senderRaw.match(/<([^>]+)>/)?.[1] || senderRaw.trim();
+      const userEmail = getSetting("user_email")?.toLowerCase();
+      const accountId = (task.input.metadata?.accountId as string || "").toLowerCase();
+      isOwnEmail = !!(
+        (userEmail && senderEmail === userEmail) ||
+        (accountId && senderEmail === accountId)
+      );
+    }
+
+    const sourceContext: SourceContext = {
+      sourceChannel: task.input.source_channel,
+      isOwnEmail,
+      ...(task.input.source_channel === "slack" && task.input.metadata?.channelId
         ? { channelId: task.input.metadata.channelId as string, threadTs: task.input.metadata.threadTs as string | undefined }
-        : undefined;
+        : {}),
+    };
 
     // Call the appropriate provider
     const caller = provider === "anthropic" ? callAnthropic : callOpenAI;
