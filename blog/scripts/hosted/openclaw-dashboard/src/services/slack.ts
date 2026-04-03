@@ -395,8 +395,10 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
 
         await requestApproval({ text, userId, channelId, threadTs, context: slackContext });
       } catch (err) {
-        // Fail open: if approval DM fails, process normally
-        console.error("[slack-approval] Error requesting approval, processing normally:", err instanceof Error ? err.message : err);
+        // Fail closed: if approval DM fails, don't process the request
+        console.error("[slack-approval] Error requesting approval, blocking request:", err instanceof Error ? err.message : err);
+        await sendSlackMessage(channelId, "I couldn't reach my admin for approval right now. Please try again in a moment.", threadTs);
+        return;
       }
       if (!getSlackOwnerUserId() || userId !== getSlackOwnerUserId()) return;
     }

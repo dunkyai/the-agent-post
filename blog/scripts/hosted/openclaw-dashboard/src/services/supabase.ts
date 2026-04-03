@@ -202,6 +202,7 @@ async function supabaseQueryInternal(
 
 export async function supabaseInsert(table: string, records: any[]): Promise<string> {
   if (!supabaseConfig) return JSON.stringify({ error: "Supabase is not connected" });
+  if (!supabaseConfig.permissions.includes("insert")) return JSON.stringify({ error: "Insert permission not granted. Update Supabase permissions on the Integrations page." });
 
   try {
     const res = await fetch(`${baseUrl()}/rest/v1/${encodeURIComponent(table)}`, {
@@ -227,6 +228,7 @@ export async function supabaseUpdate(
   data: Record<string, any>
 ): Promise<string> {
   if (!supabaseConfig) return JSON.stringify({ error: "Supabase is not connected" });
+  if (!supabaseConfig.permissions.includes("update")) return JSON.stringify({ error: "Update permission not granted. Update Supabase permissions on the Integrations page." });
 
   try {
     const params = new URLSearchParams();
@@ -256,6 +258,7 @@ export async function supabaseDelete(
   match: Record<string, string>
 ): Promise<string> {
   if (!supabaseConfig) return JSON.stringify({ error: "Supabase is not connected" });
+  if (!supabaseConfig.permissions.includes("update")) return JSON.stringify({ error: "Delete permission not granted. Update Supabase permissions on the Integrations page." });
 
   try {
     const params = new URLSearchParams();

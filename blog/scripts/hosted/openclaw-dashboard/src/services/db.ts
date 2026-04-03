@@ -227,12 +227,19 @@ export function upsertEmailThreadState(
   accountId: string,
   updates: Partial<Omit<EmailThreadStateRow, "thread_id" | "account_id" | "created_at">>
 ): void {
+  // Security: whitelist allowed column names to prevent SQL injection via dynamic keys
+  const ALLOWED_EMAIL_STATE_COLS = new Set([
+    "state", "triage_result", "structured_request", "delivery_channel",
+    "thread_subject", "latest_message_id", "latest_sender", "all_recipients",
+    "message_id_header", "clarification_count", "reply_mode", "task_id",
+  ]);
+
   const existing = getEmailThreadState(threadId, accountId);
   if (existing) {
     const fields: string[] = ["updated_at = datetime('now')"];
     const values: unknown[] = [];
     for (const [key, value] of Object.entries(updates)) {
-      if (value !== undefined) {
+      if (value !== undefined && ALLOWED_EMAIL_STATE_COLS.has(key)) {
         fields.push(`${key} = ?`);
         values.push(value);
       }
@@ -245,7 +252,7 @@ export function upsertEmailThreadState(
     const cols = ["thread_id", "account_id"];
     const vals: unknown[] = [threadId, accountId];
     for (const [key, value] of Object.entries(updates)) {
-      if (value !== undefined) {
+      if (value !== undefined && ALLOWED_EMAIL_STATE_COLS.has(key)) {
         cols.push(key);
         vals.push(value);
       }
@@ -481,10 +488,11 @@ export function updateScheduledJob(
   id: number,
   updates: Partial<Pick<ScheduledJob, "name" | "schedule" | "prompt" | "target_source" | "target_external_id" | "enabled" | "next_run">>
 ): void {
+  const ALLOWED_JOB_COLS = new Set(["name", "schedule", "prompt", "target_source", "target_external_id", "enabled", "next_run"]);
   const fields: string[] = [];
   const values: any[] = [];
   for (const [key, value] of Object.entries(updates)) {
-    if (value !== undefined) {
+    if (value !== undefined && ALLOWED_JOB_COLS.has(key)) {
       fields.push(`${key} = ?`);
       values.push(value);
     }
@@ -676,10 +684,11 @@ export function updateTask(
     conversation_id: string;
   }>
 ): void {
+  const ALLOWED_TASK_COLS = new Set(["status", "active", "intent", "context", "output", "execution", "conversation_id"]);
   const fields: string[] = [];
   const values: unknown[] = [];
   for (const [key, value] of Object.entries(updates)) {
-    if (value !== undefined) {
+    if (value !== undefined && ALLOWED_TASK_COLS.has(key)) {
       fields.push(`${key} = ?`);
       values.push(value);
     }
