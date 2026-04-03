@@ -1,8 +1,18 @@
 import { Router } from "express";
 import crypto from "crypto";
 import * as store from "../services/store";
+import { getInstanceIdFromState, decryptOAuthState } from "../services/oauth-state";
 
 const router = Router();
+
+/** Parse OAuth state — supports both encrypted (new) and legacy (plaintext) formats */
+function parseOAuthState(state: string): { statePayload: Record<string, any>; instance: ReturnType<typeof store.getInstance> } {
+  const instanceId = getInstanceIdFromState(state);
+  const instance = store.getInstance(instanceId);
+  if (!instance) throw new Error("Instance not found");
+  const statePayload = decryptOAuthState(state, instance.gatewayToken);
+  return { statePayload, instance };
+}
 
 // GET /oauth/google/callback — Google redirects here after user consent
 router.get("/google/callback", async (req, res) => {
@@ -11,10 +21,7 @@ router.get("/google/callback", async (req, res) => {
   // Handle user denying consent
   if (error) {
     try {
-      const statePayload = JSON.parse(
-        Buffer.from(state as string, "base64url").toString()
-      );
-      const instance = store.getInstance(statePayload.instance_id);
+      const { instance } = parseOAuthState(state as string);
       if (instance) {
         res.redirect(
           `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Google+connection+cancelled`
@@ -31,18 +38,15 @@ router.get("/google/callback", async (req, res) => {
     return;
   }
 
-  // Parse and verify state
-  let statePayload: { instance_id: string; hmac: string; services: string[] };
+  // Parse and verify state (supports encrypted and legacy formats)
+  let statePayload: Record<string, any>;
+  let instance: ReturnType<typeof store.getInstance>;
   try {
-    statePayload = JSON.parse(
-      Buffer.from(state as string, "base64url").toString()
-    );
+    ({ statePayload, instance } = parseOAuthState(state as string));
   } catch {
     res.status(400).send("Invalid state parameter");
     return;
   }
-
-  const instance = store.getInstance(statePayload.instance_id);
   if (!instance) {
     res.status(404).send("Instance not found");
     return;
@@ -140,10 +144,7 @@ router.get("/slack/callback", async (req, res) => {
   // Handle user denying consent
   if (error) {
     try {
-      const statePayload = JSON.parse(
-        Buffer.from(state as string, "base64url").toString()
-      );
-      const instance = store.getInstance(statePayload.instance_id);
+      const { instance } = parseOAuthState(state as string);
       if (instance) {
         res.redirect(
           `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Slack+connection+cancelled`
@@ -160,18 +161,15 @@ router.get("/slack/callback", async (req, res) => {
     return;
   }
 
-  // Parse and verify state
-  let statePayload: { instance_id: string; hmac: string };
+  // Parse and verify state (supports encrypted and legacy formats)
+  let statePayload: Record<string, any>;
+  let instance: ReturnType<typeof store.getInstance>;
   try {
-    statePayload = JSON.parse(
-      Buffer.from(state as string, "base64url").toString()
-    );
+    ({ statePayload, instance } = parseOAuthState(state as string));
   } catch {
     res.status(400).send("Invalid state parameter");
     return;
   }
-
-  const instance = store.getInstance(statePayload.instance_id);
   if (!instance) {
     res.status(404).send("Instance not found");
     return;
@@ -286,10 +284,7 @@ router.get("/airtable/callback", async (req, res) => {
 
   if (error) {
     try {
-      const statePayload = JSON.parse(
-        Buffer.from(state as string, "base64url").toString()
-      );
-      const instance = store.getInstance(statePayload.instance_id);
+      const { instance } = parseOAuthState(state as string);
       if (instance) {
         res.redirect(
           `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Airtable+connection+cancelled`
@@ -306,17 +301,14 @@ router.get("/airtable/callback", async (req, res) => {
     return;
   }
 
-  let statePayload: { instance_id: string; hmac: string; code_verifier: string };
+  let statePayload: Record<string, any>;
+  let instance: ReturnType<typeof store.getInstance>;
   try {
-    statePayload = JSON.parse(
-      Buffer.from(state as string, "base64url").toString()
-    );
+    ({ statePayload, instance } = parseOAuthState(state as string));
   } catch {
     res.status(400).send("Invalid state parameter");
     return;
   }
-
-  const instance = store.getInstance(statePayload.instance_id);
   if (!instance) {
     res.status(404).send("Instance not found");
     return;
@@ -408,10 +400,7 @@ router.get("/notion/callback", async (req, res) => {
 
   if (error) {
     try {
-      const statePayload = JSON.parse(
-        Buffer.from(state as string, "base64url").toString()
-      );
-      const instance = store.getInstance(statePayload.instance_id);
+      const { instance } = parseOAuthState(state as string);
       if (instance) {
         res.redirect(
           `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Notion+connection+cancelled`
@@ -428,17 +417,14 @@ router.get("/notion/callback", async (req, res) => {
     return;
   }
 
-  let statePayload: { instance_id: string; hmac: string };
+  let statePayload: Record<string, any>;
+  let instance: ReturnType<typeof store.getInstance>;
   try {
-    statePayload = JSON.parse(
-      Buffer.from(state as string, "base64url").toString()
-    );
+    ({ statePayload, instance } = parseOAuthState(state as string));
   } catch {
     res.status(400).send("Invalid state parameter");
     return;
   }
-
-  const instance = store.getInstance(statePayload.instance_id);
   if (!instance) {
     res.status(404).send("Instance not found");
     return;
@@ -530,10 +516,7 @@ router.get("/twitter/callback", async (req, res) => {
 
   if (error) {
     try {
-      const statePayload = JSON.parse(
-        Buffer.from(state as string, "base64url").toString()
-      );
-      const instance = store.getInstance(statePayload.instance_id);
+      const { instance } = parseOAuthState(state as string);
       if (instance) {
         res.redirect(
           `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Twitter+connection+cancelled`
@@ -550,17 +533,14 @@ router.get("/twitter/callback", async (req, res) => {
     return;
   }
 
-  let statePayload: { instance_id: string; hmac: string; code_verifier: string };
+  let statePayload: Record<string, any>;
+  let instance: ReturnType<typeof store.getInstance>;
   try {
-    statePayload = JSON.parse(
-      Buffer.from(state as string, "base64url").toString()
-    );
+    ({ statePayload, instance } = parseOAuthState(state as string));
   } catch {
     res.status(400).send("Invalid state parameter");
     return;
   }
-
-  const instance = store.getInstance(statePayload.instance_id);
   if (!instance) {
     res.status(404).send("Instance not found");
     return;
@@ -666,8 +646,7 @@ router.get("/granola/callback", async (req, res) => {
 
   if (error) {
     try {
-      const statePayload = JSON.parse(Buffer.from(state as string, "base64url").toString());
-      const instance = store.getInstance(statePayload.instance_id);
+      const { instance } = parseOAuthState(state as string);
       if (instance) {
         res.redirect(`https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Granola+connection+cancelled`);
         return;
@@ -682,15 +661,14 @@ router.get("/granola/callback", async (req, res) => {
     return;
   }
 
-  let statePayload: { instance_id: string; hmac: string; code_verifier: string; client_id: string; client_secret?: string };
+  let statePayload: Record<string, any>;
+  let instance: ReturnType<typeof store.getInstance>;
   try {
-    statePayload = JSON.parse(Buffer.from(state as string, "base64url").toString());
+    ({ statePayload, instance } = parseOAuthState(state as string));
   } catch {
     res.status(400).send("Invalid state parameter");
     return;
   }
-
-  const instance = store.getInstance(statePayload.instance_id);
   if (!instance) {
     res.status(404).send("Instance not found");
     return;

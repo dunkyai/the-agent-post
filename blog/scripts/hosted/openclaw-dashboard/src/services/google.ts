@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { getIntegration, upsertIntegration, getSetting, setSetting, getGmailProcessedThread, getEmailThreadState, isKnownSender } from "./db";
-import { encrypt, decrypt } from "./encryption";
+import { encrypt, decrypt, encryptOAuthState } from "./encryption";
 import { sanitizeEmailContent } from "./email";
 import { processIncomingEmail, type EmailThreadContext } from "../adapters/email";
 
@@ -131,7 +131,7 @@ export function buildOAuthUrl(services: string[]): string {
       .digest("hex"),
     services,
   };
-  const state = Buffer.from(JSON.stringify(statePayload)).toString("base64url");
+  const state = encryptOAuthState(statePayload);
 
   const params = new URLSearchParams({
     client_id: clientId,

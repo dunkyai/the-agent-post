@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { upsertIntegration } from "./db";
-import { encrypt } from "./encryption";
+import { encrypt, encryptOAuthState } from "./encryption";
 
 const MCP_ENDPOINT = "https://mcp.granola.ai/mcp";
 const AUTH_SERVER = "https://mcp-auth.granola.ai";
@@ -64,7 +64,7 @@ export async function buildGranolaOAuthUrl(): Promise<string> {
     client_id: clientId,
     client_secret: clientSecret || undefined,
   };
-  const state = Buffer.from(JSON.stringify(statePayload)).toString("base64url");
+  const state = encryptOAuthState(statePayload);
 
   const params = new URLSearchParams({
     client_id: clientId,

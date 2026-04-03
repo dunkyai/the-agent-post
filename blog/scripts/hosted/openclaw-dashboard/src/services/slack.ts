@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { getSetting, setSetting, getOrCreateConversation, deleteConversation, getDb, expandShortcut, getAllShortcuts, getShortcut, getPendingContinuation, setPendingContinuation, deletePendingContinuation } from "./db";
 import { submitSlackMessage } from "../adapters/slack";
-import { decrypt } from "./encryption";
+import { decrypt, encryptOAuthState } from "./encryption";
 import { isSlackAudioFile, isAudioMimeType, transcribeAudio } from "./transcription";
 
 // Module state
@@ -201,7 +201,7 @@ export function buildSlackOAuthUrl(): string {
       .update(instanceId)
       .digest("hex"),
   };
-  const state = Buffer.from(JSON.stringify(statePayload)).toString("base64url");
+  const state = encryptOAuthState(statePayload);
 
   const scopes = [
     "chat:write",
@@ -252,8 +252,11 @@ export function getSlackConfig(): SlackConfig | null {
 
 // --- Event handling ---
 
+const MAX_DEDUP_SIZE = 10000;
+
 function isDuplicateEvent(eventId: string): boolean {
   if (recentEventIds.has(eventId)) return true;
+  if (recentEventIds.size >= MAX_DEDUP_SIZE) recentEventIds.clear();
   recentEventIds.add(eventId);
   setTimeout(() => recentEventIds.delete(eventId), EVENT_DEDUP_TTL);
   return false;

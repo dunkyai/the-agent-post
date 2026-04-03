@@ -35,6 +35,59 @@ export function encrypt(plaintext: string): string {
   return `${iv.toString("hex")}:${tag.toString("hex")}:${encrypted}`;
 }
 
+/**
+ * Encrypt an OAuth state payload. Returns a URL-safe string with the instance_id
+ * in plaintext (so provisioning can look up the instance) and the rest encrypted.
+ * Format: base64url(instance_id).base64url(encrypted_payload)
+ */
+export function encryptOAuthState(payload: Record<string, any>): string {
+  const { instance_id, ...sensitive } = payload;
+  const encryptedPart = encrypt(JSON.stringify(sensitive));
+  return Buffer.from(instance_id).toString("base64url") + "." + Buffer.from(encryptedPart).toString("base64url");
+}
+
+/**
+ * Decrypt an OAuth state payload given the gateway token for the instance.
+ * The instance_id is extracted from the plaintext part, the rest is decrypted.
+ */
+export function decryptOAuthState(state: string, gatewayToken: string): Record<string, any> {
+  const dotIdx = state.indexOf(".");
+  if (dotIdx === -1) {
+    // Legacy format: base64url JSON (not encrypted)
+    return JSON.parse(Buffer.from(state, "base64url").toString());
+  }
+  const instanceId = Buffer.from(state.slice(0, dotIdx), "base64url").toString();
+  const encryptedRaw = Buffer.from(state.slice(dotIdx + 1), "base64url").toString();
+
+  // Decrypt using the instance's gateway token
+  const key = crypto.pbkdf2Sync(gatewayToken, SALT, ITERATIONS, KEY_LENGTH, "sha256");
+  const parts = encryptedRaw.split(":");
+  if (parts.length !== 3) throw new Error("Invalid encrypted state format");
+  const iv = Buffer.from(parts[0], "hex");
+  const tag = Buffer.from(parts[1], "hex");
+  const encrypted = parts[2];
+  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+  decipher.setAuthTag(tag);
+  let decrypted = decipher.update(encrypted, "hex", "utf8");
+  decrypted += decipher.final("utf8");
+
+  return { instance_id: instanceId, ...JSON.parse(decrypted) };
+}
+
+/**
+ * Extract the instance_id from an OAuth state without decrypting.
+ * Works for both encrypted (new) and legacy (base64url JSON) formats.
+ */
+export function getInstanceIdFromState(state: string): string {
+  const dotIdx = state.indexOf(".");
+  if (dotIdx === -1) {
+    // Legacy format
+    const parsed = JSON.parse(Buffer.from(state, "base64url").toString());
+    return parsed.instance_id;
+  }
+  return Buffer.from(state.slice(0, dotIdx), "base64url").toString();
+}
+
 export function decrypt(ciphertext: string): string {
   const key = getKey();
   const parts = ciphertext.split(":");
