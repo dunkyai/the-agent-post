@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { getSetting, setSetting, getOrCreateConversation, deleteConversation, getDb, expandShortcut, getAllShortcuts, getShortcut, getPendingContinuation, setPendingContinuation, deletePendingContinuation } from "./db";
+import { getSetting, setSetting, getOrCreateConversation, deleteConversation, getDb, expandShortcut, getAllShortcuts, getShortcut, getPendingContinuation, setPendingContinuation, deletePendingContinuation, getWorkflowState } from "./db";
 import { submitSlackMessage } from "../adapters/slack";
 import { decrypt, encryptOAuthState } from "./encryption";
 import { isSlackAudioFile, isAudioMimeType, transcribeAudio } from "./transcription";
@@ -366,6 +366,29 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
     return;
   }
 
+  // --- Workflow state check: if this thread has a paused/errored workflow, resume it ---
+  const workflowState = getWorkflowState(externalId);
+  if (workflowState && (workflowState.status === "paused" || workflowState.status === "prompting" || workflowState.status === "error")) {
+    console.log(`[slack] Resuming workflow for thread ${externalId} (status: ${workflowState.status})`);
+    // Submit as a workflow resume task — the processor handles the rest
+    const shortcut = getShortcut(workflowState.shortcut_id);
+    if (shortcut) {
+      const acks = ["On it!", "Working on it!", "Let me look into that.", "Give me a moment..."];
+      const ack = acks[Math.floor(Math.random() * acks.length)];
+      await sendSlackMessage(channelId, ack, threadTs);
+
+      submitSlackMessage({
+        text,
+        channelId,
+        threadTs,
+        userId,
+        context: `Workflow resume for ;${shortcut.trigger}`,
+        metadata: { shortcut_id: shortcut.id, workflow_resume: true },
+      });
+      return;
+    }
+  }
+
   // --- Continuation check: if this thread has a pending Phase 2, run it ---
   let isContinuation = false;
   const pendingCont = getPendingContinuation(externalId);
@@ -388,13 +411,22 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
   // --- Shortcut expansion ---
   const hasAttachments = (event.files || []).length > 0;
   let shortcutMatch = !isContinuation ? expandShortcut(text, hasAttachments) : null;
+  let workflowShortcutId: number | undefined;
   if (shortcutMatch) {
-    text = shortcutMatch.expanded;
-    console.log(`[slack] Shortcut ;${shortcutMatch.shortcut.trigger} expanded for user ${userId}`);
-    // If this shortcut has a continuation, save it for this thread
-    if (shortcutMatch.shortcut.continuation_prompt) {
-      setPendingContinuation(externalId, shortcutMatch.shortcut.id);
-      console.log(`[slack] Pending continuation saved for thread ${externalId}`);
+    // If this shortcut has workflow_steps, pass shortcut_id to task metadata
+    // instead of expanding the prompt — the processor will run the workflow executor
+    if (shortcutMatch.shortcut.workflow_steps) {
+      workflowShortcutId = shortcutMatch.shortcut.id;
+      console.log(`[slack] Workflow shortcut ;${shortcutMatch.shortcut.trigger} detected for user ${userId}`);
+      // Don't expand — keep original text as input for the workflow
+    } else {
+      text = shortcutMatch.expanded;
+      console.log(`[slack] Shortcut ;${shortcutMatch.shortcut.trigger} expanded for user ${userId}`);
+      // If this shortcut has a continuation, save it for this thread
+      if (shortcutMatch.shortcut.continuation_prompt) {
+        setPendingContinuation(externalId, shortcutMatch.shortcut.id);
+        console.log(`[slack] Pending continuation saved for thread ${externalId}`);
+      }
     }
   }
 
@@ -455,7 +487,10 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
     if (threadContext) {
       slackContext += `\n\n[Thread context — all messages in this thread prior to your current request]\n${threadContext}\n[End of thread context]`;
     }
-    submitSlackMessage({ text, channelId, threadTs, userId, context: slackContext });
+    submitSlackMessage({
+      text, channelId, threadTs, userId, context: slackContext,
+      ...(workflowShortcutId ? { metadata: { shortcut_id: workflowShortcutId } } : {}),
+    });
   } catch (err: unknown) {
     const errMessage = err instanceof Error ? err.message : "Unknown error";
     console.error("Slack event processing error:", errMessage);

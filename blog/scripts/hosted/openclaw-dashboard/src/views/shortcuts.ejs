@@ -42,6 +42,15 @@
             The agent will pause after Phase 1 and ask for approval. When the user replies, Phase 2 runs.
           </p>
         </div>
+        <details style="margin-bottom: 12px;">
+          <summary style="cursor: pointer; font-size: 13px; color: var(--accent); text-decoration: underline; list-style: none;">Advanced: Structured Workflow (JSON)</summary>
+          <div class="form-group" style="margin-top: 8px;">
+            <textarea name="workflow_steps" rows="8" placeholder='[{"type":"ai","id":"write","prompt":"Write a post based on: {{input}}"},{"type":"system","id":"create_doc","tool":"docs_create","input":{"title":"Draft","content":"{{step.write.result}}"}},{"type":"pause","id":"review","message":"Review: {{step.create_doc.result}}"}]' style="font-family: monospace; font-size: 12px;"></textarea>
+            <p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0 0;">
+              JSON array of steps. Types: <code>system</code> (tool call), <code>ai</code> (creative), <code>pause</code> (wait for approval), <code>prompt</code> (ask for info). Overrides prompt template when set.
+            </p>
+          </div>
+        </details>
         <button type="submit" class="btn">Create Shortcut</button>
       </form>
     </details>
@@ -104,6 +113,15 @@
                 Runs when the user replies in the thread after Phase 1. Leave blank for single-step shortcuts.
               </p>
             </div>
+            <details style="margin-bottom: 12px;">
+              <summary style="cursor: pointer; font-size: 13px; color: var(--accent); text-decoration: underline; list-style: none;">Advanced: Structured Workflow (JSON)</summary>
+              <div class="form-group" style="margin-top: 8px;">
+                <textarea name="workflow_steps" rows="8" style="font-family: monospace; font-size: 12px;"><%= sc.workflow_steps || '' %></textarea>
+                <p style="font-size: 11px; color: var(--text-secondary); margin: 4px 0 0;">
+                  JSON array of steps. Overrides prompt template when set. Clear to use prompt mode.
+                </p>
+              </div>
+            </details>
             <button type="submit" class="btn">Save</button>
           </form>
         </details>

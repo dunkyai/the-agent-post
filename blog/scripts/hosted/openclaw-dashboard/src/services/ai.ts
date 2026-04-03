@@ -582,7 +582,7 @@ async function executeFindImage(input: { query: string; style?: string }): Promi
   });
 }
 
-async function executeBrowserTool(toolName: string, input: any): Promise<string | any[]> {
+export async function executeBrowserTool(toolName: string, input: any): Promise<string | any[]> {
   const provisioningUrl = process.env.PROVISIONING_URL;
   const instanceId = process.env.INSTANCE_ID;
   const gatewayToken = process.env.GATEWAY_TOKEN;
@@ -815,7 +815,7 @@ const EMAIL_MESSAGING_TOOLS = [
   },
 ];
 
-async function executeMessagingTool(toolName: string, input: any): Promise<string> {
+export async function executeMessagingTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
       case "send_slack":
@@ -917,7 +917,7 @@ const SUPABASE_UPDATE_TOOLS = [
   },
 ];
 
-async function executeSupabaseTool(toolName: string, input: any): Promise<string> {
+export async function executeSupabaseTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
       case "supabase_list_tables":
@@ -976,7 +976,7 @@ const AIRTABLE_TOOLS = [
   },
 ];
 
-async function executeAirtableTool(toolName: string, input: any): Promise<string> {
+export async function executeAirtableTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
       case "airtable_list_bases":
@@ -1090,7 +1090,7 @@ const NOTION_TOOLS = [
   },
 ];
 
-async function executeNotionTool(toolName: string, input: any): Promise<string> {
+export async function executeNotionTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
       case "notion_search": {
@@ -1166,7 +1166,7 @@ const BUFFER_TOOLS = [
   },
 ];
 
-async function executeBufferTool(toolName: string, input: any): Promise<string> {
+export async function executeBufferTool(toolName: string, input: any): Promise<string> {
   try {
     const selected = getSelectedChannels();
     switch (toolName) {
@@ -1332,7 +1332,7 @@ const LUMA_TOOLS = [
   },
 ];
 
-async function executeLumaTool(toolName: string, input: any): Promise<string> {
+export async function executeLumaTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
       case "luma_list_events":
@@ -1494,7 +1494,7 @@ const TWITTER_TOOLS = [
   },
 ];
 
-async function executeTwitterTool(toolName: string, input: any): Promise<string> {
+export async function executeTwitterTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
       case "twitter_get_me":
@@ -1579,7 +1579,7 @@ const BEEHIIV_TOOLS = [
   },
 ];
 
-async function executeBeehiivTool(toolName: string, input: any): Promise<string> {
+export async function executeBeehiivTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
       case "beehiiv_list_templates":
@@ -1664,7 +1664,7 @@ const GRANOLA_TOOLS = [
   },
 ];
 
-async function executeGranolaTool(toolName: string, input: any): Promise<string> {
+export async function executeGranolaTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
       case "granola_list_meetings":
@@ -2223,7 +2223,7 @@ function checkGmailRecipientRules(to?: string, cc?: string): string | null {
   return null;
 }
 
-async function executeGoogleTool(toolName: string, input: any, userRawInput?: string, sourceContext?: SourceContext): Promise<string> {
+export async function executeGoogleTool(toolName: string, input: any, userRawInput?: string, sourceContext?: SourceContext): Promise<string> {
   if (!isGoogleRunning()) {
     return JSON.stringify({ error: "Google is not connected. Ask the user to connect Google in the integrations page." });
   }

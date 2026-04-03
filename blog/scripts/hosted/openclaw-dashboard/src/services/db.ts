@@ -185,12 +185,27 @@ function initSchema(): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (shortcut_id) REFERENCES shortcuts(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS workflow_state (
+      thread_id TEXT PRIMARY KEY,
+      shortcut_id INTEGER NOT NULL,
+      steps TEXT NOT NULL,
+      current_step INTEGER NOT NULL DEFAULT 0,
+      step_results TEXT NOT NULL DEFAULT '{}',
+      user_input TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'running',
+      error_step INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (shortcut_id) REFERENCES shortcuts(id) ON DELETE CASCADE
+    );
   `);
 
   // Migrations: add columns to existing tables
   try { db.exec("ALTER TABLE scheduled_jobs ADD COLUMN run_once INTEGER NOT NULL DEFAULT 0"); } catch {}
   try { db.exec("ALTER TABLE email_thread_state ADD COLUMN reply_mode TEXT NOT NULL DEFAULT 'draft'"); } catch {}
   try { db.exec("ALTER TABLE shortcuts ADD COLUMN continuation_prompt TEXT"); } catch {}
+  try { db.exec("ALTER TABLE shortcuts ADD COLUMN workflow_steps TEXT"); } catch {}
 }
 
 export function getGmailProcessedThread(threadId: string): { last_message_id: string } | undefined {
@@ -805,6 +820,7 @@ export interface Shortcut {
   description: string;
   prompt: string;
   continuation_prompt: string | null;
+  workflow_steps: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -821,13 +837,13 @@ export function getShortcutByTrigger(trigger: string): Shortcut | undefined {
   return getDb().prepare("SELECT * FROM shortcuts WHERE trigger = ?").get(trigger) as Shortcut | undefined;
 }
 
-export function createShortcut(trigger: string, name: string, description: string, prompt: string, continuationPrompt?: string): void {
+export function createShortcut(trigger: string, name: string, description: string, prompt: string, continuationPrompt?: string, workflowSteps?: string): void {
   getDb()
-    .prepare("INSERT INTO shortcuts (trigger, name, description, prompt, continuation_prompt) VALUES (?, ?, ?, ?, ?)")
-    .run(trigger, name, description, prompt, continuationPrompt || null);
+    .prepare("INSERT INTO shortcuts (trigger, name, description, prompt, continuation_prompt, workflow_steps) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(trigger, name, description, prompt, continuationPrompt || null, workflowSteps || null);
 }
 
-export function updateShortcut(id: number, updates: { trigger?: string; name?: string; description?: string; prompt?: string; continuation_prompt?: string | null }): void {
+export function updateShortcut(id: number, updates: { trigger?: string; name?: string; description?: string; prompt?: string; continuation_prompt?: string | null; workflow_steps?: string | null }): void {
   const fields: string[] = [];
   const values: any[] = [];
   if (updates.trigger !== undefined) { fields.push("trigger = ?"); values.push(updates.trigger); }
@@ -835,6 +851,7 @@ export function updateShortcut(id: number, updates: { trigger?: string; name?: s
   if (updates.description !== undefined) { fields.push("description = ?"); values.push(updates.description); }
   if (updates.prompt !== undefined) { fields.push("prompt = ?"); values.push(updates.prompt); }
   if (updates.continuation_prompt !== undefined) { fields.push("continuation_prompt = ?"); values.push(updates.continuation_prompt); }
+  if (updates.workflow_steps !== undefined) { fields.push("workflow_steps = ?"); values.push(updates.workflow_steps); }
   if (fields.length === 0) return;
   fields.push("updated_at = datetime('now')");
   values.push(id);
@@ -843,6 +860,45 @@ export function updateShortcut(id: number, updates: { trigger?: string; name?: s
 
 export function deleteShortcut(id: number): void {
   getDb().prepare("DELETE FROM shortcuts WHERE id = ?").run(id);
+}
+
+// --- Workflow State ---
+
+export function getWorkflowState(threadId: string): import("../types/workflow").WorkflowState | undefined {
+  return getDb().prepare("SELECT * FROM workflow_state WHERE thread_id = ?").get(threadId) as import("../types/workflow").WorkflowState | undefined;
+}
+
+export function upsertWorkflowState(threadId: string, data: Partial<import("../types/workflow").WorkflowState> & { shortcut_id: number }): void {
+  const existing = getWorkflowState(threadId);
+  if (existing) {
+    const fields: string[] = ["updated_at = datetime('now')"];
+    const values: any[] = [];
+    const allowed = ["steps", "current_step", "step_results", "user_input", "status", "error_step"];
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== undefined && allowed.includes(key)) {
+        fields.push(`${key} = ?`);
+        values.push(value);
+      }
+    }
+    values.push(threadId);
+    getDb().prepare(`UPDATE workflow_state SET ${fields.join(", ")} WHERE thread_id = ?`).run(...values);
+  } else {
+    getDb().prepare(
+      "INSERT INTO workflow_state (thread_id, shortcut_id, steps, current_step, step_results, user_input, status) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).run(
+      threadId,
+      data.shortcut_id,
+      data.steps || "[]",
+      data.current_step || 0,
+      data.step_results || "{}",
+      data.user_input || "",
+      data.status || "running"
+    );
+  }
+}
+
+export function deleteWorkflowState(threadId: string): void {
+  getDb().prepare("DELETE FROM workflow_state WHERE thread_id = ?").run(threadId);
 }
 
 // --- Pending Continuations ---
@@ -886,6 +942,16 @@ export function expandShortcut(message: string, hasAttachments = false): { short
   const before = normalized.slice(0, matchStart).trim();
   const after = normalized.slice(matchEnd).trim();
   const input = [before, after].filter(Boolean).join("\n\n");
+
+  // If no input and no attachments, don't run the workflow — ask for clarification
+  if (!input && !hasAttachments) {
+    const expanded = `The user typed ;${shortcut.trigger} but didn't provide any content, context, or attachments. `
+      + `This shortcut ("${shortcut.name}") needs input to work with. `
+      + `Ask the user what they'd like to ${shortcut.description || "do with this shortcut"}. `
+      + `Be specific about what kind of input you need (e.g. audio file, text notes, a URL, a topic).`;
+    return { shortcut, expanded };
+  }
+
   let expanded = shortcut.prompt;
   const hasInputPlaceholder = expanded.includes("{{input}}");
   expanded = expanded.replace(/\{\{input\}\}/g, input || "");

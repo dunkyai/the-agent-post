@@ -21,7 +21,9 @@ import {
   addMessage,
   getMessages,
   getMonthlyTaskCount,
+  getShortcut,
 } from "./db";
+import { executeWorkflow, resumeWorkflow } from "./workflow";
 
 export type StatusCallback = (status: string) => void;
 
@@ -91,6 +93,31 @@ export async function processTask(
     const usedThisMonth = getMonthlyTaskCount();
     if (usedThisMonth >= messageLimit) {
       throw new Error("MESSAGE_LIMIT_REACHED");
+    }
+
+    // --- Workflow shortcut branch ---
+    const shortcutId = task.input.metadata?.shortcut_id as number | undefined;
+    const isWorkflowResume = task.input.metadata?.workflow_resume as boolean | undefined;
+    if (shortcutId) {
+      const shortcut = getShortcut(shortcutId);
+      if (shortcut?.workflow_steps || isWorkflowResume) {
+        const threadId = task.input.metadata?.threadTs
+          ? `${task.input.metadata.channelId}:${task.input.metadata.threadTs}`
+          : taskId;
+        const userInput = task.input.raw_input;
+
+        const result = isWorkflowResume
+          ? await resumeWorkflow(task, threadId, userInput, onStatus)
+          : await executeWorkflow(task, shortcut!, threadId, userInput, onStatus);
+
+        const completedAt = new Date().toISOString();
+        const durationMs = Date.now() - new Date(startedAt).getTime();
+        updateTaskStatus(taskId, result.status === "error" ? "failed" : "completed", {
+          output: JSON.stringify({ reply_channel: task.input.source_channel, result: result.response }),
+          execution: JSON.stringify({ ...task.execution, started_at: startedAt, completed_at: completedAt, duration_ms: durationMs }),
+        });
+        return getTaskById(taskId)!;
+      }
     }
 
     // Get or create conversation for this task
