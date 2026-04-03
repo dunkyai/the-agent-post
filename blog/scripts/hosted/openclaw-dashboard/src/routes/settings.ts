@@ -4,6 +4,11 @@ import { getSetting, setSetting, getAllMemories, getAllScheduledJobs, deleteMemo
 const router = Router();
 
 router.get("/settings", (req: Request, res: Response) => {
+  // Default to integrations tab when no tab specified
+  if (!req.query.tab) {
+    res.redirect("/integrations");
+    return;
+  }
   const model = getSetting("model") || "claude-sonnet-4-20250514";
   const systemPrompt = getSetting("system_prompt") || "";
   const temperature = getSetting("temperature") || "0.7";

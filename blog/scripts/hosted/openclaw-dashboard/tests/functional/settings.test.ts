@@ -11,11 +11,17 @@ describe("Settings", () => {
     cookie = getAuthCookie();
   });
 
-  it("GET /settings renders settings page", async () => {
+  it("GET /settings redirects to integrations", async () => {
     const app = getTestApp();
     const res = await app.get("/settings").set("Cookie", cookie);
+    expect(res.status).toBe(302);
+  });
+
+  it("GET /settings?tab=details renders details page", async () => {
+    const app = getTestApp();
+    const res = await app.get("/settings?tab=details").set("Cookie", cookie);
     expect(res.status).toBe(200);
-    expect(res.text).toContain("settings");
+    expect(res.text).toContain("Details");
   });
 
   it("POST /settings saves valid settings", async () => {
