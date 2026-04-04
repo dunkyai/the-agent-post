@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { upsertIntegration } from "./db";
-import { encrypt } from "./encryption";
+import { encrypt, encryptOAuthState } from "./encryption";
 
 const TWITTER_API = "https://api.x.com/2";
 
@@ -36,7 +36,7 @@ export function buildTwitterOAuthUrl(): string {
       .digest("hex"),
     code_verifier: codeVerifier,
   };
-  const state = Buffer.from(JSON.stringify(statePayload)).toString("base64url");
+  const state = encryptOAuthState(statePayload);
 
   const params = new URLSearchParams({
     response_type: "code",

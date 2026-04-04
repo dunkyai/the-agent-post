@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { upsertIntegration } from "./db";
-import { encrypt } from "./encryption";
+import { encrypt, encryptOAuthState } from "./encryption";
 
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_VERSION = "2022-06-28";
@@ -31,7 +31,7 @@ export function buildNotionOAuthUrl(): string {
       .update(instanceId)
       .digest("hex"),
   };
-  const state = Buffer.from(JSON.stringify(statePayload)).toString("base64url");
+  const state = encryptOAuthState(statePayload);
 
   const params = new URLSearchParams({
     client_id: clientId,

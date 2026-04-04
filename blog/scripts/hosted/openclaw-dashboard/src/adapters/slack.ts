@@ -9,6 +9,7 @@ export interface SlackMessageParams {
   threadTs: string;
   userId: string;
   context: string;
+  metadata?: Record<string, any>;
 }
 
 /**
@@ -19,7 +20,7 @@ export interface SlackMessageParams {
  * immediate ack) is handled by handleSlackEvent() in slack.ts BEFORE this is called.
  */
 export function submitSlackMessage(params: SlackMessageParams): Task {
-  const { text, channelId, threadTs, userId, context } = params;
+  const { text, channelId, threadTs, userId, context, metadata: extraMetadata } = params;
   const externalId = `${channelId}:${threadTs}`;
   const conversationId = getOrCreateConversation("slack", externalId);
 
@@ -27,7 +28,7 @@ export function submitSlackMessage(params: SlackMessageParams): Task {
     raw_input: text,
     source_channel: "slack",
     reply_channel: "slack",
-    metadata: { channelId, threadTs, userId, context },
+    metadata: { channelId, threadTs, userId, context, ...extraMetadata },
     conversation_id: conversationId,
   });
 

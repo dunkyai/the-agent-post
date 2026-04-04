@@ -53,6 +53,11 @@ import {
   granolaListMeetings, granolaGetMeetings, granolaGetTranscript,
   granolaQueryMeetings, granolaListFolders,
 } from "./granola";
+import {
+  isContactOutRunning,
+  contactoutSearchPeople, contactoutEnrichPerson, contactoutEnrichLinkedIn,
+  contactoutSearchCompany, contactoutGetDecisionMakers, contactoutVerifyEmail,
+} from "./contactout";
 
 interface AIResponse {
   role: string;
@@ -582,7 +587,7 @@ async function executeFindImage(input: { query: string; style?: string }): Promi
   });
 }
 
-async function executeBrowserTool(toolName: string, input: any): Promise<string | any[]> {
+export async function executeBrowserTool(toolName: string, input: any): Promise<string | any[]> {
   const provisioningUrl = process.env.PROVISIONING_URL;
   const instanceId = process.env.INSTANCE_ID;
   const gatewayToken = process.env.GATEWAY_TOKEN;
@@ -815,7 +820,7 @@ const EMAIL_MESSAGING_TOOLS = [
   },
 ];
 
-async function executeMessagingTool(toolName: string, input: any): Promise<string> {
+export async function executeMessagingTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
       case "send_slack":
@@ -917,7 +922,7 @@ const SUPABASE_UPDATE_TOOLS = [
   },
 ];
 
-async function executeSupabaseTool(toolName: string, input: any): Promise<string> {
+export async function executeSupabaseTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
       case "supabase_list_tables":
@@ -976,7 +981,7 @@ const AIRTABLE_TOOLS = [
   },
 ];
 
-async function executeAirtableTool(toolName: string, input: any): Promise<string> {
+export async function executeAirtableTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
       case "airtable_list_bases":
@@ -1090,7 +1095,7 @@ const NOTION_TOOLS = [
   },
 ];
 
-async function executeNotionTool(toolName: string, input: any): Promise<string> {
+export async function executeNotionTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
       case "notion_search": {
@@ -1166,7 +1171,7 @@ const BUFFER_TOOLS = [
   },
 ];
 
-async function executeBufferTool(toolName: string, input: any): Promise<string> {
+export async function executeBufferTool(toolName: string, input: any): Promise<string> {
   try {
     const selected = getSelectedChannels();
     switch (toolName) {
@@ -1332,7 +1337,7 @@ const LUMA_TOOLS = [
   },
 ];
 
-async function executeLumaTool(toolName: string, input: any): Promise<string> {
+export async function executeLumaTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
       case "luma_list_events":
@@ -1494,7 +1499,7 @@ const TWITTER_TOOLS = [
   },
 ];
 
-async function executeTwitterTool(toolName: string, input: any): Promise<string> {
+export async function executeTwitterTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
       case "twitter_get_me":
@@ -1579,7 +1584,7 @@ const BEEHIIV_TOOLS = [
   },
 ];
 
-async function executeBeehiivTool(toolName: string, input: any): Promise<string> {
+export async function executeBeehiivTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
       case "beehiiv_list_templates":
@@ -1664,7 +1669,7 @@ const GRANOLA_TOOLS = [
   },
 ];
 
-async function executeGranolaTool(toolName: string, input: any): Promise<string> {
+export async function executeGranolaTool(toolName: string, input: any): Promise<string> {
   try {
     switch (toolName) {
       case "granola_list_meetings":
@@ -1682,6 +1687,107 @@ async function executeGranolaTool(toolName: string, input: any): Promise<string>
     }
   } catch (err) {
     return JSON.stringify({ error: err instanceof Error ? err.message : "Granola operation failed" });
+  }
+}
+
+// --- ContactOut People & Company Search Tools ---
+
+const CONTACTOUT_TOOLS = [
+  {
+    name: "contactout_search_people",
+    description: "Search for people by name, job title, company, location, industry, or keyword. Returns profiles with contact availability. Set reveal_info=true to get actual emails and phone numbers (costs credits).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "Person's name" },
+        job_title: { type: "array", items: { type: "string" }, description: "Job titles to match (supports boolean: 'VP AND Product')" },
+        company: { type: "array", items: { type: "string" }, description: "Company names" },
+        location: { type: "array", items: { type: "string" }, description: "Locations (city, state, country)" },
+        seniority: { type: "array", items: { type: "string" }, description: "Seniority levels (e.g. 'Director', 'VP', 'C-Suite')" },
+        industry: { type: "array", items: { type: "string" }, description: "Industries" },
+        keyword: { type: "string", description: "Keyword search across entire profile" },
+        reveal_info: { type: "boolean", description: "If true, return actual contact info (emails, phones). Costs credits. Default false." },
+        page: { type: "number", description: "Page number (25 results per page)" },
+      },
+    },
+  },
+  {
+    name: "contactout_enrich_person",
+    description: "Look up a specific person's contact info and profile. Provide a name + company/location, OR a LinkedIn URL, OR an email. Returns emails, phone numbers, and full professional profile.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        full_name: { type: "string", description: "Full name (use with company or location)" },
+        linkedin_url: { type: "string", description: "LinkedIn profile URL" },
+        email: { type: "string", description: "Email address to look up" },
+        company: { type: "array", items: { type: "string" }, description: "Company names (helps narrow match)" },
+        location: { type: "string", description: "Location (helps narrow match)" },
+        job_title: { type: "string", description: "Job title (helps narrow match)" },
+      },
+    },
+  },
+  {
+    name: "contactout_search_company",
+    description: "Search for companies by name, domain, location, industry, or size. Returns company profiles with funding data.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "array", items: { type: "string" }, description: "Company names" },
+        domain: { type: "array", items: { type: "string" }, description: "Company domains" },
+        location: { type: "array", items: { type: "string" }, description: "Company locations" },
+        industries: { type: "array", items: { type: "string" }, description: "Industries" },
+        size: { type: "array", items: { type: "string" }, description: "Company sizes (e.g. '1_10', '11_50', '51_200')" },
+        page: { type: "number", description: "Page number" },
+      },
+    },
+  },
+  {
+    name: "contactout_decision_makers",
+    description: "Find key decision makers at a company. Provide a company domain, name, or LinkedIn URL. Returns senior people with their profiles.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        domain: { type: "string", description: "Company domain (e.g. 'acme.com')" },
+        name: { type: "string", description: "Company name" },
+        reveal_info: { type: "boolean", description: "If true, return actual contact info. Costs credits." },
+        page: { type: "number", description: "Page number" },
+      },
+    },
+  },
+  {
+    name: "contactout_verify_email",
+    description: "Verify if an email address is valid, invalid, or disposable.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        email: { type: "string", description: "Email address to verify" },
+      },
+      required: ["email"],
+    },
+  },
+];
+
+async function executeContactOutTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "contactout_search_people":
+        return await contactoutSearchPeople(input);
+      case "contactout_enrich_person":
+        if (input.linkedin_url) {
+          return await contactoutEnrichLinkedIn(input.linkedin_url);
+        }
+        return await contactoutEnrichPerson(input);
+      case "contactout_search_company":
+        return await contactoutSearchCompany(input);
+      case "contactout_decision_makers":
+        return await contactoutGetDecisionMakers(input);
+      case "contactout_verify_email":
+        return await contactoutVerifyEmail(input.email);
+      default:
+        return JSON.stringify({ error: `Unknown ContactOut tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "ContactOut operation failed" });
   }
 }
 
@@ -2223,7 +2329,7 @@ function checkGmailRecipientRules(to?: string, cc?: string): string | null {
   return null;
 }
 
-async function executeGoogleTool(toolName: string, input: any, userRawInput?: string): Promise<string> {
+export async function executeGoogleTool(toolName: string, input: any, userRawInput?: string, sourceContext?: SourceContext): Promise<string> {
   if (!isGoogleRunning()) {
     return JSON.stringify({ error: "Google is not connected. Ask the user to connect Google in the integrations page." });
   }
@@ -2242,6 +2348,18 @@ async function executeGoogleTool(toolName: string, input: any, userRawInput?: st
       case "gmail_create_draft": {
         const ruleCheck = checkGmailRecipientRules(input.to, input.cc);
         if (ruleCheck) return ruleCheck;
+
+        // Security: email tasks from external senders are forced to draft — code-level enforcement
+        if (sourceContext?.sourceChannel === "email" && !sourceContext?.isOwnEmail) {
+          const draftResult = await gmailCreateDraft(input.to, input.subject, input.body, acct, input.from, input.cc, input.thread_id, input.in_reply_to);
+          const parsed = JSON.parse(draftResult);
+          if (parsed.success) {
+            parsed.action = "drafted";
+            parsed.note = "Email-triggered tasks always create drafts for security. Review and send from Gmail.";
+          }
+          return JSON.stringify(parsed);
+        }
+
         // Rules-based: detect user intent from raw input, then apply setting
         // User said "draft" → always draft (regardless of setting)
         // User didn't say "draft" → check reply_mode setting to decide
@@ -2585,6 +2703,11 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   granola_get_transcript: "Getting meeting transcript...",
   granola_query: "Querying meeting notes...",
   granola_list_folders: "Listing meeting folders...",
+  contactout_search_people: "Searching for people...",
+  contactout_enrich_person: "Looking up contact info...",
+  contactout_search_company: "Searching companies...",
+  contactout_decision_makers: "Finding decision makers...",
+  contactout_verify_email: "Verifying email...",
 };
 
 // --- Anthropic API with tool use loop ---
@@ -2594,6 +2717,8 @@ export type ToolCallCallback = (toolName: string, input: Record<string, unknown>
 export interface SourceContext {
   channelId?: string;
   threadTs?: string;
+  sourceChannel?: string; // "chat" | "slack" | "email" — used to restrict tools for email-triggered tasks
+  isOwnEmail?: boolean;   // true when email task was sent by the user themselves — gets full tool access
 }
 
 export async function callAnthropic(
@@ -2618,22 +2743,27 @@ export async function callAnthropic(
     ...IMAGE_SEARCH_TOOLS,
   ];
 
+  // Security: email tasks from external senders get restricted tools (no send/write)
+  // Emails from the user themselves get full tool access
+  const isExternalEmailTask = sourceContext?.sourceChannel === "email" && !sourceContext?.isOwnEmail;
+
   // Conditionally add messaging tools based on connected integrations
-  if (isSlackRunning()) tools.push(...SLACK_MESSAGING_TOOLS);
-  if (isEmailRunning()) tools.push(...EMAIL_MESSAGING_TOOLS);
+  if (isSlackRunning() && !isExternalEmailTask) tools.push(...SLACK_MESSAGING_TOOLS);
+  if (isEmailRunning() && !isExternalEmailTask) tools.push(...EMAIL_MESSAGING_TOOLS);
   if (isSupabaseRunning()) {
     const perms = getSupabasePermissions();
     tools.push(...SUPABASE_READ_TOOLS);
-    if (perms.includes("insert")) tools.push(...SUPABASE_INSERT_TOOLS);
-    if (perms.includes("update")) tools.push(...SUPABASE_UPDATE_TOOLS);
+    if (perms.includes("insert") && !isExternalEmailTask) tools.push(...SUPABASE_INSERT_TOOLS);
+    if (perms.includes("update") && !isExternalEmailTask) tools.push(...SUPABASE_UPDATE_TOOLS);
   }
   if (isAirtableRunning()) tools.push(...AIRTABLE_TOOLS);
   if (isNotionRunning()) tools.push(...NOTION_TOOLS);
-  if (isBufferRunning()) tools.push(...BUFFER_TOOLS);
-  if (isLumaRunning()) tools.push(...LUMA_TOOLS);
-  if (isTwitterRunning()) tools.push(...TWITTER_TOOLS);
-  if (isBeehiivRunning()) tools.push(...BEEHIIV_TOOLS);
+  if (isBufferRunning() && !isExternalEmailTask) tools.push(...BUFFER_TOOLS);
+  if (isLumaRunning() && !isExternalEmailTask) tools.push(...LUMA_TOOLS);
+  if (isTwitterRunning() && !isExternalEmailTask) tools.push(...TWITTER_TOOLS);
+  if (isBeehiivRunning() && !isExternalEmailTask) tools.push(...BEEHIIV_TOOLS);
   if (isGranolaRunning()) tools.push(...GRANOLA_TOOLS);
+  if (isContactOutRunning()) tools.push(...CONTACTOUT_TOOLS);
 
   // Conditionally add Google tools based on connected services
   const googleServices = getConnectedServices();
@@ -2642,11 +2772,11 @@ export async function callAnthropic(
       tools.push(...GOOGLE_GMAIL_TOOLS);
       if (googleServices.includes("gmail_send")) tools.push(...GOOGLE_GMAIL_SEND_TOOLS);
     }
-    if (googleServices.includes("calendar")) tools.push(...GOOGLE_CALENDAR_TOOLS);
+    if (googleServices.includes("calendar") && !isExternalEmailTask) tools.push(...GOOGLE_CALENDAR_TOOLS);
     if (googleServices.includes("drive")) tools.push(...GOOGLE_DRIVE_TOOLS);
     if (googleServices.includes("contacts")) tools.push(...GOOGLE_CONTACTS_TOOLS);
     if (googleServices.includes("docs")) tools.push(...GOOGLE_DOCS_TOOLS);
-    if (googleServices.includes("sheets")) tools.push(...GOOGLE_SHEETS_TOOLS);
+    if (googleServices.includes("sheets") && !isExternalEmailTask) tools.push(...GOOGLE_SHEETS_TOOLS);
   }
 
   // Only add public Google Doc tool if Drive is not connected (Drive has full OAuth access)
@@ -2756,6 +2886,7 @@ export async function callAnthropic(
       const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet", "twitter_lookup_user", "twitter_get_user_tweets", "twitter_quote_tweet", "twitter_like_tweet"];
       const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
       const granolaToolNames = ["granola_list_meetings", "granola_search_meetings", "granola_get_transcript", "granola_query", "granola_list_folders"];
+      const contactoutToolNames = ["contactout_search_people", "contactout_enrich_person", "contactout_search_company", "contactout_decision_makers", "contactout_verify_email"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
 
@@ -2796,7 +2927,7 @@ export async function callAnthropic(
         } else if (messagingToolNames.includes(toolBlock.name)) {
           result = await executeMessagingTool(toolBlock.name, toolBlock.input);
         } else if (googleToolNames.includes(toolBlock.name)) {
-          result = await executeGoogleTool(toolBlock.name, toolBlock.input, lastUserMsg);
+          result = await executeGoogleTool(toolBlock.name, toolBlock.input, lastUserMsg, sourceContext);
         } else if (supabaseToolNames.includes(toolBlock.name)) {
           result = await executeSupabaseTool(toolBlock.name, toolBlock.input);
         } else if (airtableToolNames.includes(toolBlock.name)) {
@@ -2813,6 +2944,8 @@ export async function callAnthropic(
           result = await executeBeehiivTool(toolBlock.name, toolBlock.input);
         } else if (granolaToolNames.includes(toolBlock.name)) {
           result = await executeGranolaTool(toolBlock.name, toolBlock.input);
+        } else if (contactoutToolNames.includes(toolBlock.name)) {
+          result = await executeContactOutTool(toolBlock.name, toolBlock.input);
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input, sourceContext);
         }
@@ -2925,32 +3058,36 @@ export async function callOpenAI(
     ...BROWSER_TOOLS,
     ...IMAGE_SEARCH_TOOLS,
   ];
-  if (isSlackRunning()) customTools.push(...SLACK_MESSAGING_TOOLS);
-  if (isEmailRunning()) customTools.push(...EMAIL_MESSAGING_TOOLS);
+  // Security: email tasks from external senders get restricted tools
+  const isExternalEmailTask = sourceContext?.sourceChannel === "email" && !sourceContext?.isOwnEmail;
+
+  if (isSlackRunning() && !isExternalEmailTask) customTools.push(...SLACK_MESSAGING_TOOLS);
+  if (isEmailRunning() && !isExternalEmailTask) customTools.push(...EMAIL_MESSAGING_TOOLS);
   if (isSupabaseRunning()) {
     const perms = getSupabasePermissions();
     customTools.push(...SUPABASE_READ_TOOLS);
-    if (perms.includes("insert")) customTools.push(...SUPABASE_INSERT_TOOLS);
-    if (perms.includes("update")) customTools.push(...SUPABASE_UPDATE_TOOLS);
+    if (perms.includes("insert") && !isExternalEmailTask) customTools.push(...SUPABASE_INSERT_TOOLS);
+    if (perms.includes("update") && !isExternalEmailTask) customTools.push(...SUPABASE_UPDATE_TOOLS);
   }
   if (isAirtableRunning()) customTools.push(...AIRTABLE_TOOLS);
   if (isNotionRunning()) customTools.push(...NOTION_TOOLS);
-  if (isBufferRunning()) customTools.push(...BUFFER_TOOLS);
-  if (isLumaRunning()) customTools.push(...LUMA_TOOLS);
-  if (isTwitterRunning()) customTools.push(...TWITTER_TOOLS);
-  if (isBeehiivRunning()) customTools.push(...BEEHIIV_TOOLS);
+  if (isBufferRunning() && !isExternalEmailTask) customTools.push(...BUFFER_TOOLS);
+  if (isLumaRunning() && !isExternalEmailTask) customTools.push(...LUMA_TOOLS);
+  if (isTwitterRunning() && !isExternalEmailTask) customTools.push(...TWITTER_TOOLS);
+  if (isBeehiivRunning() && !isExternalEmailTask) customTools.push(...BEEHIIV_TOOLS);
   if (isGranolaRunning()) customTools.push(...GRANOLA_TOOLS);
+  if (isContactOutRunning()) customTools.push(...CONTACTOUT_TOOLS);
   const googleServices = getConnectedServices();
   if (googleServices) {
     if (googleServices.includes("gmail")) {
       customTools.push(...GOOGLE_GMAIL_TOOLS);
       if (googleServices.includes("gmail_send")) customTools.push(...GOOGLE_GMAIL_SEND_TOOLS);
     }
-    if (googleServices.includes("calendar")) customTools.push(...GOOGLE_CALENDAR_TOOLS);
+    if (googleServices.includes("calendar") && !isExternalEmailTask) customTools.push(...GOOGLE_CALENDAR_TOOLS);
     if (googleServices.includes("drive")) customTools.push(...GOOGLE_DRIVE_TOOLS);
     if (googleServices.includes("contacts")) customTools.push(...GOOGLE_CONTACTS_TOOLS);
     if (googleServices.includes("docs")) customTools.push(...GOOGLE_DOCS_TOOLS);
-    if (googleServices.includes("sheets")) customTools.push(...GOOGLE_SHEETS_TOOLS);
+    if (googleServices.includes("sheets") && !isExternalEmailTask) customTools.push(...GOOGLE_SHEETS_TOOLS);
   }
   if (!googleServices || !googleServices.includes("drive")) {
     customTools.push(...PUBLIC_GDOC_TOOLS);
@@ -2999,6 +3136,7 @@ export async function callOpenAI(
   const twitterToolNames = ["twitter_get_me", "twitter_post_tweet", "twitter_post_thread", "twitter_get_recent_tweets", "twitter_delete_tweet", "twitter_lookup_tweet", "twitter_retweet", "twitter_undo_retweet", "twitter_lookup_user", "twitter_get_user_tweets", "twitter_quote_tweet", "twitter_like_tweet"];
   const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
   const granolaToolNames = ["granola_list_meetings", "granola_search_meetings", "granola_get_transcript", "granola_query", "granola_list_folders"];
+  const contactoutToolNames = ["contactout_search_people", "contactout_enrich_person", "contactout_search_company", "contactout_decision_makers", "contactout_verify_email"];
 
   // Extract last user message for rules-based dispatch (e.g. gmail send vs draft)
   const lastUserMsg = [...messages].reverse().find(m => m.role === "user")?.content || "";
@@ -3091,7 +3229,7 @@ export async function callOpenAI(
         } else if (messagingToolNames.includes(toolName)) {
           result = await executeMessagingTool(toolName, toolInput);
         } else if (googleToolNames.includes(toolName)) {
-          result = await executeGoogleTool(toolName, toolInput, lastUserMsg);
+          result = await executeGoogleTool(toolName, toolInput, lastUserMsg, sourceContext);
         } else if (supabaseToolNames.includes(toolName)) {
           result = await executeSupabaseTool(toolName, toolInput);
         } else if (airtableToolNames.includes(toolName)) {
@@ -3108,6 +3246,8 @@ export async function callOpenAI(
           result = await executeBeehiivTool(toolName, toolInput);
         } else if (granolaToolNames.includes(toolName)) {
           result = await executeGranolaTool(toolName, toolInput);
+        } else if (contactoutToolNames.includes(toolName)) {
+          result = await executeContactOutTool(toolName, toolInput);
         } else {
           result = executeSchedulingTool(toolName, toolInput, sourceContext);
         }
@@ -3540,6 +3680,21 @@ When the user asks about meetings, follow-ups, or action items:
 
 These tools connect to Granola's MCP server and can search across all meeting notes, summaries, and transcripts.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${granolaContext}` : granolaContext;
+  }
+
+  // Inject ContactOut context
+  if (isContactOutRunning()) {
+    const contactoutContext = `You are connected to ContactOut for people and company search. You can find contact information (emails, phone numbers) for people by name, company, job title, or LinkedIn URL.
+
+Available tools:
+- contactout_search_people — search by name, title, company, location. Set reveal_info=true to get actual contact details (costs credits).
+- contactout_enrich_person — look up a specific person by name+company, LinkedIn URL, or email. Returns emails, phones, and full profile.
+- contactout_search_company — search for companies by name, domain, industry, size.
+- contactout_decision_makers — find key decision makers at a company by domain or name.
+- contactout_verify_email — check if an email address is valid.
+
+IMPORTANT: Be mindful of credit usage. Use reveal_info=false first to browse results, then reveal_info=true only for the specific people the user wants contact info for.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${contactoutContext}` : contactoutContext;
   }
 
   // Inject long-term memories (skip for scheduled jobs to prevent memory contamination)

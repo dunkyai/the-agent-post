@@ -51,7 +51,7 @@ function convertToWav(audioBuffer: Buffer, filename: string): { buffer: Buffer; 
   } finally {
     try { unlinkSync(inputPath); } catch {}
     try { unlinkSync(outputPath); } catch {}
-    try { require("fs").rmdirSync(dir); } catch {}
+    try { require("fs").rmSync(dir, { recursive: true }); } catch {}
   }
 }
 

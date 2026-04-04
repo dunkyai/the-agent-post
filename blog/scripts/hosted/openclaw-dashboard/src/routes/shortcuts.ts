@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { getAllShortcuts, getShortcut, createShortcut, updateShortcut, deleteShortcut } from "../services/db";
+import { getAllShortcuts, getShortcut, createShortcut, updateShortcut, deleteShortcut, getAllMemories } from "../services/db";
 
 const router = Router();
 
@@ -7,6 +7,7 @@ router.get("/shortcuts", (req: Request, res: Response) => {
   const shortcuts = getAllShortcuts();
   res.render("shortcuts", {
     shortcuts,
+    memories: getAllMemories(),
     active: "shortcuts",
     flash: req.query.flash || null,
   });
@@ -27,7 +28,9 @@ router.post("/shortcuts", (req: Request, res: Response) => {
   }
 
   try {
-    createShortcut(cleanTrigger, name.trim(), (description || "").trim(), prompt.trim());
+    const contPrompt = req.body.continuation_prompt?.trim() || undefined;
+    const workflowSteps = req.body.workflow_steps?.trim() || undefined;
+    createShortcut(cleanTrigger, name.trim(), (description || "").trim(), prompt.trim(), contPrompt, workflowSteps);
     res.redirect(303, "/shortcuts?flash=Shortcut+created");
   } catch (err: any) {
     const msg = err.message?.includes("UNIQUE") ? "A shortcut with that trigger already exists" : "Failed to create shortcut";
@@ -50,11 +53,15 @@ router.post("/shortcuts/:id", (req: Request, res: Response) => {
 
   const cleanTrigger = trigger.trim().replace(/^;/, "").toLowerCase();
   try {
+    const contPrompt = req.body.continuation_prompt?.trim() || null;
+    const workflowSteps = req.body.workflow_steps?.trim() || null;
     updateShortcut(id, {
       trigger: cleanTrigger,
       name: name.trim(),
       description: (description || "").trim(),
       prompt: prompt.trim(),
+      continuation_prompt: contPrompt,
+      workflow_steps: workflowSteps,
     });
     res.redirect(303, "/shortcuts?flash=Shortcut+updated");
   } catch (err: any) {

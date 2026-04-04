@@ -21,7 +21,9 @@ import {
   addMessage,
   getMessages,
   getMonthlyTaskCount,
+  getShortcut,
 } from "./db";
+import { executeWorkflow, resumeWorkflow } from "./workflow";
 
 export type StatusCallback = (status: string) => void;
 
@@ -93,6 +95,31 @@ export async function processTask(
       throw new Error("MESSAGE_LIMIT_REACHED");
     }
 
+    // --- Workflow shortcut branch ---
+    const shortcutId = task.input.metadata?.shortcut_id as number | undefined;
+    const isWorkflowResume = task.input.metadata?.workflow_resume as boolean | undefined;
+    if (shortcutId) {
+      const shortcut = getShortcut(shortcutId);
+      if (shortcut?.workflow_steps || isWorkflowResume) {
+        const threadId = task.input.metadata?.threadTs
+          ? `${task.input.metadata.channelId}:${task.input.metadata.threadTs}`
+          : taskId;
+        const userInput = task.input.raw_input;
+
+        const result = isWorkflowResume
+          ? await resumeWorkflow(task, threadId, userInput, onStatus)
+          : await executeWorkflow(task, shortcut!, threadId, userInput, onStatus);
+
+        const completedAt = new Date().toISOString();
+        const durationMs = Date.now() - new Date(startedAt).getTime();
+        updateTaskStatus(taskId, result.status === "error" ? "failed" : "completed", {
+          output: JSON.stringify({ reply_channel: task.input.source_channel, result: result.response }),
+          execution: JSON.stringify({ ...task.execution, started_at: startedAt, completed_at: completedAt, duration_ms: durationMs }),
+        });
+        return getTaskById(taskId)!;
+      }
+    }
+
     // Get or create conversation for this task
     const source = task.input.source_channel;
     const externalId = taskId; // Use task ID as external ID for chat tasks
@@ -147,11 +174,27 @@ export async function processTask(
       });
     };
 
-    // Build source context for Slack thread delivery
-    const sourceContext: SourceContext | undefined =
-      task.input.source_channel === "slack" && task.input.metadata?.channelId
+    // Build source context (Slack thread delivery + source channel for security restrictions)
+    // For email tasks: check if sender is the user's own email (full tools) or external (restricted)
+    let isOwnEmail = false;
+    if (task.input.source_channel === "email") {
+      const senderRaw = (task.input.metadata?.latestSender as string || "").toLowerCase();
+      const senderEmail = senderRaw.match(/<([^>]+)>/)?.[1] || senderRaw.trim();
+      const userEmail = getSetting("user_email")?.toLowerCase();
+      const accountId = (task.input.metadata?.accountId as string || "").toLowerCase();
+      isOwnEmail = !!(
+        (userEmail && senderEmail === userEmail) ||
+        (accountId && senderEmail === accountId)
+      );
+    }
+
+    const sourceContext: SourceContext = {
+      sourceChannel: task.input.source_channel,
+      isOwnEmail,
+      ...(task.input.source_channel === "slack" && task.input.metadata?.channelId
         ? { channelId: task.input.metadata.channelId as string, threadTs: task.input.metadata.threadTs as string | undefined }
-        : undefined;
+        : {}),
+    };
 
     // Call the appropriate provider
     const caller = provider === "anthropic" ? callAnthropic : callOpenAI;

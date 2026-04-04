@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { getIntegration, upsertIntegration, getSetting, setSetting, getGmailProcessedThread, getEmailThreadState, isKnownSender } from "./db";
-import { encrypt, decrypt } from "./encryption";
+import { encrypt, decrypt, encryptOAuthState } from "./encryption";
 import { sanitizeEmailContent } from "./email";
 import { processIncomingEmail, type EmailThreadContext } from "../adapters/email";
 
@@ -131,7 +131,7 @@ export function buildOAuthUrl(services: string[]): string {
       .digest("hex"),
     services,
   };
-  const state = Buffer.from(JSON.stringify(statePayload)).toString("base64url");
+  const state = encryptOAuthState(statePayload);
 
   const params = new URLSearchParams({
     client_id: clientId,
@@ -379,6 +379,11 @@ export async function gmailGetAttachment(messageId: string, attachmentId: string
   });
 }
 
+// Security: strip CRLF from email header values to prevent header injection
+function sanitizeHeader(value: string): string {
+  return value.replace(/[\r\n]/g, "");
+}
+
 export async function gmailSend(to: string, subject: string, body: string, accountId?: string, from?: string, cc?: string, threadId?: string, inReplyTo?: string): Promise<string> {
   // If we have a threadId but no In-Reply-To, try to fetch it from the thread
   let resolvedInReplyTo = inReplyTo;
@@ -409,15 +414,15 @@ export async function gmailSend(to: string, subject: string, body: string, accou
   }
 
   const emailHeaders = [
-    `To: ${to}`,
-    `Subject: ${subject}`,
+    `To: ${sanitizeHeader(to)}`,
+    `Subject: ${sanitizeHeader(subject)}`,
     `Content-Type: text/plain; charset="UTF-8"`,
   ];
-  if (from) emailHeaders.unshift(`From: ${from}`);
-  if (cc) emailHeaders.push(`Cc: ${cc}`);
+  if (from) emailHeaders.unshift(`From: ${sanitizeHeader(from)}`);
+  if (cc) emailHeaders.push(`Cc: ${sanitizeHeader(cc)}`);
   if (resolvedInReplyTo) {
-    emailHeaders.push(`In-Reply-To: ${resolvedInReplyTo}`);
-    emailHeaders.push(`References: ${resolvedInReplyTo}`);
+    emailHeaders.push(`In-Reply-To: ${sanitizeHeader(resolvedInReplyTo)}`);
+    emailHeaders.push(`References: ${sanitizeHeader(resolvedInReplyTo)}`);
   }
 
   const email = [...emailHeaders, "", body].join("\r\n");
@@ -470,15 +475,15 @@ export async function gmailCreateDraft(to: string, subject: string, body: string
   }
 
   const emailHeaders = [
-    `To: ${to}`,
-    `Subject: ${subject}`,
+    `To: ${sanitizeHeader(to)}`,
+    `Subject: ${sanitizeHeader(subject)}`,
     `Content-Type: text/plain; charset="UTF-8"`,
   ];
-  if (from) emailHeaders.unshift(`From: ${from}`);
-  if (cc) emailHeaders.push(`Cc: ${cc}`);
+  if (from) emailHeaders.unshift(`From: ${sanitizeHeader(from)}`);
+  if (cc) emailHeaders.push(`Cc: ${sanitizeHeader(cc)}`);
   if (resolvedInReplyTo) {
-    emailHeaders.push(`In-Reply-To: ${resolvedInReplyTo}`);
-    emailHeaders.push(`References: ${resolvedInReplyTo}`);
+    emailHeaders.push(`In-Reply-To: ${sanitizeHeader(resolvedInReplyTo)}`);
+    emailHeaders.push(`References: ${sanitizeHeader(resolvedInReplyTo)}`);
   }
 
   const email = [...emailHeaders, "", body].join("\r\n");

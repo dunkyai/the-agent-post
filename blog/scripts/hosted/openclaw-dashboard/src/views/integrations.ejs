@@ -6,8 +6,9 @@
     <%- include('partials/flash', { flash }) %>
 
     <div class="tab-bar" style="display: flex; gap: 0; margin-bottom: 16px; border-bottom: 2px solid var(--border, #e0e0e0);">
-      <a href="/settings?tab=settings" class="tab-link">Settings</a>
       <a href="/integrations" class="tab-link tab-active">Integrations</a>
+      <a href="/shortcuts" class="tab-link">Shortcuts</a>
+      <a href="/settings?tab=details" class="tab-link">Details</a>
       <a href="/settings?tab=memories" class="tab-link">Memories (<%= memories.length %>)</a>
     </div>
 

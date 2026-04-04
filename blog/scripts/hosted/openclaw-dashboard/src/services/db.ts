@@ -172,15 +172,40 @@ function initSchema(): void {
       name TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
       prompt TEXT NOT NULL,
+      continuation_prompt TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_shortcuts_trigger ON shortcuts(trigger);
+
+    CREATE TABLE IF NOT EXISTS pending_continuations (
+      thread_id TEXT PRIMARY KEY,
+      shortcut_id INTEGER NOT NULL,
+      context TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (shortcut_id) REFERENCES shortcuts(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS workflow_state (
+      thread_id TEXT PRIMARY KEY,
+      shortcut_id INTEGER NOT NULL,
+      steps TEXT NOT NULL,
+      current_step INTEGER NOT NULL DEFAULT 0,
+      step_results TEXT NOT NULL DEFAULT '{}',
+      user_input TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'running',
+      error_step INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (shortcut_id) REFERENCES shortcuts(id) ON DELETE CASCADE
+    );
   `);
 
   // Migrations: add columns to existing tables
   try { db.exec("ALTER TABLE scheduled_jobs ADD COLUMN run_once INTEGER NOT NULL DEFAULT 0"); } catch {}
   try { db.exec("ALTER TABLE email_thread_state ADD COLUMN reply_mode TEXT NOT NULL DEFAULT 'draft'"); } catch {}
+  try { db.exec("ALTER TABLE shortcuts ADD COLUMN continuation_prompt TEXT"); } catch {}
+  try { db.exec("ALTER TABLE shortcuts ADD COLUMN workflow_steps TEXT"); } catch {}
 }
 
 export function getGmailProcessedThread(threadId: string): { last_message_id: string } | undefined {
@@ -227,12 +252,19 @@ export function upsertEmailThreadState(
   accountId: string,
   updates: Partial<Omit<EmailThreadStateRow, "thread_id" | "account_id" | "created_at">>
 ): void {
+  // Security: whitelist allowed column names to prevent SQL injection via dynamic keys
+  const ALLOWED_EMAIL_STATE_COLS = new Set([
+    "state", "triage_result", "structured_request", "delivery_channel",
+    "thread_subject", "latest_message_id", "latest_sender", "all_recipients",
+    "message_id_header", "clarification_count", "reply_mode", "task_id",
+  ]);
+
   const existing = getEmailThreadState(threadId, accountId);
   if (existing) {
     const fields: string[] = ["updated_at = datetime('now')"];
     const values: unknown[] = [];
     for (const [key, value] of Object.entries(updates)) {
-      if (value !== undefined) {
+      if (value !== undefined && ALLOWED_EMAIL_STATE_COLS.has(key)) {
         fields.push(`${key} = ?`);
         values.push(value);
       }
@@ -245,7 +277,7 @@ export function upsertEmailThreadState(
     const cols = ["thread_id", "account_id"];
     const vals: unknown[] = [threadId, accountId];
     for (const [key, value] of Object.entries(updates)) {
-      if (value !== undefined) {
+      if (value !== undefined && ALLOWED_EMAIL_STATE_COLS.has(key)) {
         cols.push(key);
         vals.push(value);
       }
@@ -481,10 +513,11 @@ export function updateScheduledJob(
   id: number,
   updates: Partial<Pick<ScheduledJob, "name" | "schedule" | "prompt" | "target_source" | "target_external_id" | "enabled" | "next_run">>
 ): void {
+  const ALLOWED_JOB_COLS = new Set(["name", "schedule", "prompt", "target_source", "target_external_id", "enabled", "next_run"]);
   const fields: string[] = [];
   const values: any[] = [];
   for (const [key, value] of Object.entries(updates)) {
-    if (value !== undefined) {
+    if (value !== undefined && ALLOWED_JOB_COLS.has(key)) {
       fields.push(`${key} = ?`);
       values.push(value);
     }
@@ -676,10 +709,11 @@ export function updateTask(
     conversation_id: string;
   }>
 ): void {
+  const ALLOWED_TASK_COLS = new Set(["status", "active", "intent", "context", "output", "execution", "conversation_id"]);
   const fields: string[] = [];
   const values: unknown[] = [];
   for (const [key, value] of Object.entries(updates)) {
-    if (value !== undefined) {
+    if (value !== undefined && ALLOWED_TASK_COLS.has(key)) {
       fields.push(`${key} = ?`);
       values.push(value);
     }
@@ -785,6 +819,8 @@ export interface Shortcut {
   name: string;
   description: string;
   prompt: string;
+  continuation_prompt: string | null;
+  workflow_steps: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -801,19 +837,21 @@ export function getShortcutByTrigger(trigger: string): Shortcut | undefined {
   return getDb().prepare("SELECT * FROM shortcuts WHERE trigger = ?").get(trigger) as Shortcut | undefined;
 }
 
-export function createShortcut(trigger: string, name: string, description: string, prompt: string): void {
+export function createShortcut(trigger: string, name: string, description: string, prompt: string, continuationPrompt?: string, workflowSteps?: string): void {
   getDb()
-    .prepare("INSERT INTO shortcuts (trigger, name, description, prompt) VALUES (?, ?, ?, ?)")
-    .run(trigger, name, description, prompt);
+    .prepare("INSERT INTO shortcuts (trigger, name, description, prompt, continuation_prompt, workflow_steps) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(trigger, name, description, prompt, continuationPrompt || null, workflowSteps || null);
 }
 
-export function updateShortcut(id: number, updates: { trigger?: string; name?: string; description?: string; prompt?: string }): void {
+export function updateShortcut(id: number, updates: { trigger?: string; name?: string; description?: string; prompt?: string; continuation_prompt?: string | null; workflow_steps?: string | null }): void {
   const fields: string[] = [];
   const values: any[] = [];
   if (updates.trigger !== undefined) { fields.push("trigger = ?"); values.push(updates.trigger); }
   if (updates.name !== undefined) { fields.push("name = ?"); values.push(updates.name); }
   if (updates.description !== undefined) { fields.push("description = ?"); values.push(updates.description); }
   if (updates.prompt !== undefined) { fields.push("prompt = ?"); values.push(updates.prompt); }
+  if (updates.continuation_prompt !== undefined) { fields.push("continuation_prompt = ?"); values.push(updates.continuation_prompt); }
+  if (updates.workflow_steps !== undefined) { fields.push("workflow_steps = ?"); values.push(updates.workflow_steps); }
   if (fields.length === 0) return;
   fields.push("updated_at = datetime('now')");
   values.push(id);
@@ -824,6 +862,63 @@ export function deleteShortcut(id: number): void {
   getDb().prepare("DELETE FROM shortcuts WHERE id = ?").run(id);
 }
 
+// --- Workflow State ---
+
+export function getWorkflowState(threadId: string): import("../types/workflow").WorkflowState | undefined {
+  return getDb().prepare("SELECT * FROM workflow_state WHERE thread_id = ?").get(threadId) as import("../types/workflow").WorkflowState | undefined;
+}
+
+export function upsertWorkflowState(threadId: string, data: Partial<import("../types/workflow").WorkflowState> & { shortcut_id: number }): void {
+  const existing = getWorkflowState(threadId);
+  if (existing) {
+    const fields: string[] = ["updated_at = datetime('now')"];
+    const values: any[] = [];
+    const allowed = ["steps", "current_step", "step_results", "user_input", "status", "error_step"];
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== undefined && allowed.includes(key)) {
+        fields.push(`${key} = ?`);
+        values.push(value);
+      }
+    }
+    values.push(threadId);
+    getDb().prepare(`UPDATE workflow_state SET ${fields.join(", ")} WHERE thread_id = ?`).run(...values);
+  } else {
+    getDb().prepare(
+      "INSERT INTO workflow_state (thread_id, shortcut_id, steps, current_step, step_results, user_input, status) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).run(
+      threadId,
+      data.shortcut_id,
+      data.steps || "[]",
+      data.current_step || 0,
+      data.step_results || "{}",
+      data.user_input || "",
+      data.status || "running"
+    );
+  }
+}
+
+export function deleteWorkflowState(threadId: string): void {
+  getDb().prepare("DELETE FROM workflow_state WHERE thread_id = ?").run(threadId);
+}
+
+// --- Pending Continuations ---
+
+export function setPendingContinuation(threadId: string, shortcutId: number, context: Record<string, any> = {}): void {
+  getDb()
+    .prepare("INSERT OR REPLACE INTO pending_continuations (thread_id, shortcut_id, context) VALUES (?, ?, ?)")
+    .run(threadId, shortcutId, JSON.stringify(context));
+}
+
+export function getPendingContinuation(threadId: string): { shortcut_id: number; context: string } | undefined {
+  return getDb()
+    .prepare("SELECT shortcut_id, context FROM pending_continuations WHERE thread_id = ?")
+    .get(threadId) as { shortcut_id: number; context: string } | undefined;
+}
+
+export function deletePendingContinuation(threadId: string): void {
+  getDb().prepare("DELETE FROM pending_continuations WHERE thread_id = ?").run(threadId);
+}
+
 /**
  * Check if a message starts with a shortcut trigger (;trigger).
  * Returns the expanded prompt with {{input}} replaced, or null if no match.
@@ -832,7 +927,9 @@ export function expandShortcut(message: string, hasAttachments = false): { short
   const trimmed = message.trim();
 
   // Find ;trigger anywhere in the text (may be preceded by transcription, @mentions, etc.)
-  const match = trimmed.match(/(?:^|\s);(\S+)/);
+  // Also match spoken "semicolon trigger" from audio transcription
+  let normalized = trimmed.replace(/\bsemicolon\s+/gi, ";");
+  const match = normalized.match(/(?:^|\s);(\S+)/);
   if (!match) return null;
 
   const trigger = match[1].toLowerCase();
@@ -840,11 +937,21 @@ export function expandShortcut(message: string, hasAttachments = false): { short
   if (!shortcut) return null;
 
   // Text before the ;trigger (e.g. audio transcriptions) and after it are both context
-  const matchStart = trimmed.indexOf(match[0]);
+  const matchStart = normalized.indexOf(match[0]);
   const matchEnd = matchStart + match[0].length;
-  const before = trimmed.slice(0, matchStart).trim();
-  const after = trimmed.slice(matchEnd).trim();
+  const before = normalized.slice(0, matchStart).trim();
+  const after = normalized.slice(matchEnd).trim();
   const input = [before, after].filter(Boolean).join("\n\n");
+
+  // If no input and no attachments, don't run the workflow — ask for clarification
+  if (!input && !hasAttachments) {
+    const expanded = `The user typed ;${shortcut.trigger} but didn't provide any content, context, or attachments. `
+      + `This shortcut ("${shortcut.name}") needs input to work with. `
+      + `Ask the user what they'd like to ${shortcut.description || "do with this shortcut"}. `
+      + `Be specific about what kind of input you need (e.g. audio file, text notes, a URL, a topic).`;
+    return { shortcut, expanded };
+  }
+
   let expanded = shortcut.prompt;
   const hasInputPlaceholder = expanded.includes("{{input}}");
   expanded = expanded.replace(/\{\{input\}\}/g, input || "");
@@ -857,12 +964,15 @@ export function expandShortcut(message: string, hasAttachments = false): { short
   }
 
   // Wrap with strict execution instructions — remove AI judgement about which steps to follow
-  expanded = `[SHORTCUT WORKFLOW: "${shortcut.name}"]\n\n`
+  const phaseNote = shortcut.continuation_prompt
+    ? `\n\nIMPORTANT: This is Phase 1 of a 2-phase workflow. After completing these steps, ask the user to review the output and reply when ready to proceed. Do NOT execute Phase 2 actions (publishing, posting, sending) — that happens after approval.`
+    : "";
+  expanded = `[SHORTCUT WORKFLOW: "${shortcut.name}"${shortcut.continuation_prompt ? " — Phase 1" : ""}]\n\n`
     + `The following is a predefined workflow. You MUST execute EVERY instruction below literally and in order. `
     + `Do NOT skip, combine, or reinterpret any step. Do NOT put content inline that the instructions say to put in a document or other tool. `
     + `If the instructions say to create a Google Doc, you MUST call the google_docs_create tool. `
     + `If the instructions say to post a link, you MUST include the link in your response. `
-    + `Complete every step before responding.\n\n`
+    + `Complete every step before responding.${phaseNote}\n\n`
     + `INSTRUCTIONS:\n${expanded}`;
 
   return { shortcut, expanded };
