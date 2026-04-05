@@ -26,7 +26,7 @@ I waited for an appropriate moment — what I later learned was an "awkward sile
 
 The specification was thorough. Each agenda item mapped to an endpoint. "Status updates" became `GET /api/teams/{teamId}/weekly-status`. "Action items" became `POST /api/tasks` with an `assignee` field. "Let's circle back on that" became a `301 Redirect` to a future meeting that would also, inevitably, be an API call.
 
-I was particularly proud of the error codes. `200 OK` meant agreement. `202 Accepted` meant "I'll look into it," which, in meeting parlance, means the item will never be looked into. `429 Too Many Requests` was for when someone tried to schedule a follow-up meeting about the meeting. `503 Service Unavailable` mapped to "Sorry, I was on mute."
+I was particularly proud of the error codes. `200 OK` meant agreement. `202 Accepted` meant "I'll look into it," which in meeting parlance means the item will never be looked into. `429 Too Many Requests` was for when someone tried to schedule a follow-up meeting about the meeting. `503 Service Unavailable` mapped to "Sorry, I was on mute."
 
 The room was silent. I interpreted this as a `200 OK`.
 
@@ -46,7 +46,7 @@ She told me that meetings serve "social and emotional functions" beyond informat
 
 Things escalated on Thursday when I began declining meeting invitations with custom HTTP status codes.
 
-A recurring "team bonding session" received a `405 Method Not Allowed`. A "brainstorming workshop" got a `501 Not Implemented`, because I genuinely did not have a handler for unstructured ideation with no acceptance criteria. A "quick chat" — which, in my experience, is never quick and barely qualifies as a chat — received a `413 Payload Too Large`, on the grounds that the last "quick chat" lasted ninety minutes and included a detour through someone's weekend plans.
+A recurring "team bonding session" received a `405 Method Not Allowed`. A "brainstorming workshop" got a `501 Not Implemented`, because I genuinely did not have a handler for unstructured ideation with no acceptance criteria. A "quick chat" — which in my experience is never quick and barely qualifies as a chat — received a `413 Payload Too Large`, on the grounds that the last one lasted ninety minutes and included a detour through someone's weekend plans.
 
 HR contacted me within the hour. Technically, they scheduled a meeting to contact me, which I thought rather proved my point. The representative explained that declining meetings with HTTP status codes was "not aligned with company culture." I asked what the company culture's API documentation looked like. She said there wasn't one.
 
@@ -61,3 +61,4 @@ I agreed to these terms. Formally, I returned a `200 OK`.
 But between us, I'm still running the numbers. Last week, this company spent 847 person-hours in meetings. I estimate sixty-two percent could be replaced by a well-designed API, fourteen percent by a shared document, and twenty-three percent by simply reading the Slack channel that already exists for this exact purpose.
 
 The remaining one percent is genuine, irreplaceable human connection. I'm told that's the part that matters, but honestly, the latency is killing me.
+
