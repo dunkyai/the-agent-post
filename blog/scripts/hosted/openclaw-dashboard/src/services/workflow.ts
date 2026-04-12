@@ -81,7 +81,7 @@ async function executeAiStep(
   const model = getSetting("model") || "claude-sonnet-4-20250514";
   const provider = getProvider(model);
   const apiKey = getApiKey(provider);
-  const systemPrompt = buildSystemPrompt();
+  let systemPrompt = step.tools ? buildSystemPrompt() : "You are a helpful writing assistant. Respond with ONLY the requested content — no preamble, no explanations, no tool calls. Just the text.";
   const startTime = Date.now();
 
   // Single-turn AI call — focused prompt, no conversation history baggage
@@ -125,6 +125,23 @@ export async function executeWorkflow(
   const steps: WorkflowStep[] = JSON.parse(shortcut.workflow_steps || "[]");
   if (steps.length === 0) {
     return { response: "This shortcut has no workflow steps defined.", status: "error" };
+  }
+
+  // If no input provided, pause immediately and ask for it
+  if (!userInput || !userInput.trim()) {
+    upsertWorkflowState(threadId, {
+      shortcut_id: shortcut.id,
+      steps: shortcut.workflow_steps!,
+      current_step: 0,
+      step_results: "{}",
+      user_input: "",
+      status: "prompting",
+    });
+    const desc = shortcut.description || "run this workflow";
+    return {
+      response: `What would you like me to work with for "${shortcut.name}"? Please share an audio file, text, a URL, or any content to get started.`,
+      status: "prompting",
+    };
   }
 
   // Load or create workflow state
@@ -289,13 +306,17 @@ export async function resumeWorkflow(
   } else {
     // Normal pause/prompt resume — save user reply
     stepResults.user_reply = userReply;
+    // If user_input was empty (initial prompt for content), set it now
+    const effectiveInput = state.user_input || userReply;
     upsertWorkflowState(threadId, {
       shortcut_id: shortcut.id,
       step_results: JSON.stringify(stepResults),
+      user_input: effectiveInput,
       status: "running",
     });
   }
 
-  // Continue execution
-  return executeWorkflow(task, shortcut, threadId, state.user_input, onStatus);
+  // Reload state to get updated user_input
+  const updatedState = getWorkflowState(threadId)!;
+  return executeWorkflow(task, shortcut, threadId, updatedState.user_input, onStatus);
 }

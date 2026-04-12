@@ -116,9 +116,17 @@ export function submitChatMessage(sessionId: string, message: string): { taskId:
 
   // --- Shortcut expansion ---
   const shortcutMatch = expandShortcut(message);
-  const taskInput = shortcutMatch ? shortcutMatch.expanded : message;
+  let taskInput = message;
+  let extraMetadata: Record<string, any> = {};
   if (shortcutMatch) {
-    console.log(`[chat-adapter] Shortcut ;${shortcutMatch.shortcut.trigger} expanded for session ${sessionId.slice(0, 8)}...`);
+    if (shortcutMatch.shortcut.workflow_steps) {
+      // Workflow shortcut — pass shortcut_id, keep original text as input
+      extraMetadata = { shortcut_id: shortcutMatch.shortcut.id };
+      console.log(`[chat-adapter] Workflow shortcut ;${shortcutMatch.shortcut.trigger} detected for session ${sessionId.slice(0, 8)}...`);
+    } else {
+      taskInput = shortcutMatch.expanded;
+      console.log(`[chat-adapter] Shortcut ;${shortcutMatch.shortcut.trigger} expanded for session ${sessionId.slice(0, 8)}...`);
+    }
   }
 
   // --- Normal flow ---
@@ -126,7 +134,7 @@ export function submitChatMessage(sessionId: string, message: string): { taskId:
     raw_input: taskInput,
     source_channel: "chat",
     reply_channel: "chat",
-    metadata: { sessionId },
+    metadata: { sessionId, ...extraMetadata },
     conversation_id: conversationId,
   });
 
