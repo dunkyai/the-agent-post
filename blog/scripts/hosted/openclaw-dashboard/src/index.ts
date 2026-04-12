@@ -200,6 +200,19 @@ async function reconnectIntegrations() {
     console.error("Failed to reconnect ContactOut:", err instanceof Error ? err.message : err);
   }
 
+  // Agree.com
+  try {
+    const agree = getIntegration("agree");
+    if (agree && agree.status === "connected") {
+      const config = JSON.parse(decrypt(agree.config));
+      const { startAgree } = require("./services/agree");
+      startAgree(config);
+      console.log("Agree.com reconnected");
+    }
+  } catch (err: unknown) {
+    console.error("Failed to reconnect Agree.com:", err instanceof Error ? err.message : err);
+  }
+
   // Gamma
   try {
     const gamma = getIntegration("gamma");
