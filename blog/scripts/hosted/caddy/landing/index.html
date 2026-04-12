@@ -70,18 +70,21 @@
     .hero .container {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 48px;
+      gap: 32px 48px;
       align-items: center;
     }
-    .hero-content h1 {
+    .hero-header {
+      grid-column: 1 / -1;
+    }
+    .hero-header h1 {
       font-size: 52px;
       font-weight: 800;
       letter-spacing: -2px;
       line-height: 1.05;
       margin-bottom: 20px;
     }
-    .hero-content h1 span { color: var(--purple); }
-    .hero-content .subtitle {
+    .hero-header h1 span { color: var(--purple); }
+    .hero-header .subtitle {
       font-size: 18px;
       color: var(--text-secondary);
       margin-bottom: 24px;
@@ -268,8 +271,7 @@
         grid-template-columns: 1fr;
         text-align: center;
       }
-      .hero-content h1 { font-size: 38px; }
-      .hero-visual { order: 0; }
+      .hero-header h1 { font-size: 38px; }
       .hero-mascot { max-width: 220px; }
       .hero-benefits li { justify-content: center; }
       .hero-cta-row { justify-content: center; }
@@ -292,14 +294,16 @@
 
   <section class="hero">
     <div class="container">
-      <div class="hero-visual">
-        <img src="/mascot.jpg" alt="Dunky mascot" class="hero-mascot">
-      </div>
-      <div class="hero-content">
+      <div class="hero-header">
         <h1>Dunky, your OpenClaw AI agent, <span>always on.</span></h1>
         <p class="subtitle">
           Built for business people. A dedicated AI agent that runs 24/7, connects to your tools, and gets things done.
         </p>
+      </div>
+      <div class="hero-visual">
+        <img src="/mascot.jpg" alt="Dunky mascot" class="hero-mascot">
+      </div>
+      <div class="hero-content">
         <ul class="hero-benefits">
           <li><span class="check">&#10003;</span> Runs 24/7 on dedicated infrastructure &mdash; no Mac Mini needed</li>
           <li><span class="check">&#10003;</span> Supports Email, Slack, Google, Notion, Airtable &amp; more</li>
