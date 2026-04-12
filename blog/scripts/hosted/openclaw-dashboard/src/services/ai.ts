@@ -58,6 +58,10 @@ import {
   contactoutSearchPeople, contactoutEnrichPerson, contactoutEnrichLinkedIn,
   contactoutSearchCompany, contactoutGetDecisionMakers, contactoutVerifyEmail,
 } from "./contactout";
+import {
+  isGammaRunning,
+  gammaCreatePresentation, gammaGetGeneration, gammaListThemes, gammaListFolders,
+} from "./gamma";
 
 interface AIResponse {
   role: string;
@@ -1791,6 +1795,81 @@ async function executeContactOutTool(toolName: string, input: any): Promise<stri
   }
 }
 
+// --- Gamma Tools ---
+
+const GAMMA_TOOLS = [
+  {
+    name: "gamma_create_presentation",
+    description: "Create a presentation, document, or social post using Gamma. Returns a shareable URL when complete. Generation takes 30-120 seconds.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        text: { type: "string", description: "The content/topic to generate from. Can be a brief topic, outline, or full text." },
+        format: { type: "string", enum: ["presentation", "document", "social"], description: "Output format (default: presentation)" },
+        num_cards: { type: "number", description: "Number of slides/cards to generate" },
+        text_amount: { type: "string", enum: ["brief", "medium", "detailed", "extensive"], description: "How much text per card" },
+        tone: { type: "string", description: "Tone/voice (e.g. 'professional', 'casual', 'playful')" },
+        audience: { type: "string", description: "Target audience (e.g. 'investors', 'students', 'engineering team')" },
+        language: { type: "string", description: "Output language (e.g. 'English', 'Spanish')" },
+        dimensions: { type: "string", description: "Slide dimensions: 'fluid', '16x9', '4x3' for presentations; 'fluid', 'letter', 'a4' for documents; '1x1', '4x5', '9x16' for social" },
+        image_source: { type: "string", description: "Image source (e.g. 'aiGenerated')" },
+        image_style: { type: "string", description: "Image style description" },
+        additional_instructions: { type: "string", description: "Extra instructions for generation (max 500 chars)" },
+        export_as: { type: "string", enum: ["pdf", "pptx", "png"], description: "Also export as this format. Returns an export_url in addition to the live URL." },
+      },
+      required: ["text"],
+    },
+  },
+  {
+    name: "gamma_get_generation",
+    description: "Check the status of a Gamma generation by ID. Returns status, URL, and export URL when complete.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        generation_id: { type: "string", description: "The generation ID to check" },
+      },
+      required: ["generation_id"],
+    },
+  },
+  {
+    name: "gamma_list_themes",
+    description: "List available Gamma themes (standard and custom workspace themes). Use theme IDs when creating presentations.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
+  {
+    name: "gamma_list_folders",
+    description: "List folders in the Gamma workspace. Use folder IDs to organize generated content.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
+];
+
+async function executeGammaTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "gamma_create_presentation":
+        return await gammaCreatePresentation(input);
+      case "gamma_get_generation":
+        return await gammaGetGeneration(input.generation_id);
+      case "gamma_list_themes":
+        return await gammaListThemes();
+      case "gamma_list_folders":
+        return await gammaListFolders();
+      default:
+        return JSON.stringify({ error: `Unknown Gamma tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Gamma operation failed" });
+  }
+}
+
+export { executeGammaTool };
+
 // --- Public Google Doc Tool (no OAuth needed) ---
 
 const PUBLIC_GDOC_TOOLS = [
@@ -2708,6 +2787,10 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   contactout_search_company: "Searching companies...",
   contactout_decision_makers: "Finding decision makers...",
   contactout_verify_email: "Verifying email...",
+  gamma_create_presentation: "Creating presentation in Gamma...",
+  gamma_get_generation: "Checking generation status...",
+  gamma_list_themes: "Listing Gamma themes...",
+  gamma_list_folders: "Listing Gamma folders...",
 };
 
 // --- Anthropic API with tool use loop ---
@@ -2764,6 +2847,7 @@ export async function callAnthropic(
   if (isBeehiivRunning() && !isExternalEmailTask) tools.push(...BEEHIIV_TOOLS);
   if (isGranolaRunning()) tools.push(...GRANOLA_TOOLS);
   if (isContactOutRunning()) tools.push(...CONTACTOUT_TOOLS);
+  if (isGammaRunning()) tools.push(...GAMMA_TOOLS);
 
   // Conditionally add Google tools based on connected services
   const googleServices = getConnectedServices();
@@ -2887,6 +2971,7 @@ export async function callAnthropic(
       const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
       const granolaToolNames = ["granola_list_meetings", "granola_search_meetings", "granola_get_transcript", "granola_query", "granola_list_folders"];
       const contactoutToolNames = ["contactout_search_people", "contactout_enrich_person", "contactout_search_company", "contactout_decision_makers", "contactout_verify_email"];
+      const gammaToolNames = ["gamma_create_presentation", "gamma_get_generation", "gamma_list_themes", "gamma_list_folders"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
 
@@ -2946,6 +3031,8 @@ export async function callAnthropic(
           result = await executeGranolaTool(toolBlock.name, toolBlock.input);
         } else if (contactoutToolNames.includes(toolBlock.name)) {
           result = await executeContactOutTool(toolBlock.name, toolBlock.input);
+        } else if (gammaToolNames.includes(toolBlock.name)) {
+          result = await executeGammaTool(toolBlock.name, toolBlock.input);
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input, sourceContext);
         }
@@ -3077,6 +3164,7 @@ export async function callOpenAI(
   if (isBeehiivRunning() && !isExternalEmailTask) customTools.push(...BEEHIIV_TOOLS);
   if (isGranolaRunning()) customTools.push(...GRANOLA_TOOLS);
   if (isContactOutRunning()) customTools.push(...CONTACTOUT_TOOLS);
+  if (isGammaRunning()) customTools.push(...GAMMA_TOOLS);
   const googleServices = getConnectedServices();
   if (googleServices) {
     if (googleServices.includes("gmail")) {
@@ -3137,6 +3225,7 @@ export async function callOpenAI(
   const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
   const granolaToolNames = ["granola_list_meetings", "granola_search_meetings", "granola_get_transcript", "granola_query", "granola_list_folders"];
   const contactoutToolNames = ["contactout_search_people", "contactout_enrich_person", "contactout_search_company", "contactout_decision_makers", "contactout_verify_email"];
+  const gammaToolNames = ["gamma_create_presentation", "gamma_get_generation", "gamma_list_themes", "gamma_list_folders"];
 
   // Extract last user message for rules-based dispatch (e.g. gmail send vs draft)
   const lastUserMsg = [...messages].reverse().find(m => m.role === "user")?.content || "";
@@ -3248,6 +3337,8 @@ export async function callOpenAI(
           result = await executeGranolaTool(toolName, toolInput);
         } else if (contactoutToolNames.includes(toolName)) {
           result = await executeContactOutTool(toolName, toolInput);
+        } else if (gammaToolNames.includes(toolName)) {
+          result = await executeGammaTool(toolName, toolInput);
         } else {
           result = executeSchedulingTool(toolName, toolInput, sourceContext);
         }
@@ -3695,6 +3786,20 @@ Available tools:
 
 IMPORTANT: Be mindful of credit usage. Use reveal_info=false first to browse results, then reveal_info=true only for the specific people the user wants contact info for.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${contactoutContext}` : contactoutContext;
+  }
+
+  // Inject Gamma context
+  if (isGammaRunning()) {
+    const gammaContext = `You are connected to Gamma for creating presentations, documents, and social posts.
+
+Available tools:
+- gamma_create_presentation — create a presentation/document/social post from text. Provide content or a topic. Returns a shareable Gamma URL. Can also export as PDF/PPTX/PNG.
+- gamma_get_generation — check status of a generation in progress (if it timed out or you need to re-check).
+- gamma_list_themes — list available themes to customize the look.
+- gamma_list_folders — list workspace folders for organization.
+
+IMPORTANT: Generation takes 30-120 seconds. The tool handles polling automatically and returns the URL when done. Always share the resulting URL with the user.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${gammaContext}` : gammaContext;
   }
 
   // Inject long-term memories (skip for scheduled jobs to prevent memory contamination)

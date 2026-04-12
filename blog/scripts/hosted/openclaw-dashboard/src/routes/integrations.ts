@@ -13,6 +13,7 @@ import { buildTwitterOAuthUrl, stopTwitter } from "../services/twitter";
 import { startBeehiiv, stopBeehiiv, testBeehiivConnection, fetchTemplates } from "../services/beehiiv";
 import { buildGranolaOAuthUrl, stopGranola, isGranolaRunning } from "../services/granola";
 import { startContactOut, stopContactOut, isContactOutRunning, testContactOutConnection } from "../services/contactout";
+import { startGamma, stopGamma, testGammaConnection } from "../services/gamma";
 
 const router = Router();
 
@@ -203,6 +204,7 @@ router.get("/integrations", async (req: Request, res: Response) => {
     })(),
     granola: integrationMap["granola"] || { status: "disconnected", error_message: null },
     contactout: integrationMap["contactout"] || { status: "disconnected", error_message: null },
+    gamma: integrationMap["gamma"] || { status: "disconnected", error_message: null },
     memories: getAllMemories(),
     flash: req.query.flash || null,
   });
@@ -833,6 +835,34 @@ router.post("/integrations/contactout/disconnect", (req: Request, res: Response)
   stopContactOut();
   upsertIntegration("contactout", "{}", "disconnected");
   res.redirect(303, "/integrations?flash=ContactOut+disconnected");
+});
+
+// --- Gamma ---
+
+router.post("/integrations/gamma/connect", async (req: Request, res: Response) => {
+  const { api_key } = req.body;
+  if (!api_key?.trim()) {
+    res.redirect(303, "/integrations?flash=Gamma+API+key+is+required");
+    return;
+  }
+
+  try {
+    await testGammaConnection(api_key.trim());
+    const config = encrypt(JSON.stringify({ api_key: api_key.trim() }));
+    upsertIntegration("gamma", config, "connected");
+    startGamma({ api_key: api_key.trim() });
+    res.redirect(303, "/integrations?flash=Gamma+connected+successfully");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Connection failed";
+    upsertIntegration("gamma", "{}", "error", message);
+    res.redirect(303, "/integrations?flash=Gamma+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/gamma/disconnect", (req: Request, res: Response) => {
+  stopGamma();
+  upsertIntegration("gamma", "{}", "disconnected");
+  res.redirect(303, "/integrations?flash=Gamma+disconnected");
 });
 
 export default router;
