@@ -39,6 +39,10 @@
     // Links [text](url) — only match if not preceded by !
     html = html.replace(/(?<!!)\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 
+    // Bold URLs — handle **https://...** before general bold/URL processing
+    // Strips bold markers and auto-links the URL cleanly
+    html = html.replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+
     // Bare URLs — auto-link URLs not already inside an href or src attribute
     // Exclude trailing markdown chars (*, _, `) so **url** doesn't capture ** in the URL
     html = html.replace(/(?<!=&quot;|="|src="|href=")(https?:\/\/[^\s<)\]*_`]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
