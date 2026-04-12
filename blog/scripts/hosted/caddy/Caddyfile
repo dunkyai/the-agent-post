@@ -11,6 +11,7 @@ dunky.ai {
         respond "ok" 200
     }
     root * /opt/agentpost/landing
+    try_files {path} {path}.html {path}/index.html
     file_server
 }
 
