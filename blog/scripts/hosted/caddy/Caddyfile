@@ -2,28 +2,64 @@
     admin localhost:2019
 }
 
-# Base domain health check
-agents.theagentpost.co {
+# Landing page + health check
+dunky.ai {
     tls {
         dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     }
-    respond "ok" 200
+    handle /health {
+        respond "ok" 200
+    }
+    root * /opt/agentpost/landing
+    try_files {path} {path}.html {path}/index.html
+    file_server
 }
 
-# Provisioning API (internal, via Caddy for TLS)
-api.agents.theagentpost.co {
+# www redirect
+www.dunky.ai {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    redir https://dunky.ai{uri} permanent
+}
+
+# Provisioning API
+api.dunky.ai {
     tls {
         dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     }
     reverse_proxy localhost:3500
 }
 
-# Instance routes are added dynamically via the Caddy admin API
-# Each instance gets: {id}.agents.theagentpost.co → localhost:{port}
-# Wildcard TLS covers all subdomains
-*.agents.theagentpost.co {
+# Wildcard TLS + fallback for unregistered subdomains
+# Dynamic instance routes are added via Caddy admin API at /routes/0
+# and take precedence because they're inserted before this block
+*.dunky.ai {
     tls {
         dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     }
     respond "Instance not found" 404
+}
+
+# === OLD DOMAIN REDIRECTS ===
+
+agents.theagentpost.co {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    redir https://dunky.ai{uri} permanent
+}
+
+api.agents.theagentpost.co {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    redir https://api.dunky.ai{uri} permanent
+}
+
+*.agents.theagentpost.co {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    redir https://{labels.3}.dunky.ai{uri} permanent
 }

@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
           plan,
         });
 
-        const dashboardUrl = `https://${instance.subdomain}.agents.theagentpost.co`;
+        const dashboardUrl = `https://${instance.subdomain}.dunky.ai`;
         const template = welcomeEmail({
           dashboardUrl,
           gatewayToken: instance.gatewayToken,
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                from: "The Agent Post <noreply@theagentpost.co>",
+                from: "Dunky <noreply@dunky.ai>",
                 to: email,
                 subject: template.subject,
                 html: template.html,

@@ -24,7 +24,7 @@ router.get("/magic-link", (req, res) => {
     return;
   }
 
-  const callbackUrl = `https://${instance.subdomain}.agents.theagentpost.co/login/callback?code=${result.sessionCode}`;
+  const callbackUrl = `https://${instance.subdomain}.dunky.ai/login/callback?code=${result.sessionCode}`;
   res.redirect(302, callbackUrl);
 });
 

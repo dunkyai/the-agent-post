@@ -135,7 +135,7 @@ export function buildOAuthUrl(services: string[]): string {
 
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: "https://api.agents.theagentpost.co/oauth/google/callback",
+    redirect_uri: "https://api.dunky.ai/oauth/google/callback",
     response_type: "code",
     scope: scopes.join(" "),
     access_type: "offline",

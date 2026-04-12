@@ -44,7 +44,7 @@ router.post("/bug-report", async (req: Request, res: Response) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "OpenClaw Bug Reports <noreply@theagentpost.co>",
+        from: "Dunky Bug Reports <noreply@dunky.ai>",
         to: "elizabeth@hustlefundvc.com",
         subject: `Bug Report — ${accountEmail}`,
         html: `<p><strong>Account:</strong> ${accountEmail}</p>

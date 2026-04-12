@@ -107,7 +107,7 @@ cat > /opt/agentpost/Caddyfile <<CADDY
 }
 
 # Base domain — health check
-agents.theagentpost.co {
+dunky.ai {
     tls {
         dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     }
@@ -169,8 +169,8 @@ systemctl enable agentpost-provisioning
 systemctl start agentpost-provisioning
 
 # --- Caddy route for provisioning API ---
-# api.agents.theagentpost.co → localhost:3500
-caddy reverse-proxy --from api.agents.theagentpost.co --to localhost:3500 &>/dev/null || true
+# api.dunky.ai → localhost:3500
+caddy reverse-proxy --from api.dunky.ai --to localhost:3500 &>/dev/null || true
 
 # --- Firewall ---
 echo "=== Configuring firewall ==="

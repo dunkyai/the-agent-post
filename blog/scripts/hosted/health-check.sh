@@ -6,7 +6,7 @@ set -euo pipefail
 
 PROVISIONING_API="http://127.0.0.1:3500"
 RESEND_API_KEY="${RESEND_API_KEY:-}"
-ALERT_EMAIL="dunkybot@theagentpost.co"
+ALERT_EMAIL="dunkybot@dunky.ai"
 
 if [ -z "$RESEND_API_KEY" ]; then
   echo "RESEND_API_KEY not set, skipping alerts"
@@ -37,7 +37,7 @@ if [ -n "$FAILED" ]; then
     -H "Authorization: Bearer ${RESEND_API_KEY}" \
     -H "Content-Type: application/json" \
     -d "{
-      \"from\": \"AgentPost Alerts <noreply@theagentpost.co>\",
+      \"from\": \"AgentPost Alerts <noreply@dunky.ai>\",
       \"to\": \"${ALERT_EMAIL}\",
       \"subject\": \"[ALERT] OpenClaw instances unhealthy\",
       \"html\": \"<p>The following instances failed health checks:</p><pre>${FAILED}</pre>\"

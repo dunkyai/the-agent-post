@@ -223,7 +223,7 @@ export function buildSlackOAuthUrl(): string {
   const params = new URLSearchParams({
     client_id: clientId,
     scope: scopes,
-    redirect_uri: "https://api.agents.theagentpost.co/oauth/slack/callback",
+    redirect_uri: "https://api.dunky.ai/oauth/slack/callback",
     state,
   });
 
@@ -329,7 +329,7 @@ export async function handleSlackEvent(event: any, eventId: string): Promise<voi
         markThreadNudged(externalId);
         await sendSlackMessage(
           channelId,
-          "Is this message meant for me? If so, please include @theagentpost in your ask so that I can take action.",
+          "Is this message meant for me? If so, please @ mention me in your ask so that I can take action.",
           event.thread_ts
         ).catch(() => {});
       }

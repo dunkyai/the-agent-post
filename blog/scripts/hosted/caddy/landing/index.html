@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dunky - Your AI Agent, Always On</title>
+  <meta name="description" content="An always-on AI agent that connects to your email, Slack, Google, Notion, and more. $19.99/month.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --purple: #7C3AED;
+      --purple-light: #A78BFA;
+      --purple-dark: #5B21B6;
+      --bg: #FAFAF9;
+      --text: #1C1917;
+      --text-secondary: #57534E;
+      --card-bg: #FFFFFF;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Nav */
+    nav {
+      padding: 20px 0;
+    }
+    nav .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--purple);
+      text-decoration: none;
+      letter-spacing: -0.5px;
+    }
+    .nav-cta {
+      background: var(--purple);
+      color: #fff;
+      padding: 10px 24px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+    .nav-cta:hover { background: var(--purple-dark); }
+
+    /* Hero — side by side */
+    .hero {
+      padding: 48px 0 56px;
+    }
+    .hero .container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px 24px;
+      align-items: center;
+    }
+    .hero-header {
+      grid-column: 1 / -1;
+    }
+    .hero-header h1 {
+      font-size: 44px;
+      font-weight: 800;
+      letter-spacing: -1.5px;
+      line-height: 1.05;
+      margin-bottom: 16px;
+      white-space: nowrap;
+    }
+    .hero-header h1 span { color: var(--purple); }
+    .hero-header .subtitle {
+      font-size: 18px;
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+      line-height: 1.6;
+    }
+    .hero-benefits {
+      list-style: none;
+      margin-bottom: 28px;
+    }
+    .hero-benefits li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 12px;
+      font-size: 15px;
+      color: var(--text);
+    }
+    .hero-benefits li .check {
+      color: var(--purple);
+      font-weight: 700;
+      font-size: 18px;
+      line-height: 1.4;
+      flex-shrink: 0;
+    }
+    .hero-cta-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .hero-cta {
+      display: inline-block;
+      background: var(--purple);
+      color: #fff;
+      padding: 14px 36px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 16px;
+      transition: background 0.2s, transform 0.2s;
+    }
+    .hero-cta:hover { background: var(--purple-dark); transform: translateY(-1px); }
+    .hero-price {
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+    .hero-price strong { color: var(--text); }
+    .hero-visual {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .hero-mascot {
+      width: 100%;
+      max-width: 380px;
+      height: auto;
+      filter: drop-shadow(0 12px 32px rgba(124, 58, 237, 0.18));
+    }
+
+    /* Integration strip */
+    .integration-strip {
+      padding: 40px 0;
+      border-top: 1px solid #E7E5E4;
+      border-bottom: 1px solid #E7E5E4;
+    }
+    .integration-strip p {
+      text-align: center;
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+    }
+    .integration-logos {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+    }
+    .integration-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--card-bg);
+      border: 1px solid #E7E5E4;
+      border-radius: 100px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+    }
+    .integration-pill img {
+      width: 18px;
+      height: 18px;
+    }
+    .integration-pill span { font-size: 16px; }
+
+    /* Features */
+    .features {
+      padding: 64px 0;
+    }
+    .features h2 {
+      text-align: center;
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 40px;
+    }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+    }
+    .feature-card {
+      background: var(--card-bg);
+      border: 1px solid #E7E5E4;
+      border-radius: 14px;
+      padding: 24px;
+      text-align: center;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .feature-card:hover {
+      border-color: var(--purple-light);
+      box-shadow: 0 4px 16px rgba(124, 58, 237, 0.08);
+    }
+    .feature-icon {
+      width: 44px;
+      height: 44px;
+      background: #F3E8FF;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      margin: 0 auto 12px;
+    }
+    .feature-card h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .feature-card p {
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    /* CTA */
+    .cta-section {
+      padding: 64px 0;
+      text-align: center;
+      border-top: 1px solid #E7E5E4;
+    }
+    .cta-section h2 {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+    }
+    .cta-section p {
+      color: var(--text-secondary);
+      font-size: 16px;
+      margin-bottom: 24px;
+    }
+    .cta-note {
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    /* Footer */
+    footer {
+      padding: 24px 0;
+      border-top: 1px solid #E7E5E4;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    footer a {
+      color: var(--purple);
+      text-decoration: none;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .hero .container {
+        grid-template-columns: 1fr;
+        text-align: center;
+      }
+      .hero-header h1 { font-size: 38px; }
+      .hero-mascot { max-width: 220px; }
+      .hero-benefits li { justify-content: center; }
+      .hero-cta-row { justify-content: center; }
+      .feature-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 480px) {
+      .feature-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="container">
+      <a href="/" class="logo">dunky.ai</a>
+      <a href="https://theagentpost.co/hosted" class="nav-cta">Get Started</a>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div class="container">
+      <div class="hero-header">
+        <h1>Dunky, your OpenClaw AI agent, <span>always&nbsp;on</span></h1>
+        <p class="subtitle">
+          Built for business people. A dedicated AI agent that runs 24/7, connects to your tools, and gets things done.
+        </p>
+      </div>
+      <div class="hero-visual">
+        <img src="/mascot.jpg" alt="Dunky mascot" class="hero-mascot">
+      </div>
+      <div class="hero-content">
+        <ul class="hero-benefits">
+          <li><span class="check">&#10003;</span> Runs on dedicated infrastructure &mdash; no Mac Mini needed</li>
+          <li><span class="check">&#10003;</span> Supports Email, Slack, Google, Notion, Airtable &amp; more</li>
+          <li><span class="check">&#10003;</span> You set the controls &mdash; configure how your AI responds and acts</li>
+          <li><span class="check">&#10003;</span> No coding, no terminal, no configurations &mdash; just log in and start</li>
+        </ul>
+        <div class="hero-cta-row">
+          <a href="https://theagentpost.co/hosted" class="hero-cta">Get Started</a>
+          <span class="hero-price"><strong>$19.99/mo</strong> &middot; Cancel anytime</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="integration-strip">
+    <div class="container">
+      <p>Connects to everything you use</p>
+      <div class="integration-logos">
+        <div class="integration-pill"><img src="/logos/google.svg" alt=""> Gmail</div>
+        <div class="integration-pill"><img src="/logos/slack.svg" alt=""> Slack</div>
+        <div class="integration-pill"><img src="/logos/google.svg" alt=""> Calendar</div>
+        <div class="integration-pill"><img src="/logos/google.svg" alt=""> Docs</div>
+        <div class="integration-pill"><img src="/logos/google.svg" alt=""> Sheets</div>
+        <div class="integration-pill"><img src="/logos/google.svg" alt=""> Drive</div>
+        <div class="integration-pill"><img src="/logos/notion.svg" alt=""> Notion</div>
+        <div class="integration-pill"><img src="/logos/airtable.svg" alt=""> Airtable</div>
+        <div class="integration-pill"><img src="/logos/buffer.svg" alt=""> Buffer</div>
+        <div class="integration-pill"><img src="/logos/luma.svg" alt=""> Luma</div>
+        <div class="integration-pill"><img src="/logos/twitter.svg" alt=""> Twitter/X</div>
+        <div class="integration-pill"><span>&#127912;</span> Gamma</div>
+        <div class="integration-pill"><span>&#128270;</span> Web Search</div>
+        <div class="integration-pill"><span>&#127760;</span> Browser</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-section">
+    <div class="container">
+      <h2>Ready to get started?</h2>
+      <p>Set up in minutes. Cancel anytime.</p>
+      <a href="https://theagentpost.co/hosted" class="hero-cta">Start for $19.99/month</a>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <a href="/privacy">Privacy</a> &middot;
+      <a href="/terms">Terms</a>
+      <br>
+      &copy; 2026 Dunky
+    </div>
+  </footer>
+
+</body>
+</html>

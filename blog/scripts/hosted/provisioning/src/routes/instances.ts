@@ -292,7 +292,7 @@ router.post("/:id/magic-link", async (req, res) => {
     // Only send if email matches the instance owner
     if (email.trim().toLowerCase() === instance.email.toLowerCase()) {
       const magicToken = store.createMagicLinkToken(instance.id);
-      const magicLink = `https://api.agents.theagentpost.co/auth/magic-link?token=${magicToken}`;
+      const magicLink = `https://api.dunky.ai/auth/magic-link?token=${magicToken}`;
 
       const resendKey = process.env.RESEND_API_KEY;
       if (resendKey) {
@@ -303,7 +303,7 @@ router.post("/:id/magic-link", async (req, res) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            from: "The Agent Post <noreply@theagentpost.co>",
+            from: "Dunky <noreply@dunky.ai>",
             to: instance.email,
             subject: "Sign in to your OpenClaw dashboard",
             html: magicLinkEmailHtml(magicLink),
@@ -366,7 +366,7 @@ router.get("/:id/upgrade-url", async (req, res) => {
       return;
     }
 
-    const returnUrl = `https://${instance.subdomain}.agents.theagentpost.co/settings`;
+    const returnUrl = `https://${instance.subdomain}.dunky.ai/settings`;
 
     const response = await fetch("https://api.stripe.com/v1/billing_portal/sessions", {
       method: "POST",
@@ -444,13 +444,27 @@ function magicLinkEmailHtml(link: string): string {
 // --- Caddy route management ---
 
 function registerCaddyRoute(subdomain: string, port: number): void {
+  // First, try to delete any existing route with the same ID (idempotent)
+  try {
+    execSync(`curl -sf -X DELETE ${CADDY_ADMIN}/id/openclaw-${subdomain}`, { timeout: 5000 });
+  } catch {}
+
   const routeConfig = JSON.stringify({
     "@id": `openclaw-${subdomain}`,
-    match: [{ host: [`${subdomain}.agents.theagentpost.co`] }],
+    match: [{ host: [`${subdomain}.dunky.ai`] }],
     handle: [
       {
-        handler: "reverse_proxy",
-        upstreams: [{ dial: `localhost:${port}` }],
+        handler: "subroute",
+        routes: [
+          {
+            handle: [
+              {
+                handler: "reverse_proxy",
+                upstreams: [{ dial: `localhost:${port}` }],
+              },
+            ],
+          },
+        ],
       },
     ],
     terminal: true,
@@ -458,7 +472,7 @@ function registerCaddyRoute(subdomain: string, port: number): void {
 
   try {
     execSync(
-      `curl -sf -X POST ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes -H "Content-Type: application/json" -d '${routeConfig}'`,
+      `curl -sf -X POST ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes/0 -H "Content-Type: application/json" -d '${routeConfig}'`,
       { timeout: 5000 }
     );
   } catch (err) {
