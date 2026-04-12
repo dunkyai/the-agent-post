@@ -143,7 +143,7 @@ async function handleStripeEvent(event: StripeWebhookEvent): Promise<void> {
       });
       try {
         execSync(
-          `curl -sf -X POST ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes -H "Content-Type: application/json" -d '${routeConfig}'`,
+          `curl -sf -X POST ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes/0 -H "Content-Type: application/json" -d '${routeConfig}'`,
           { timeout: 5000 }
         );
       } catch (caddyErr) {

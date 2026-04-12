@@ -444,13 +444,27 @@ function magicLinkEmailHtml(link: string): string {
 // --- Caddy route management ---
 
 function registerCaddyRoute(subdomain: string, port: number): void {
+  // First, try to delete any existing route with the same ID (idempotent)
+  try {
+    execSync(`curl -sf -X DELETE ${CADDY_ADMIN}/id/openclaw-${subdomain}`, { timeout: 5000 });
+  } catch {}
+
   const routeConfig = JSON.stringify({
     "@id": `openclaw-${subdomain}`,
     match: [{ host: [`${subdomain}.dunky.ai`] }],
     handle: [
       {
-        handler: "reverse_proxy",
-        upstreams: [{ dial: `localhost:${port}` }],
+        handler: "subroute",
+        routes: [
+          {
+            handle: [
+              {
+                handler: "reverse_proxy",
+                upstreams: [{ dial: `localhost:${port}` }],
+              },
+            ],
+          },
+        ],
       },
     ],
     terminal: true,
@@ -458,7 +472,7 @@ function registerCaddyRoute(subdomain: string, port: number): void {
 
   try {
     execSync(
-      `curl -sf -X POST ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes -H "Content-Type: application/json" -d '${routeConfig}'`,
+      `curl -sf -X POST ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes/0 -H "Content-Type: application/json" -d '${routeConfig}'`,
       { timeout: 5000 }
     );
   } catch (err) {
