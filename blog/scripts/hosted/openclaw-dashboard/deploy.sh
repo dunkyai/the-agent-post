@@ -152,6 +152,14 @@ EOF
     echo "  ✗ openclaw-$ID FAILED health check!"
     return 1
   fi
+
+  # Register Caddy route for this instance (idempotent)
+  ssh "$SERVER" bash -s <<CADDY
+    curl -sf -X DELETE http://localhost:2019/id/openclaw-$ID 2>/dev/null || true
+    curl -sf -X POST "http://localhost:2019/config/apps/http/servers/srv0/routes/0" \
+      -H "Content-Type: application/json" \
+      -d '{"@id":"openclaw-$ID","match":[{"host":["$ID.dunky.ai"]}],"handle":[{"handler":"subroute","routes":[{"handle":[{"handler":"reverse_proxy","upstreams":[{"dial":"localhost:$PORT"}]}]}]}],"terminal":true}' 2>/dev/null && echo "  ✓ Caddy route registered" || echo "  ⚠ Caddy route registration failed (non-fatal)"
+CADDY
 }
 
 # --- Deploy all filtered instances ---
