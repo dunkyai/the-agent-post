@@ -59,6 +59,12 @@ import {
   contactoutSearchCompany, contactoutGetDecisionMakers, contactoutVerifyEmail,
 } from "./contactout";
 import {
+  isAgreeRunning,
+  agreeListTemplates, agreeGetTemplate, agreeCreateAgreement, agreeCreateAndSend,
+  agreeSendAgreement, agreeListAgreements, agreeGetAgreement,
+  agreeListContacts, agreeCreateContact,
+} from "./agree";
+import {
   isGammaRunning,
   gammaCreatePresentation, gammaGetGeneration, gammaListThemes, gammaListFolders,
 } from "./gamma";
@@ -1795,6 +1801,144 @@ async function executeContactOutTool(toolName: string, input: any): Promise<stri
   }
 }
 
+// --- Agree.com Tools ---
+
+const AGREE_TOOLS = [
+  {
+    name: "agree_list_templates",
+    description: "List all available contract templates in Agree.com. Returns template names, IDs, and field definitions. Use this first to see what templates are available before creating an agreement.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "agree_get_template",
+    description: "Get details of a specific Agree.com template including its fields and required information. Use this before creating an agreement to understand what fields need to be filled.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        template_id: { type: "string", description: "Template UUID" },
+      },
+      required: ["template_id"],
+    },
+  },
+  {
+    name: "agree_create_agreement",
+    description: "Create a new agreement (contract) from a template. This creates a draft — use agree_send_agreement to send it for signing. Use agree_get_template first to see required fields.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        template_id: { type: "string", description: "Template UUID to create from" },
+        name: { type: "string", description: "Name for this agreement" },
+        recipients: { type: "array", description: "Array of recipient objects with role, contact details (name, email), and assigned_fields" },
+        field_values: { type: "object", description: "Key-value pairs to prefill template fields" },
+        delivery_mode: { type: "string", enum: ["embedded", "managed"], description: "Delivery mode (default: managed)" },
+      },
+      required: ["template_id", "name"],
+    },
+  },
+  {
+    name: "agree_create_and_send",
+    description: "Create an agreement from a template AND send it immediately for signing in one step. Use when you don't need to review the draft first.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        template_id: { type: "string", description: "Template UUID" },
+        name: { type: "string", description: "Name for this agreement" },
+        recipients: { type: "array", description: "Array of recipient objects" },
+        field_values: { type: "object", description: "Key-value pairs for template fields" },
+      },
+      required: ["template_id", "name"],
+    },
+  },
+  {
+    name: "agree_send_agreement",
+    description: "Send a draft agreement to its recipients for signing.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        agreement_id: { type: "string", description: "Agreement UUID" },
+        message: { type: "string", description: "Optional message to include with the signing request" },
+      },
+      required: ["agreement_id"],
+    },
+  },
+  {
+    name: "agree_list_agreements",
+    description: "List existing agreements with their statuses (draft, sent, signed, etc.).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        page: { type: "number", description: "Page number (default 1)" },
+        page_size: { type: "number", description: "Items per page (default 10)" },
+      },
+    },
+  },
+  {
+    name: "agree_get_agreement",
+    description: "Get details of a specific agreement including its status, recipients, and signing progress.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        agreement_id: { type: "string", description: "Agreement UUID" },
+      },
+      required: ["agreement_id"],
+    },
+  },
+  {
+    name: "agree_list_contacts",
+    description: "List contacts in Agree.com. Use to find existing contacts before creating an agreement.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        email: { type: "string", description: "Filter by email (fuzzy search)" },
+        company: { type: "string", description: "Filter by company (fuzzy search)" },
+      },
+    },
+  },
+  {
+    name: "agree_create_contact",
+    description: "Create a new contact in Agree.com for use as an agreement recipient.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "Contact's full name" },
+        email: { type: "string", description: "Contact's email address" },
+        company: { type: "string", description: "Contact's company" },
+        title: { type: "string", description: "Contact's job title" },
+      },
+      required: ["name", "email"],
+    },
+  },
+];
+
+export async function executeAgreeTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "agree_list_templates":
+        return await agreeListTemplates();
+      case "agree_get_template":
+        return await agreeGetTemplate(input.template_id);
+      case "agree_create_agreement":
+        return await agreeCreateAgreement(input);
+      case "agree_create_and_send":
+        return await agreeCreateAndSend(input);
+      case "agree_send_agreement":
+        return await agreeSendAgreement(input.agreement_id, input);
+      case "agree_list_agreements":
+        return await agreeListAgreements(input);
+      case "agree_get_agreement":
+        return await agreeGetAgreement(input.agreement_id);
+      case "agree_list_contacts":
+        return await agreeListContacts(input);
+      case "agree_create_contact":
+        return await agreeCreateContact(input);
+      default:
+        return JSON.stringify({ error: `Unknown Agree tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Agree operation failed" });
+  }
+}
+
 // --- Gamma Tools ---
 
 const GAMMA_TOOLS = [
@@ -2787,6 +2931,15 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   contactout_search_company: "Searching companies...",
   contactout_decision_makers: "Finding decision makers...",
   contactout_verify_email: "Verifying email...",
+  agree_list_templates: "Listing contract templates...",
+  agree_get_template: "Getting template details...",
+  agree_create_agreement: "Creating agreement...",
+  agree_create_and_send: "Creating and sending agreement...",
+  agree_send_agreement: "Sending agreement for signing...",
+  agree_list_agreements: "Listing agreements...",
+  agree_get_agreement: "Getting agreement details...",
+  agree_list_contacts: "Listing contacts...",
+  agree_create_contact: "Creating contact...",
   gamma_create_presentation: "Creating presentation in Gamma...",
   gamma_get_generation: "Checking generation status...",
   gamma_list_themes: "Listing Gamma themes...",
@@ -2847,6 +3000,7 @@ export async function callAnthropic(
   if (isBeehiivRunning() && !isExternalEmailTask) tools.push(...BEEHIIV_TOOLS);
   if (isGranolaRunning()) tools.push(...GRANOLA_TOOLS);
   if (isContactOutRunning()) tools.push(...CONTACTOUT_TOOLS);
+  if (isAgreeRunning()) tools.push(...AGREE_TOOLS);
   if (isGammaRunning()) tools.push(...GAMMA_TOOLS);
 
   // Conditionally add Google tools based on connected services
@@ -2971,6 +3125,7 @@ export async function callAnthropic(
       const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
       const granolaToolNames = ["granola_list_meetings", "granola_search_meetings", "granola_get_transcript", "granola_query", "granola_list_folders"];
       const contactoutToolNames = ["contactout_search_people", "contactout_enrich_person", "contactout_search_company", "contactout_decision_makers", "contactout_verify_email"];
+      const agreeToolNames = ["agree_list_templates", "agree_get_template", "agree_create_agreement", "agree_create_and_send", "agree_send_agreement", "agree_list_agreements", "agree_get_agreement", "agree_list_contacts", "agree_create_contact"];
       const gammaToolNames = ["gamma_create_presentation", "gamma_get_generation", "gamma_list_themes", "gamma_list_folders"];
       for (const toolBlock of customToolUseBlocks) {
         console.log(`Tool call: ${toolBlock.name}`, JSON.stringify(toolBlock.input).slice(0, 200));
@@ -3031,6 +3186,8 @@ export async function callAnthropic(
           result = await executeGranolaTool(toolBlock.name, toolBlock.input);
         } else if (contactoutToolNames.includes(toolBlock.name)) {
           result = await executeContactOutTool(toolBlock.name, toolBlock.input);
+        } else if (agreeToolNames.includes(toolBlock.name)) {
+          result = await executeAgreeTool(toolBlock.name, toolBlock.input);
         } else if (gammaToolNames.includes(toolBlock.name)) {
           result = await executeGammaTool(toolBlock.name, toolBlock.input);
         } else {
@@ -3164,6 +3321,7 @@ export async function callOpenAI(
   if (isBeehiivRunning() && !isExternalEmailTask) customTools.push(...BEEHIIV_TOOLS);
   if (isGranolaRunning()) customTools.push(...GRANOLA_TOOLS);
   if (isContactOutRunning()) customTools.push(...CONTACTOUT_TOOLS);
+  if (isAgreeRunning()) customTools.push(...AGREE_TOOLS);
   if (isGammaRunning()) customTools.push(...GAMMA_TOOLS);
   const googleServices = getConnectedServices();
   if (googleServices) {
@@ -3225,6 +3383,7 @@ export async function callOpenAI(
   const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
   const granolaToolNames = ["granola_list_meetings", "granola_search_meetings", "granola_get_transcript", "granola_query", "granola_list_folders"];
   const contactoutToolNames = ["contactout_search_people", "contactout_enrich_person", "contactout_search_company", "contactout_decision_makers", "contactout_verify_email"];
+  const agreeToolNames = ["agree_list_templates", "agree_get_template", "agree_create_agreement", "agree_create_and_send", "agree_send_agreement", "agree_list_agreements", "agree_get_agreement", "agree_list_contacts", "agree_create_contact"];
   const gammaToolNames = ["gamma_create_presentation", "gamma_get_generation", "gamma_list_themes", "gamma_list_folders"];
 
   // Extract last user message for rules-based dispatch (e.g. gmail send vs draft)
@@ -3337,6 +3496,8 @@ export async function callOpenAI(
           result = await executeGranolaTool(toolName, toolInput);
         } else if (contactoutToolNames.includes(toolName)) {
           result = await executeContactOutTool(toolName, toolInput);
+        } else if (agreeToolNames.includes(toolName)) {
+          result = await executeAgreeTool(toolName, toolInput);
         } else if (gammaToolNames.includes(toolName)) {
           result = await executeGammaTool(toolName, toolInput);
         } else {
@@ -3786,6 +3947,21 @@ Available tools:
 
 IMPORTANT: Be mindful of credit usage. Use reveal_info=false first to browse results, then reveal_info=true only for the specific people the user wants contact info for.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${contactoutContext}` : contactoutContext;
+  }
+
+  // Inject Agree.com context
+  if (isAgreeRunning()) {
+    const agreeContext = `You are connected to Agree.com for contract and agreement management. You can create contracts from templates, send them for e-signature, and manage contacts.
+
+Workflow for creating a contract:
+1. Use agree_list_templates to see available templates
+2. Use agree_get_template to see the template's fields and requirements
+3. Use agree_list_contacts or agree_create_contact to set up recipients
+4. Use agree_create_agreement to create a draft with field values and recipients
+5. Use agree_send_agreement to send it for signing (or use agree_create_and_send to do steps 4-5 in one call)
+
+Always check template fields before creating an agreement so you fill in the right values.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${agreeContext}` : agreeContext;
   }
 
   // Inject Gamma context

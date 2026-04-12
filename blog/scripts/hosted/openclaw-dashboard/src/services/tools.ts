@@ -16,6 +16,7 @@ import {
   executeNotionTool,
   executeLumaTool,
   executeGammaTool,
+  executeAgreeTool,
 } from "./ai";
 
 // Tool name → category mapping
@@ -65,6 +66,10 @@ const TOOL_CATEGORIES: Record<string, string> = {
   // Gamma
   gamma_create_presentation: "gamma", gamma_get_generation: "gamma",
   gamma_list_themes: "gamma", gamma_list_folders: "gamma",
+  // Agree
+  agree_list_templates: "agree", agree_get_template: "agree", agree_create_agreement: "agree",
+  agree_create_and_send: "agree", agree_send_agreement: "agree", agree_list_agreements: "agree",
+  agree_get_agreement: "agree", agree_list_contacts: "agree", agree_create_contact: "agree",
 };
 
 /**
@@ -115,6 +120,9 @@ export async function executeTool(toolName: string, input: Record<string, any>):
         break;
       case "gamma":
         result = await executeGammaTool(toolName, input);
+        break;
+      case "agree":
+        result = await executeAgreeTool(toolName, input);
         break;
       default:
         return JSON.stringify({ error: `Unsupported tool category: ${category}` });

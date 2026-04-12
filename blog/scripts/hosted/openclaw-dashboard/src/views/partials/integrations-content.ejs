@@ -743,6 +743,45 @@
         </div>
       </details>
 
+      <!-- Agree.com -->
+      <details class="integration-tile">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #1a1a2e;"><span style="font-size: 18px;">📝</span></span>
+          <div class="integration-tile-info">
+            <h3>Agree.com</h3>
+            <p>Create contracts from templates, send for e-signature</p>
+          </div>
+          <span class="status-badge status-<%= agree.status === 'connected' ? 'connected' : 'disconnected' %>">
+            <%= agree.status === 'connected' ? 'Connected' : 'Not connected' %>
+          </span>
+        </summary>
+        <div class="integration-tile-body">
+          <% if (agree.status === 'connected') { %>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+              Your agent can create contracts from templates, send them for e-signature, track agreement status, and manage contacts.
+            </p>
+            <form method="POST" action="/integrations/agree/disconnect" onsubmit="return confirm('Disconnect Agree.com?')">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+            </form>
+          <% } else { %>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+              Connect Agree.com to let your agent create and send contracts from your templates. Requires an Agree.com API key.
+            </p>
+            <% if (agree.error_message) { %>
+              <p style="color: var(--danger); font-size: 13px; margin-bottom: 8px;"><%= agree.error_message %></p>
+            <% } %>
+            <form method="POST" action="/integrations/agree/connect">
+              <div class="form-group">
+                <label for="agree_api_key">API Key</label>
+                <input type="password" id="agree_api_key" name="api_key" placeholder="Your Agree.com API key" required>
+                <div class="hint">Get your API key from your Agree.com account settings.</div>
+              </div>
+              <button type="submit" class="btn btn-sm">Connect</button>
+            </form>
+          <% } %>
+        </div>
+      </details>
+
       <!-- Gamma -->
       <details class="integration-tile">
         <summary class="integration-tile-summary">

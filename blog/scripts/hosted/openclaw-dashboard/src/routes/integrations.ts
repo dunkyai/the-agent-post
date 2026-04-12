@@ -13,6 +13,7 @@ import { buildTwitterOAuthUrl, stopTwitter } from "../services/twitter";
 import { startBeehiiv, stopBeehiiv, testBeehiivConnection, fetchTemplates } from "../services/beehiiv";
 import { buildGranolaOAuthUrl, stopGranola, isGranolaRunning } from "../services/granola";
 import { startContactOut, stopContactOut, isContactOutRunning, testContactOutConnection } from "../services/contactout";
+import { startAgree, stopAgree, testAgreeConnection } from "../services/agree";
 import { startGamma, stopGamma, testGammaConnection } from "../services/gamma";
 
 const router = Router();
@@ -204,6 +205,7 @@ router.get("/integrations", async (req: Request, res: Response) => {
     })(),
     granola: integrationMap["granola"] || { status: "disconnected", error_message: null },
     contactout: integrationMap["contactout"] || { status: "disconnected", error_message: null },
+    agree: integrationMap["agree"] || { status: "disconnected", error_message: null },
     gamma: integrationMap["gamma"] || { status: "disconnected", error_message: null },
     memories: getAllMemories(),
     flash: req.query.flash || null,
@@ -835,6 +837,34 @@ router.post("/integrations/contactout/disconnect", (req: Request, res: Response)
   stopContactOut();
   upsertIntegration("contactout", "{}", "disconnected");
   res.redirect(303, "/integrations?flash=ContactOut+disconnected");
+});
+
+// --- Agree.com ---
+
+router.post("/integrations/agree/connect", async (req: Request, res: Response) => {
+  const { api_key } = req.body;
+  if (!api_key?.trim()) {
+    res.redirect(303, "/integrations?flash=Agree.com+API+key+is+required");
+    return;
+  }
+
+  try {
+    await testAgreeConnection(api_key.trim());
+    const config = encrypt(JSON.stringify({ api_key: api_key.trim() }));
+    upsertIntegration("agree", config, "connected");
+    startAgree({ api_key: api_key.trim() });
+    res.redirect(303, "/integrations?flash=Agree.com+connected+successfully");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Connection failed";
+    upsertIntegration("agree", "{}", "error", message);
+    res.redirect(303, "/integrations?flash=Agree+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/agree/disconnect", (req: Request, res: Response) => {
+  stopAgree();
+  upsertIntegration("agree", "{}", "disconnected");
+  res.redirect(303, "/integrations?flash=Agree.com+disconnected");
 });
 
 // --- Gamma ---
