@@ -43,6 +43,12 @@ print(f'Config ready: {len(routes)} routes ({len(instances)} instances)')
 "
 
 if [ "${1:-}" = "--reload" ]; then
-  caddy reload --config "$JSON_CONFIG" 2>&1 | grep -v "level.*info"
-  echo "Caddy reloaded"
+  # Use admin API POST /load to preserve route order
+  # (caddy reload re-sorts routes, putting wildcards before specific hosts)
+  curl -sf -X POST http://localhost:2019/load \
+    -H "Content-Type: application/json" \
+    -d @"$JSON_CONFIG" >/dev/null 2>&1 && echo "Caddy config loaded" || {
+    # Fallback: if admin API isn't up yet (cold start), use caddy run
+    echo "Admin API not available — config will be loaded on next start"
+  }
 fi
