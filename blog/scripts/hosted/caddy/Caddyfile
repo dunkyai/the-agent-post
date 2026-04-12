@@ -2,12 +2,16 @@
     admin localhost:2019
 }
 
-# Base domain health check
+# Landing page + health check
 dunky.ai {
     tls {
         dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     }
-    respond "ok" 200
+    handle /health {
+        respond "ok" 200
+    }
+    root * /opt/agentpost/landing
+    file_server
 }
 
 # Provisioning API
