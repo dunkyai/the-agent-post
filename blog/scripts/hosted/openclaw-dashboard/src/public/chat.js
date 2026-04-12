@@ -281,7 +281,7 @@
           if (t) t.remove();
 
           if (data.status === "error") {
-            errorEl.textContent = data.error || "Something went wrong";
+            errorEl.textContent = data.error || "Hmm, that didn't work. Try again or rephrase your request.";
           } else if (data.result) {
             addMessage("assistant", data.result.content);
             maybeShowMemoryLink();
