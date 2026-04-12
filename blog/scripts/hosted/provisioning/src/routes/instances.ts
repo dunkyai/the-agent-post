@@ -292,7 +292,7 @@ router.post("/:id/magic-link", async (req, res) => {
     // Only send if email matches the instance owner
     if (email.trim().toLowerCase() === instance.email.toLowerCase()) {
       const magicToken = store.createMagicLinkToken(instance.id);
-      const magicLink = `https://api.agents.theagentpost.co/auth/magic-link?token=${magicToken}`;
+      const magicLink = `https://api.dunky.ai/auth/magic-link?token=${magicToken}`;
 
       const resendKey = process.env.RESEND_API_KEY;
       if (resendKey) {
@@ -303,7 +303,7 @@ router.post("/:id/magic-link", async (req, res) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            from: "The Agent Post <noreply@theagentpost.co>",
+            from: "Dunky <noreply@dunky.ai>",
             to: instance.email,
             subject: "Sign in to your OpenClaw dashboard",
             html: magicLinkEmailHtml(magicLink),
@@ -366,7 +366,7 @@ router.get("/:id/upgrade-url", async (req, res) => {
       return;
     }
 
-    const returnUrl = `https://${instance.subdomain}.agents.theagentpost.co/settings`;
+    const returnUrl = `https://${instance.subdomain}.dunky.ai/settings`;
 
     const response = await fetch("https://api.stripe.com/v1/billing_portal/sessions", {
       method: "POST",
@@ -446,7 +446,7 @@ function magicLinkEmailHtml(link: string): string {
 function registerCaddyRoute(subdomain: string, port: number): void {
   const routeConfig = JSON.stringify({
     "@id": `openclaw-${subdomain}`,
-    match: [{ host: [`${subdomain}.agents.theagentpost.co`] }],
+    match: [{ host: [`${subdomain}.dunky.ai`] }],
     handle: [
       {
         handler: "reverse_proxy",

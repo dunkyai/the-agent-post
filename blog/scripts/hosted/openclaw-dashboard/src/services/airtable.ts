@@ -38,7 +38,7 @@ export function buildAirtableOAuthUrl(): string {
 
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: "https://api.agents.theagentpost.co/oauth/airtable/callback",
+    redirect_uri: "https://api.dunky.ai/oauth/airtable/callback",
     response_type: "code",
     scope: "data.records:read schema.bases:read",
     state,

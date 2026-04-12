@@ -24,7 +24,7 @@ router.get("/google/callback", async (req, res) => {
       const { instance } = parseOAuthState(state as string);
       if (instance) {
         res.redirect(
-          `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Google+connection+cancelled`
+          `https://${instance.subdomain}.dunky.ai/integrations?flash=Google+connection+cancelled`
         );
         return;
       }
@@ -72,7 +72,7 @@ router.get("/google/callback", async (req, res) => {
         client_id: process.env.GOOGLE_CLIENT_ID!,
         client_secret: process.env.GOOGLE_CLIENT_SECRET!,
         redirect_uri:
-          "https://api.agents.theagentpost.co/oauth/google/callback",
+          "https://api.dunky.ai/oauth/google/callback",
         grant_type: "authorization_code",
       }),
     });
@@ -81,7 +81,7 @@ router.get("/google/callback", async (req, res) => {
       const body = await tokenRes.text();
       console.error("Google token exchange failed:", body);
       res.redirect(
-        `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Google+token+exchange+failed`
+        `https://${instance.subdomain}.dunky.ai/integrations?flash=Google+token+exchange+failed`
       );
       return;
     }
@@ -120,19 +120,19 @@ router.get("/google/callback", async (req, res) => {
         await deliverRes.text()
       );
       res.redirect(
-        `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Failed+to+deliver+tokens`
+        `https://${instance.subdomain}.dunky.ai/integrations?flash=Failed+to+deliver+tokens`
       );
       return;
     }
 
     // Redirect user back to their dashboard
     res.redirect(
-      `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Google+connected+successfully`
+      `https://${instance.subdomain}.dunky.ai/integrations?flash=Google+connected+successfully`
     );
   } catch (err) {
     console.error("OAuth callback error:", err);
     res.redirect(
-      `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Google+connection+failed`
+      `https://${instance.subdomain}.dunky.ai/integrations?flash=Google+connection+failed`
     );
   }
 });
@@ -147,7 +147,7 @@ router.get("/slack/callback", async (req, res) => {
       const { instance } = parseOAuthState(state as string);
       if (instance) {
         res.redirect(
-          `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Slack+connection+cancelled`
+          `https://${instance.subdomain}.dunky.ai/integrations?flash=Slack+connection+cancelled`
         );
         return;
       }
@@ -195,7 +195,7 @@ router.get("/slack/callback", async (req, res) => {
         client_secret: process.env.SLACK_CLIENT_SECRET!,
         code: code as string,
         redirect_uri:
-          "https://api.agents.theagentpost.co/oauth/slack/callback",
+          "https://api.dunky.ai/oauth/slack/callback",
       }),
     });
 
@@ -203,7 +203,7 @@ router.get("/slack/callback", async (req, res) => {
     if (!data.ok) {
       console.error("Slack token exchange failed:", data.error);
       res.redirect(
-        `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Slack+error:+${encodeURIComponent(data.error || "token exchange failed")}`
+        `https://${instance.subdomain}.dunky.ai/integrations?flash=Slack+error:+${encodeURIComponent(data.error || "token exchange failed")}`
       );
       return;
     }
@@ -217,7 +217,7 @@ router.get("/slack/callback", async (req, res) => {
     if (!botToken || !botUserId || !teamId) {
       console.error("Slack OAuth response missing fields:", { botToken: !!botToken, botUserId, teamId });
       res.redirect(
-        `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Slack+connection+failed`
+        `https://${instance.subdomain}.dunky.ai/integrations?flash=Slack+connection+failed`
       );
       return;
     }
@@ -260,7 +260,7 @@ router.get("/slack/callback", async (req, res) => {
         await deliverRes.text()
       );
       res.redirect(
-        `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Failed+to+deliver+Slack+tokens`
+        `https://${instance.subdomain}.dunky.ai/integrations?flash=Failed+to+deliver+Slack+tokens`
       );
       return;
     }
@@ -268,12 +268,12 @@ router.get("/slack/callback", async (req, res) => {
     // Redirect user back to their dashboard
     console.log(`Slack connected for instance ${instance.id} (team: ${teamName})`);
     res.redirect(
-      `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Slack+connected+successfully`
+      `https://${instance.subdomain}.dunky.ai/integrations?flash=Slack+connected+successfully`
     );
   } catch (err) {
     console.error("Slack OAuth callback error:", err);
     res.redirect(
-      `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Slack+connection+failed`
+      `https://${instance.subdomain}.dunky.ai/integrations?flash=Slack+connection+failed`
     );
   }
 });
@@ -287,7 +287,7 @@ router.get("/airtable/callback", async (req, res) => {
       const { instance } = parseOAuthState(state as string);
       if (instance) {
         res.redirect(
-          `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Airtable+connection+cancelled`
+          `https://${instance.subdomain}.dunky.ai/integrations?flash=Airtable+connection+cancelled`
         );
         return;
       }
@@ -337,7 +337,7 @@ router.get("/airtable/callback", async (req, res) => {
       },
       body: new URLSearchParams({
         code: code as string,
-        redirect_uri: "https://api.agents.theagentpost.co/oauth/airtable/callback",
+        redirect_uri: "https://api.dunky.ai/oauth/airtable/callback",
         grant_type: "authorization_code",
         code_verifier: statePayload.code_verifier,
       }),
@@ -347,7 +347,7 @@ router.get("/airtable/callback", async (req, res) => {
       const body = await tokenRes.text();
       console.error("Airtable token exchange failed:", body);
       res.redirect(
-        `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Airtable+token+exchange+failed`
+        `https://${instance.subdomain}.dunky.ai/integrations?flash=Airtable+token+exchange+failed`
       );
       return;
     }
@@ -377,19 +377,19 @@ router.get("/airtable/callback", async (req, res) => {
         await deliverRes.text()
       );
       res.redirect(
-        `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Failed+to+deliver+Airtable+tokens`
+        `https://${instance.subdomain}.dunky.ai/integrations?flash=Failed+to+deliver+Airtable+tokens`
       );
       return;
     }
 
     console.log(`Airtable connected for instance ${instance.id}`);
     res.redirect(
-      `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Airtable+connected+successfully`
+      `https://${instance.subdomain}.dunky.ai/integrations?flash=Airtable+connected+successfully`
     );
   } catch (err) {
     console.error("Airtable OAuth callback error:", err);
     res.redirect(
-      `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Airtable+connection+failed`
+      `https://${instance.subdomain}.dunky.ai/integrations?flash=Airtable+connection+failed`
     );
   }
 });
@@ -403,7 +403,7 @@ router.get("/notion/callback", async (req, res) => {
       const { instance } = parseOAuthState(state as string);
       if (instance) {
         res.redirect(
-          `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Notion+connection+cancelled`
+          `https://${instance.subdomain}.dunky.ai/integrations?flash=Notion+connection+cancelled`
         );
         return;
       }
@@ -454,7 +454,7 @@ router.get("/notion/callback", async (req, res) => {
         grant_type: "authorization_code",
         code: code as string,
         redirect_uri:
-          "https://api.agents.theagentpost.co/oauth/notion/callback",
+          "https://api.dunky.ai/oauth/notion/callback",
       }),
     });
 
@@ -462,7 +462,7 @@ router.get("/notion/callback", async (req, res) => {
       const body = await tokenRes.text();
       console.error("Notion token exchange failed:", body);
       res.redirect(
-        `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Notion+token+exchange+failed`
+        `https://${instance.subdomain}.dunky.ai/integrations?flash=Notion+token+exchange+failed`
       );
       return;
     }
@@ -493,19 +493,19 @@ router.get("/notion/callback", async (req, res) => {
         await deliverRes.text()
       );
       res.redirect(
-        `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Failed+to+deliver+Notion+tokens`
+        `https://${instance.subdomain}.dunky.ai/integrations?flash=Failed+to+deliver+Notion+tokens`
       );
       return;
     }
 
     console.log(`Notion connected for instance ${instance.id} (workspace: ${data.workspace_name})`);
     res.redirect(
-      `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Notion+connected+successfully`
+      `https://${instance.subdomain}.dunky.ai/integrations?flash=Notion+connected+successfully`
     );
   } catch (err) {
     console.error("Notion OAuth callback error:", err);
     res.redirect(
-      `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Notion+connection+failed`
+      `https://${instance.subdomain}.dunky.ai/integrations?flash=Notion+connection+failed`
     );
   }
 });
@@ -519,7 +519,7 @@ router.get("/twitter/callback", async (req, res) => {
       const { instance } = parseOAuthState(state as string);
       if (instance) {
         res.redirect(
-          `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Twitter+connection+cancelled`
+          `https://${instance.subdomain}.dunky.ai/integrations?flash=Twitter+connection+cancelled`
         );
         return;
       }
@@ -571,7 +571,7 @@ router.get("/twitter/callback", async (req, res) => {
         code: code as string,
         grant_type: "authorization_code",
         redirect_uri:
-          "https://api.agents.theagentpost.co/oauth/twitter/callback",
+          "https://api.dunky.ai/oauth/twitter/callback",
         code_verifier: statePayload.code_verifier,
       }),
     });
@@ -580,7 +580,7 @@ router.get("/twitter/callback", async (req, res) => {
       const body = await tokenRes.text();
       console.error("Twitter token exchange failed:", body);
       res.redirect(
-        `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Twitter+token+exchange+failed`
+        `https://${instance.subdomain}.dunky.ai/integrations?flash=Twitter+token+exchange+failed`
       );
       return;
     }
@@ -621,7 +621,7 @@ router.get("/twitter/callback", async (req, res) => {
         await deliverRes.text()
       );
       res.redirect(
-        `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Failed+to+deliver+Twitter+tokens`
+        `https://${instance.subdomain}.dunky.ai/integrations?flash=Failed+to+deliver+Twitter+tokens`
       );
       return;
     }
@@ -630,12 +630,12 @@ router.get("/twitter/callback", async (req, res) => {
       `Twitter connected for instance ${instance.id} (@${username})`
     );
     res.redirect(
-      `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Twitter+connected+successfully`
+      `https://${instance.subdomain}.dunky.ai/integrations?flash=Twitter+connected+successfully`
     );
   } catch (err) {
     console.error("Twitter OAuth callback error:", err);
     res.redirect(
-      `https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Twitter+connection+failed`
+      `https://${instance.subdomain}.dunky.ai/integrations?flash=Twitter+connection+failed`
     );
   }
 });
@@ -648,7 +648,7 @@ router.get("/granola/callback", async (req, res) => {
     try {
       const { instance } = parseOAuthState(state as string);
       if (instance) {
-        res.redirect(`https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Granola+connection+cancelled`);
+        res.redirect(`https://${instance.subdomain}.dunky.ai/integrations?flash=Granola+connection+cancelled`);
         return;
       }
     } catch {}
@@ -688,7 +688,7 @@ router.get("/granola/callback", async (req, res) => {
     // Exchange authorization code for tokens (public client, PKCE)
     const tokenParams: Record<string, string> = {
       code: code as string,
-      redirect_uri: "https://api.agents.theagentpost.co/oauth/granola/callback",
+      redirect_uri: "https://api.dunky.ai/oauth/granola/callback",
       grant_type: "authorization_code",
       client_id: statePayload.client_id,
       code_verifier: statePayload.code_verifier,
@@ -706,7 +706,7 @@ router.get("/granola/callback", async (req, res) => {
     if (!tokenRes.ok) {
       const body = await tokenRes.text();
       console.error("Granola token exchange failed:", body);
-      res.redirect(`https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Granola+token+exchange+failed`);
+      res.redirect(`https://${instance.subdomain}.dunky.ai/integrations?flash=Granola+token+exchange+failed`);
       return;
     }
 
@@ -733,15 +733,15 @@ router.get("/granola/callback", async (req, res) => {
 
     if (!deliverRes.ok) {
       console.error("Granola token delivery to instance failed:", await deliverRes.text());
-      res.redirect(`https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Failed+to+deliver+Granola+tokens`);
+      res.redirect(`https://${instance.subdomain}.dunky.ai/integrations?flash=Failed+to+deliver+Granola+tokens`);
       return;
     }
 
     console.log(`Granola connected for instance ${instance.id}`);
-    res.redirect(`https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Granola+connected+successfully`);
+    res.redirect(`https://${instance.subdomain}.dunky.ai/integrations?flash=Granola+connected+successfully`);
   } catch (err) {
     console.error("Granola OAuth callback error:", err);
-    res.redirect(`https://${instance.subdomain}.agents.theagentpost.co/integrations?flash=Granola+connection+failed`);
+    res.redirect(`https://${instance.subdomain}.dunky.ai/integrations?flash=Granola+connection+failed`);
   }
 });
 

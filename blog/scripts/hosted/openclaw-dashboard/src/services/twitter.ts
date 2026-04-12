@@ -41,7 +41,7 @@ export function buildTwitterOAuthUrl(): string {
   const params = new URLSearchParams({
     response_type: "code",
     client_id: clientId,
-    redirect_uri: "https://api.agents.theagentpost.co/oauth/twitter/callback",
+    redirect_uri: "https://api.dunky.ai/oauth/twitter/callback",
     scope: "tweet.read tweet.write users.read like.write offline.access",
     state,
     code_challenge: codeChallenge,

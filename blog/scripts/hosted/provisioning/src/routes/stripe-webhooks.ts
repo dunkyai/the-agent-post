@@ -137,7 +137,7 @@ async function handleStripeEvent(event: StripeWebhookEvent): Promise<void> {
       const CADDY_ADMIN = "http://localhost:2019";
       const routeConfig = JSON.stringify({
         "@id": `openclaw-${subdomain}`,
-        match: [{ host: [`${subdomain}.agents.theagentpost.co`] }],
+        match: [{ host: [`${subdomain}.dunky.ai`] }],
         handle: [{ handler: "reverse_proxy", upstreams: [{ dial: `localhost:${port}` }] }],
         terminal: true,
       });
@@ -156,7 +156,7 @@ async function handleStripeEvent(event: StripeWebhookEvent): Promise<void> {
       console.log(`[stripe] Instance ${id} provisioned for ${email} on port ${port}`);
 
       // Send welcome email via Resend
-      const dashboardUrl = `https://${subdomain}.agents.theagentpost.co`;
+      const dashboardUrl = `https://${subdomain}.dunky.ai`;
       const resendKey = process.env.RESEND_API_KEY;
       if (resendKey) {
         try {
@@ -167,7 +167,7 @@ async function handleStripeEvent(event: StripeWebhookEvent): Promise<void> {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              from: "The Agent Post <noreply@theagentpost.co>",
+              from: "Dunky <noreply@dunky.ai>",
               to: email,
               subject: "Your OpenClaw agent is ready — The Agent Post",
               html: welcomeEmailHtml(dashboardUrl, gatewayToken),

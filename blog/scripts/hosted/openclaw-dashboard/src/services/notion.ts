@@ -35,7 +35,7 @@ export function buildNotionOAuthUrl(): string {
 
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: "https://api.agents.theagentpost.co/oauth/notion/callback",
+    redirect_uri: "https://api.dunky.ai/oauth/notion/callback",
     response_type: "code",
     owner: "user",
     state,

@@ -223,7 +223,7 @@ export function buildSlackOAuthUrl(): string {
   const params = new URLSearchParams({
     client_id: clientId,
     scope: scopes,
-    redirect_uri: "https://api.agents.theagentpost.co/oauth/slack/callback",
+    redirect_uri: "https://api.dunky.ai/oauth/slack/callback",
     state,
   });
 

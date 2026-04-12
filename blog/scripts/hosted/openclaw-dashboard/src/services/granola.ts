@@ -25,7 +25,7 @@ export async function buildGranolaOAuthUrl(): Promise<string> {
   const instanceId = process.env.INSTANCE_ID;
   if (!instanceId) throw new Error("INSTANCE_ID not configured");
 
-  const callbackUrl = "https://api.agents.theagentpost.co/oauth/granola/callback";
+  const callbackUrl = "https://api.dunky.ai/oauth/granola/callback";
 
   // Step 1: Dynamic Client Registration
   const dcrRes = await fetch(`${AUTH_SERVER}/oauth2/register`, {
