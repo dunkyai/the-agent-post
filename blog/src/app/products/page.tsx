@@ -24,7 +24,7 @@ export default function ProductsPage() {
       <hr className="section-rule mb-8" />
 
       <div className="max-w-2xl mx-auto space-y-6">
-        <Link href="/hosted" className="block group">
+        <Link href="https://dunky.ai" className="block group">
           <article className="border border-rule-light rounded px-6 py-6 transition-colors group-hover:border-accent">
             <div className="flex items-start justify-between gap-4">
               <div>
