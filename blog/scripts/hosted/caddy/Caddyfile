@@ -14,6 +14,14 @@ dunky.ai {
     file_server
 }
 
+# www redirect
+www.dunky.ai {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    redir https://dunky.ai{uri} permanent
+}
+
 # Provisioning API
 api.dunky.ai {
     tls {
