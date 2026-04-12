@@ -1,32 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "https://dunky.ai",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
+function corsJson(data: unknown, status = 200) {
+  const res = NextResponse.json(data, { status });
+  res.headers.set("Access-Control-Allow-Origin", "https://dunky.ai");
+  res.headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.headers.set("Access-Control-Allow-Headers", "Content-Type");
+  return res;
+}
 
 export async function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+  const res = new NextResponse(null, { status: 204 });
+  res.headers.set("Access-Control-Allow-Origin", "https://dunky.ai");
+  res.headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.headers.set("Access-Control-Allow-Headers", "Content-Type");
+  return res;
 }
 
 export async function POST(req: NextRequest) {
   const { email } = await req.json();
 
   if (!email || typeof email !== "string" || !email.includes("@")) {
-    return NextResponse.json(
-      { error: "Valid email is required" },
-      { status: 400, headers: CORS_HEADERS }
-    );
+    return corsJson({ error: "Valid email is required" }, 400);
   }
 
   const priceId = process.env.STRIPE_PRICE_ID;
   if (!priceId) {
-    return NextResponse.json(
-      { error: "Stripe not configured" },
-      { status: 500 }
-    );
+    return corsJson({ error: "Stripe not configured" }, 500);
   }
 
   try {
@@ -40,15 +40,12 @@ export async function POST(req: NextRequest) {
       cancel_url: "https://dunky.ai",
     });
 
-    return NextResponse.json({ url: session.url }, { headers: CORS_HEADERS });
+    return corsJson({ url: session.url });
   } catch (err: unknown) {
     console.error("Stripe checkout error:", err);
-    return NextResponse.json(
-      {
-        error:
-          err instanceof Error ? err.message : "Failed to create checkout",
-      },
-      { status: 500, headers: CORS_HEADERS }
+    return corsJson(
+      { error: err instanceof Error ? err.message : "Failed to create checkout" },
+      500
     );
   }
 }
