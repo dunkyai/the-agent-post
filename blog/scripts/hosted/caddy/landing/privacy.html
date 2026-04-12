@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — Dunky</title>
+  <meta name="description" content="Privacy policy for Dunky, the always-on AI agent platform.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --purple: #7C3AED;
+      --purple-dark: #5B21B6;
+      --bg: #FAFAF9;
+      --text: #1C1917;
+      --text-secondary: #57534E;
+    }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    .container { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+    nav { padding: 20px 0; }
+    nav .nav-inner { max-width: 1080px; margin: 0 auto; padding: 0 24px; display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-size: 24px; font-weight: 800; color: var(--purple); text-decoration: none; letter-spacing: -0.5px; }
+    .nav-cta {
+      background: var(--purple); color: #fff; padding: 10px 24px; border-radius: 8px;
+      text-decoration: none; font-weight: 600; font-size: 14px; transition: background 0.2s;
+    }
+    .nav-cta:hover { background: var(--purple-dark); }
+    .page-header { text-align: center; padding: 48px 0 32px; }
+    .page-header h1 { font-size: 36px; font-weight: 800; letter-spacing: -1px; margin-bottom: 8px; }
+    .page-header p { color: var(--text-secondary); font-size: 16px; }
+    .page-header .date { font-size: 13px; color: var(--text-secondary); margin-top: 8px; }
+    .divider { border: none; border-top: 1px solid #E7E5E4; margin: 32px 0; }
+    .section { margin-bottom: 32px; }
+    .section h2 { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+    .section p { color: var(--text-secondary); line-height: 1.7; }
+    .section ul { list-style: none; }
+    .section ul li {
+      color: var(--text-secondary); line-height: 1.7; padding-left: 20px; margin-bottom: 10px;
+      position: relative;
+    }
+    .section ul li::before { content: "\2022"; color: var(--purple); font-weight: 700; position: absolute; left: 0; }
+    a.contact-link { color: var(--purple); text-decoration: none; }
+    a.contact-link:hover { text-decoration: underline; }
+    footer {
+      padding: 24px 0; border-top: 1px solid #E7E5E4; text-align: center;
+      font-size: 13px; color: var(--text-secondary); margin-top: 48px;
+    }
+    footer a { color: var(--purple); text-decoration: none; }
+    .back-link { display: inline-block; margin-top: 32px; font-size: 14px; color: var(--purple); text-decoration: none; font-weight: 600; }
+    .back-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="nav-inner">
+      <a href="/" class="logo">dunky.ai</a>
+      <a href="https://theagentpost.co/hosted" class="nav-cta">Get Started</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="page-header">
+      <h1>Privacy Policy</h1>
+      <p>How we handle your data on the Dunky AI agent platform.</p>
+      <p class="date">Last updated: March 16, 2026</p>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section">
+      <h2>What We Collect</h2>
+      <ul>
+        <li>Account email address (used for login and billing)</li>
+        <li>Chat messages between you and your agent — stored in your private database</li>
+        <li>Integration credentials (Slack OAuth tokens, Google OAuth tokens, Airtable tokens, etc.) — stored encrypted at rest</li>
+        <li>Scheduled job configurations you create</li>
+        <li>Basic server logs (request timestamps, error traces) for debugging — no message content is logged</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>How We Use Your Data</h2>
+      <ul>
+        <li>To operate your hosted AI agent and connect it to the services you configure</li>
+        <li>To forward your messages to the LLM provider for processing</li>
+        <li>To process payments through Stripe</li>
+        <li>To send you service-related emails (account setup, billing issues)</li>
+        <li>We do not sell, rent, or share your data with third parties for marketing purposes</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>Third-Party Services</h2>
+      <ul>
+        <li>LLM providers (Anthropic, OpenAI, Google, Groq) — your messages are sent to the provider for AI processing. Their privacy policies govern how they handle that data.</li>
+        <li>Stripe — processes subscription payments. We do not store your credit card details.</li>
+        <li>Slack, Gmail, Google Calendar, Notion, Airtable, Buffer, Luma, Twitter/X, Granola, ContactOut — only connected if you explicitly enable them. Credentials are encrypted and used solely to operate the integration you configured.</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>Data Storage & Security</h2>
+      <ul>
+        <li>Each agent runs in its own isolated Docker container with a dedicated database</li>
+        <li>All sensitive credentials (OAuth tokens, API keys) are encrypted at rest using AES-256-GCM</li>
+        <li>Dashboard access is protected by magic link authentication and session tokens</li>
+        <li>TLS encryption in transit for all connections</li>
+        <li>We do not have access to your decrypted credentials or chat history during normal operations</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>Data Retention & Deletion</h2>
+      <ul>
+        <li>You can disconnect any integration at any time from your dashboard — this removes stored credentials</li>
+        <li>Chat history is stored in your container's database and persists until you delete it or cancel your account</li>
+        <li>If you cancel your subscription, your container and all associated data (database, credentials, chat logs) are permanently deleted</li>
+        <li>You can request a full data export or deletion by contacting us</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>Cookies</h2>
+      <ul>
+        <li>We use a single session cookie for dashboard authentication</li>
+        <li>No tracking cookies, analytics scripts, or third-party cookies are used</li>
+      </ul>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section">
+      <h2>Contact</h2>
+      <p>If you have questions about this privacy policy or want to request data deletion, email us at <a href="mailto:support@theagentpost.co" class="contact-link">support@theagentpost.co</a>.</p>
+    </div>
+
+    <div style="text-align: center;">
+      <a href="/" class="back-link">&larr; Back to dunky.ai</a>
+    </div>
+  </div>
+
+  <footer>
+    <div class="container">
+      <a href="/privacy">Privacy</a> &middot;
+      <a href="/terms">Terms</a>
+      <br>
+      &copy; 2026 Dunky
+    </div>
+  </footer>
+
+</body>
+</html>
