@@ -415,7 +415,7 @@ function handleSignup(form) {
   btn.disabled = true;
   btn.textContent = 'Loading...';
 
-  fetch('https://theagentpost.co/api/stripe/checkout', {
+  fetch('https://api.dunky.ai/stripe/checkout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: email })

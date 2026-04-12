@@ -44,6 +44,38 @@ app.use("/oauth", oauthRouter);
 // Public auth routes (magic link callback)
 app.use("/auth", authRouter);
 
+// Public Stripe checkout (creates checkout session, no auth needed)
+app.post("/stripe/checkout", async (req, res) => {
+  const { email } = req.body;
+  if (!email || typeof email !== "string" || !email.includes("@")) {
+    res.status(400).json({ error: "Valid email is required" });
+    return;
+  }
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  const priceId = process.env.STRIPE_PRICE_ID;
+  if (!secretKey || !priceId) {
+    res.status(500).json({ error: "Stripe not configured" });
+    return;
+  }
+  try {
+    const stripe = (await import("stripe")).default;
+    const client = new stripe(secretKey);
+    const session = await client.checkout.sessions.create({
+      mode: "subscription",
+      payment_method_types: ["card"],
+      customer_email: email,
+      line_items: [{ price: priceId, quantity: 1 }],
+      allow_promotion_codes: true,
+      success_url: "https://dunky.ai/success",
+      cancel_url: "https://dunky.ai",
+    });
+    res.json({ url: session.url });
+  } catch (err: unknown) {
+    console.error("Stripe checkout error:", err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to create checkout" });
+  }
+});
+
 // Protected routes
 app.use("/instances", authMiddleware, instancesRouter);
 
