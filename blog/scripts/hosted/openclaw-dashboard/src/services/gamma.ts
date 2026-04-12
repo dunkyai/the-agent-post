@@ -98,6 +98,11 @@ export async function gammaCreatePresentation(params: {
       body.cardOptions = { dimensions: params.dimensions };
     }
 
+    // Make generated content viewable by anyone with the link
+    body.sharingOptions = {
+      externalAccess: "view",
+    };
+
     const res = await fetch(`${GAMMA_API}/generations`, {
       method: "POST",
       headers: headers(),
