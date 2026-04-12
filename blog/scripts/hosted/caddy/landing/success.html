@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to Dunky</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #FAFAF9;
+      color: #1C1917;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    .card {
+      text-align: center;
+      max-width: 480px;
+      padding: 48px 32px;
+    }
+    .card img {
+      width: 140px;
+      margin-bottom: 24px;
+      filter: drop-shadow(0 8px 24px rgba(124, 58, 237, 0.15));
+    }
+    .card h1 {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 12px;
+    }
+    .card p {
+      color: #57534E;
+      font-size: 16px;
+      line-height: 1.6;
+      margin-bottom: 8px;
+    }
+    .card .highlight {
+      color: #7C3AED;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img src="/mascot.jpg" alt="Dunky mascot">
+    <h1>You're in!</h1>
+    <p>Check your email for a <span class="highlight">magic link</span> to access your Dunky dashboard.</p>
+    <p>It should arrive in the next few minutes.</p>
+  </div>
+</body>
+</html>
