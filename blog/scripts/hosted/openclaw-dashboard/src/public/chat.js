@@ -211,7 +211,7 @@
     // Show thinking indicator
     var thinking = document.createElement("div");
     thinking.className = "chat-message assistant thinking-indicator";
-    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><span class="spinner"></span> <span class="thinking-text">Thinking...</span></div>';
+    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><div class="thinking-top"><span class="thinking-dots"><span></span><span></span><span></span></span> <span class="thinking-text">Thinking...</span></div><div class="thinking-progress"><div class="thinking-progress-bar"></div></div></div>';
     messages.appendChild(thinking);
     scrollToBottom();
 
@@ -290,10 +290,14 @@
           return;
         }
 
-        // Update thinking text with current status
+        // Update thinking text with current status (fade transition)
         var thinkingText = messages.querySelector(".thinking-text");
-        if (thinkingText && data.status) {
-          thinkingText.textContent = data.status;
+        if (thinkingText && data.status && thinkingText.textContent !== data.status) {
+          thinkingText.classList.add("fade-out");
+          setTimeout(function () {
+            thinkingText.textContent = data.status;
+            thinkingText.classList.remove("fade-out");
+          }, 300);
         }
         scrollToBottom();
 
@@ -313,7 +317,7 @@
   window.startPolling = function() {
     var thinking = document.createElement("div");
     thinking.className = "chat-message assistant thinking-indicator";
-    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><span class="spinner"></span> <span class="thinking-text">Thinking...</span></div>';
+    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><div class="thinking-top"><span class="thinking-dots"><span></span><span></span><span></span></span> <span class="thinking-text">Thinking...</span></div><div class="thinking-progress"><div class="thinking-progress-bar"></div></div></div>';
     messages.appendChild(thinking);
     scrollToBottom();
     input.disabled = true;
