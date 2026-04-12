@@ -257,6 +257,41 @@
       color: var(--text-secondary);
     }
 
+    /* Signup form */
+    .signup-form {
+      margin-top: 4px;
+    }
+    .signup-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .signup-row-center {
+      justify-content: center;
+    }
+    .signup-form input[type="email"] {
+      padding: 14px 16px;
+      border: 1px solid #D6D3D1;
+      border-radius: 10px;
+      font-size: 15px;
+      font-family: inherit;
+      width: 260px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .signup-form input[type="email"]:focus {
+      border-color: var(--purple);
+    }
+    .signup-error {
+      color: #DC2626;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+    .hero-price {
+      margin-top: 12px;
+      display: block;
+    }
+
     /* Footer */
     footer {
       padding: 24px 0;
@@ -293,7 +328,7 @@
   <nav>
     <div class="container">
       <a href="/" class="logo">dunky.ai</a>
-      <a href="https://theagentpost.co/hosted" class="nav-cta">Get Started</a>
+      <a href="#get-started" class="nav-cta">Get Started</a>
     </div>
   </nav>
 
@@ -315,10 +350,14 @@
           <li><span class="check">&#10003;</span> You set the controls &mdash; configure how your AI responds and acts</li>
           <li><span class="check">&#10003;</span> No coding, no terminal, no configurations &mdash; just log in and start</li>
         </ul>
-        <div class="hero-cta-row">
-          <a href="https://theagentpost.co/hosted" class="hero-cta">Get Started</a>
+        <form class="signup-form" onsubmit="return handleSignup(this)">
+          <div class="signup-row">
+            <input type="email" name="email" placeholder="you@company.com" required>
+            <button type="submit" class="hero-cta">Get Started</button>
+          </div>
+          <p class="signup-error" style="display:none;"></p>
           <span class="hero-price"><strong>$19.99/mo</strong> &middot; Cancel anytime</span>
-        </div>
+        </form>
       </div>
     </div>
   </section>
@@ -338,18 +377,23 @@
         <div class="integration-pill"><img src="/logos/buffer.svg" alt=""> Buffer</div>
         <div class="integration-pill"><img src="/logos/luma.svg" alt=""> Luma</div>
         <div class="integration-pill"><img src="/logos/twitter.svg" alt=""> Twitter/X</div>
-        <div class="integration-pill"><span>&#127912;</span> Gamma</div>
+        <div class="integration-pill"><img src="/logos/gamma.svg" alt=""> Gamma</div>
         <div class="integration-pill"><span>&#128270;</span> Web Search</div>
-        <div class="integration-pill"><span>&#127760;</span> Browser</div>
       </div>
     </div>
   </section>
 
   <section class="cta-section">
     <div class="container">
-      <h2>Ready to get started?</h2>
-      <p>Set up in minutes. Cancel anytime.</p>
-      <a href="https://theagentpost.co/hosted" class="hero-cta">Start for $19.99/month</a>
+      <h2 id="get-started">Ready to get started?</h2>
+      <p>Enter your email and we'll get you set up in minutes.</p>
+      <form class="signup-form" onsubmit="return handleSignup(this)">
+        <div class="signup-row signup-row-center">
+          <input type="email" name="email" placeholder="you@company.com" required>
+          <button type="submit" class="hero-cta">Start for $19.99/month</button>
+        </div>
+        <p class="signup-error" style="display:none;"></p>
+      </form>
     </div>
   </section>
 
@@ -362,5 +406,40 @@
     </div>
   </footer>
 
+<script>
+function handleSignup(form) {
+  var email = form.email.value.trim();
+  var btn = form.querySelector('button');
+  var errEl = form.querySelector('.signup-error');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Loading...';
+
+  fetch('https://theagentpost.co/api/stripe/checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      errEl.textContent = data.error || 'Something went wrong. Please try again.';
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Get Started';
+    }
+  })
+  .catch(function() {
+    errEl.textContent = 'Something went wrong. Please try again.';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Get Started';
+  });
+
+  return false;
+}
+</script>
 </body>
 </html>

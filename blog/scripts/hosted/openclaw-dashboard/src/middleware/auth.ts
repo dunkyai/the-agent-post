@@ -29,7 +29,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   }
 
   // Skip auth for public routes
-  const publicPaths = ["/login", "/login/magic-link", "/login/callback", "/health"];
+  const publicPaths = ["/login", "/login/magic-link", "/login/callback", "/health", "/privacy", "/terms"];
   if (publicPaths.includes(req.path) || req.path.startsWith("/webhook/")) {
     return next();
   }
