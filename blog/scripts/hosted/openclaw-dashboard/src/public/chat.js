@@ -39,8 +39,13 @@
     // Links [text](url) — only match if not preceded by !
     html = html.replace(/(?<!!)\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 
+    // Bold URLs — handle **https://...** before general bold/URL processing
+    // Strips bold markers and auto-links the URL cleanly
+    html = html.replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+
     // Bare URLs — auto-link URLs not already inside an href or src attribute
-    html = html.replace(/(?<!=&quot;|="|src="|href=")(https?:\/\/[^\s<)\]]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    // Exclude trailing markdown chars (*, _, `) so **url** doesn't capture ** in the URL
+    html = html.replace(/(?<!=&quot;|="|src="|href=")(https?:\/\/[^\s<)\]*_`]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
 
     // Bold **text**
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -210,7 +215,7 @@
     // Show thinking indicator
     var thinking = document.createElement("div");
     thinking.className = "chat-message assistant thinking-indicator";
-    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><span class="spinner"></span> <span class="thinking-text">Thinking...</span></div>';
+    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><div class="thinking-top"><span class="thinking-dots"><span></span><span></span><span></span></span> <span class="thinking-text">Thinking...</span></div><div class="thinking-progress"><div class="thinking-progress-bar"></div></div></div>';
     messages.appendChild(thinking);
     scrollToBottom();
 
@@ -289,10 +294,14 @@
           return;
         }
 
-        // Update thinking text with current status
+        // Update thinking text with current status (fade transition)
         var thinkingText = messages.querySelector(".thinking-text");
-        if (thinkingText && data.status) {
-          thinkingText.textContent = data.status;
+        if (thinkingText && data.status && thinkingText.textContent !== data.status) {
+          thinkingText.classList.add("fade-out");
+          setTimeout(function () {
+            thinkingText.textContent = data.status;
+            thinkingText.classList.remove("fade-out");
+          }, 300);
         }
         scrollToBottom();
 
@@ -312,7 +321,7 @@
   window.startPolling = function() {
     var thinking = document.createElement("div");
     thinking.className = "chat-message assistant thinking-indicator";
-    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><span class="spinner"></span> <span class="thinking-text">Thinking...</span></div>';
+    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><div class="thinking-top"><span class="thinking-dots"><span></span><span></span><span></span></span> <span class="thinking-text">Thinking...</span></div><div class="thinking-progress"><div class="thinking-progress-bar"></div></div></div>';
     messages.appendChild(thinking);
     scrollToBottom();
     input.disabled = true;

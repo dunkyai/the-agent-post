@@ -743,6 +743,45 @@
         </div>
       </details>
 
+      <!-- Gamma -->
+      <details class="integration-tile">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #8B5CF6;"><span style="font-size: 16px; color: #fff; font-weight: bold;">G</span></span>
+          <div class="integration-tile-info">
+            <h3>Gamma</h3>
+            <p>Create presentations, documents, and social posts with AI</p>
+          </div>
+          <span class="status-badge status-<%= gamma.status === 'connected' ? 'connected' : 'disconnected' %>">
+            <%= gamma.status === 'connected' ? 'Connected' : 'Not connected' %>
+          </span>
+        </summary>
+        <div class="integration-body">
+          <% if (gamma.status === 'connected') { %>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+              Your agent can create presentations, documents, and social posts using Gamma. It can also list themes and folders, and export as PDF/PPTX.
+            </p>
+            <form method="POST" action="/integrations/gamma/disconnect" onsubmit="return confirm('Disconnect Gamma?')">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+            </form>
+          <% } else { %>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+              Connect Gamma to let your agent create beautiful presentations, documents, and social posts. Requires a Gamma API key (Pro plan or higher).
+            </p>
+            <% if (gamma.error_message) { %>
+              <p style="color: var(--danger); font-size: 13px; margin-bottom: 8px;"><%= gamma.error_message %></p>
+            <% } %>
+            <form method="POST" action="/integrations/gamma/connect">
+              <div class="form-group">
+                <label for="gamma_api_key">API Key</label>
+                <input type="password" id="gamma_api_key" name="api_key" placeholder="Your Gamma API key" required>
+                <div class="hint">Get your API key from Gamma account settings > API Keys.</div>
+              </div>
+              <button type="submit" class="btn btn-sm">Connect</button>
+            </form>
+          <% } %>
+        </div>
+      </details>
+
     </div><!-- /integration-grid -->
   </div>
 </div>

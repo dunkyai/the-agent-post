@@ -69,6 +69,9 @@ export async function processTask(
   });
 
   try {
+    // Immediate feedback — show status before AI call
+    onStatus?.("Understanding your request...");
+
     const model = getSetting("model") || "claude-sonnet-4-20250514";
     const temperature = parseFloat(getSetting("temperature") || "0.7");
     const maxTokens = parseInt(getSetting("max_tokens") || "4096", 10);

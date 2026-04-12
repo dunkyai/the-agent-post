@@ -14,7 +14,7 @@ let lastDeactivateCheck = 0;
 const activeTasks = new Set<string>();
 const MAX_CONCURRENT_TASKS = 3;
 
-const TICK_INTERVAL_MS = 2_000; // 2 seconds
+const TICK_INTERVAL_MS = 500; // 500ms — fast task pickup, negligible cost (just a SQLite query)
 const DEACTIVATE_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // Guard for cron jobs (still sequential)

@@ -943,8 +943,13 @@ export function expandShortcut(message: string, hasAttachments = false): { short
   const after = normalized.slice(matchEnd).trim();
   const input = [before, after].filter(Boolean).join("\n\n");
 
-  // If no input and no attachments, don't run the workflow — ask for clarification
+  // If no input and no attachments — for workflow shortcuts, still return the match
+  // so the adapter can set up a "prompting" workflow state. For prompt shortcuts, ask for clarification.
   if (!input && !hasAttachments) {
+    if (shortcut.workflow_steps) {
+      // Workflow shortcut — return with empty input, the workflow executor will handle it
+      return { shortcut, expanded: "" };
+    }
     const expanded = `The user typed ;${shortcut.trigger} but didn't provide any content, context, or attachments. `
       + `This shortcut ("${shortcut.name}") needs input to work with. `
       + `Ask the user what they'd like to ${shortcut.description || "do with this shortcut"}. `

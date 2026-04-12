@@ -5,15 +5,7 @@
 # Ensure Node/npx is available (cron has minimal PATH)
 export PATH="/Users/dunkybot/.nvm/versions/node/v22.22.0/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-# Set up git credential helper using gh CLI (osxkeychain not available in cron)
-export GH_TOKEN="$(gh auth token 2>/dev/null)"
-git_push_with_auth() {
-  if [ -n "$GH_TOKEN" ]; then
-    git -c "http.https://github.com/.extraheader=Authorization: basic $(echo -n "x-access-token:$GH_TOKEN" | base64)" push
-  else
-    git push
-  fi
-}
+# Remote uses SSH (git@github.com:...) — no token needed
 
 BLOG_DIR="/Users/dunkybot/Projects/open-company/blog"
 cd "$BLOG_DIR" || exit 1
@@ -33,7 +25,14 @@ git add content/posts/
 git commit -m "Add new articles
 
 Auto-deployed by cron"
-git_push_with_auth
+git push
+
+# Merge dev into main and push to trigger Vercel deploy
+git checkout main
+git pull --ff-only
+git merge dev -m "Merge branch 'dev'"
+git push
+git checkout dev
 
 echo "$(date): Posts deployed to Vercel"
 

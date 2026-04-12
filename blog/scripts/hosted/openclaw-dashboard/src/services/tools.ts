@@ -15,6 +15,7 @@ import {
   executeAirtableTool,
   executeNotionTool,
   executeLumaTool,
+  executeGammaTool,
 } from "./ai";
 
 // Tool name → category mapping
@@ -61,6 +62,9 @@ const TOOL_CATEGORIES: Record<string, string> = {
   // Luma
   luma_list_events: "luma", luma_get_event: "luma", luma_create_event: "luma",
   luma_update_event: "luma", luma_get_guests: "luma",
+  // Gamma
+  gamma_create_presentation: "gamma", gamma_get_generation: "gamma",
+  gamma_list_themes: "gamma", gamma_list_folders: "gamma",
 };
 
 /**
@@ -108,6 +112,9 @@ export async function executeTool(toolName: string, input: Record<string, any>):
         break;
       case "luma":
         result = await executeLumaTool(toolName, input);
+        break;
+      case "gamma":
+        result = await executeGammaTool(toolName, input);
         break;
       default:
         return JSON.stringify({ error: `Unsupported tool category: ${category}` });

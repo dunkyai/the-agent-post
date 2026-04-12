@@ -11,6 +11,7 @@ export interface AiStep {
   id: string;
   prompt: string;
   label?: string;
+  tools?: boolean;  // default false — set to true to give AI access to tools
 }
 
 export interface PauseStep {

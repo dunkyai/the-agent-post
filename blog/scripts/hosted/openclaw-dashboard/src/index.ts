@@ -200,6 +200,19 @@ async function reconnectIntegrations() {
     console.error("Failed to reconnect ContactOut:", err instanceof Error ? err.message : err);
   }
 
+  // Gamma
+  try {
+    const gamma = getIntegration("gamma");
+    if (gamma && gamma.status === "connected") {
+      const config = JSON.parse(decrypt(gamma.config));
+      const { startGamma } = require("./services/gamma");
+      startGamma(config);
+      console.log("Gamma reconnected");
+    }
+  } catch (err: unknown) {
+    console.error("Failed to reconnect Gamma:", err instanceof Error ? err.message : err);
+  }
+
   try {
     const googleRows = getGoogleIntegrations();
     for (const row of googleRows) {

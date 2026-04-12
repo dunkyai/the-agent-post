@@ -418,26 +418,57 @@
 
     .thinking-bubble {
       display: flex;
-      align-items: center;
-      gap: 8px;
+      flex-direction: column;
+      gap: 6px;
       color: var(--text-secondary);
       font-style: italic;
+      min-width: 200px;
+    }
+    .thinking-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
     .thinking-text {
-      transition: opacity 0.15s ease;
+      transition: opacity 0.3s ease;
     }
-    .spinner {
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      border: 2px solid var(--rule-light);
-      border-top-color: var(--accent);
+    .thinking-text.fade-out { opacity: 0; }
+    .thinking-dots {
+      display: inline-flex;
+      gap: 3px;
+      margin-left: 2px;
+    }
+    .thinking-dots span {
+      width: 4px;
+      height: 4px;
       border-radius: 50%;
-      animation: spin 0.8s linear infinite;
+      background: var(--accent);
+      animation: dot-bounce 1.4s ease-in-out infinite;
     }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
+    .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes dot-bounce {
+      0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+      40% { opacity: 1; transform: scale(1.2); }
     }
+    .thinking-progress {
+      height: 3px;
+      border-radius: 2px;
+      background: var(--rule-light);
+      overflow: hidden;
+    }
+    .thinking-progress-bar {
+      height: 100%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--accent), #8B5CF6);
+      animation: progress-sweep 2.5s ease-in-out infinite;
+      width: 40%;
+    }
+    @keyframes progress-sweep {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(350%); }
+    }
+    .spinner { display: none; }
 
     .chat-error {
       color: var(--danger);
