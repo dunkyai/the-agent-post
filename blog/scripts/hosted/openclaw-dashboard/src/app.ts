@@ -49,6 +49,10 @@ app.use((_req, res, next) => {
 
 app.use(express.static(path.join(__dirname, "public")));
 
+// Public pages (no auth required)
+app.get("/privacy", (_req, res) => res.render("privacy"));
+app.get("/terms", (_req, res) => res.render("terms"));
+
 // Auth middleware (skips /login, /health, /webhook/*)
 app.use(requireAuth);
 
