@@ -602,7 +602,8 @@ export async function fetchChannelHistory(channelId: string, limit = 25): Promis
       if (msg.bot_id || msg.user === slackConfig.bot_user_id) continue;
       if (!msg.text?.trim()) continue;
       const userName = await resolveUserName(msg.user || "unknown");
-      lines.push(`${userName}: ${msg.text.trim()}`);
+      const ts = msg.ts ? new Date(parseFloat(msg.ts) * 1000).toISOString().slice(0, 16).replace("T", " ") : "";
+      lines.push(`[${ts}] ${userName} (${msg.user}): ${msg.text.trim()}`);
     }
 
     if (lines.length === 0) return "";
@@ -610,6 +611,35 @@ export async function fetchChannelHistory(channelId: string, limit = 25): Promis
     return lines.join("\n");
   } catch (err) {
     console.error("[slack] Failed to fetch channel history:", err instanceof Error ? err.message : err);
+    return "";
+  }
+}
+
+/**
+ * Fetch channel member list with display names.
+ * Requires channels:read scope.
+ */
+export async function fetchChannelMembers(channelId: string): Promise<string> {
+  if (!slackConfig) return "";
+  try {
+    const res = await fetch(
+      `https://slack.com/api/conversations.members?channel=${channelId}&limit=100`,
+      { headers: { Authorization: `Bearer ${slackConfig.bot_token}` } }
+    );
+    const data: any = await res.json();
+    if (!data.ok || !data.members?.length) return "";
+
+    const lines: string[] = [];
+    for (const userId of data.members) {
+      if (userId === slackConfig.bot_user_id) continue;
+      const name = await resolveUserName(userId);
+      lines.push(`${name} (${userId})`);
+    }
+
+    console.log(`[slack] Fetched ${lines.length} channel members for ${channelId}`);
+    return lines.join("\n");
+  } catch (err) {
+    console.error("[slack] Failed to fetch channel members:", err instanceof Error ? err.message : err);
     return "";
   }
 }

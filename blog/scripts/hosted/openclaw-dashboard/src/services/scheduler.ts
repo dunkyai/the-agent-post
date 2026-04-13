@@ -140,11 +140,18 @@ async function executeJob(jobId: number, force = false): Promise<void> {
     // For Slack-targeted jobs: fetch recent channel history and enforce output rules
     let slackBrevityRule = "";
     if (job.target_source === "slack" && job.target_external_id) {
-      const { fetchChannelHistory, SLACK_OUTPUT_RULES } = require("./slack");
+      const { fetchChannelHistory, fetchChannelMembers, SLACK_OUTPUT_RULES } = require("./slack");
       const slackChannelId = job.target_external_id.split(":")[0];
-      const channelContext = await fetchChannelHistory(slackChannelId);
+      const channelContext = await fetchChannelHistory(slackChannelId, 100);
       if (channelContext) {
-        extraContext += `\n\n[Recent Slack channel activity — for context only, do not summarize unless the job requires it]\n${channelContext}\n[End of channel context]`;
+        extraContext += `\n\n[SLACK CHANNEL DATA — This is REAL data from Slack channel ${slackChannelId}. You DO have access to this. Use it to answer the job prompt.]\n${channelContext}\n[End of Slack channel data]`;
+      } else {
+        extraContext += `\n\n[SLACK CHANNEL DATA — No recent messages found in channel ${slackChannelId}.]`;
+      }
+      // Fetch channel members if available
+      const members = await fetchChannelMembers(slackChannelId);
+      if (members) {
+        extraContext += `\n\n[SLACK CHANNEL MEMBERS]\n${members}\n[End of channel members]`;
       }
       extraContext += `\n\nYour output will be posted to Slack. ${SLACK_OUTPUT_RULES}`;
       slackBrevityRule = `\n\n[REMINDER: ${SLACK_OUTPUT_RULES}]`;
