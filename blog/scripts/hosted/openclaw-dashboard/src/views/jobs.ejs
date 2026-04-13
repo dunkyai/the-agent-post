@@ -22,7 +22,7 @@
       <% } %>
 
       <% jobs.forEach(function(job) { %>
-        <div class="card job-card" style="padding: 12px 16px;">
+        <div class="card job-card" data-job-id="<%= job.id %>" style="padding: 12px 16px;">
           <div class="job-summary" onclick="toggleJob(this)" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
             <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
               <span class="job-chevron" style="font-size: 12px; color: var(--text-secondary); transition: transform 0.15s; flex-shrink: 0;">&#9654;</span>
@@ -261,5 +261,17 @@ function toggleJob(summaryEl) {
   details.style.display = isOpen ? 'none' : 'block';
   card.classList.toggle('expanded', !isOpen);
 }
+
+// Auto-expand job card if ?open=ID is in the URL
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  var openId = params.get('open');
+  if (!openId) return;
+  var card = document.querySelector('.job-card[data-job-id="' + openId + '"]');
+  if (!card) return;
+  var details = card.querySelector('.job-details');
+  if (details) { details.style.display = 'block'; card.classList.add('expanded'); }
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+})();
 </script>
 <%- include('partials/foot') %>

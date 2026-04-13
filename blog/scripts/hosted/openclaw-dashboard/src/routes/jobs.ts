@@ -103,7 +103,7 @@ router.post("/jobs/:id/toggle", (req: Request, res: Response) => {
   }
 
   updateScheduledJob(id, { enabled: newEnabled, next_run: nextRun || undefined });
-  res.redirect(303, "/jobs?flash=Job+" + (newEnabled ? "enabled" : "disabled"));
+  res.redirect(303, `/jobs?flash=Job+${newEnabled ? "enabled" : "disabled"}&open=${id}`);
 });
 
 router.post("/jobs/:id/run", async (req: Request, res: Response) => {
@@ -116,7 +116,7 @@ router.post("/jobs/:id/run", async (req: Request, res: Response) => {
   runJobNow(id).catch((err: unknown) => {
     console.error(`Manual job run #${id} failed:`, err instanceof Error ? err.message : err);
   });
-  res.redirect(303, "/jobs?flash=Job+running+now…+refresh+in+a+moment+to+see+results");
+  res.redirect(303, `/jobs?flash=Job+running+now…+refresh+in+a+moment+to+see+results&open=${id}`);
 });
 
 router.post("/jobs/:id/delete", (req: Request, res: Response) => {
@@ -164,7 +164,7 @@ router.post("/jobs/:id", (req: Request, res: Response) => {
     }
     updateScheduledJob(id, updates);
     const flash = req.body.enabled === "1" ? "Job+updated+and+enabled" : "Job+updated";
-    res.redirect(303, "/jobs?flash=" + flash);
+    res.redirect(303, `/jobs?flash=${flash}&open=${id}`);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     res.redirect(303, "/jobs?flash=" + encodeURIComponent(message));
