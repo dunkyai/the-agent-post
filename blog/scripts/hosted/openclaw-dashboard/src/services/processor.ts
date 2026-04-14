@@ -138,6 +138,9 @@ export async function processTask(
     // Add user message
     addMessage(conversationId, "user", task.input.raw_input);
 
+    // Build image content blocks for Claude vision (if images attached)
+    const imageAttachments = task.input.metadata?.images as { name: string; content: string; mimeType: string }[] | undefined;
+
     // Get conversation history
     const MAX_HISTORY = 20;
     let history = getMessages(conversationId).filter(
@@ -198,6 +201,22 @@ export async function processTask(
         ? { channelId: task.input.metadata.channelId as string, threadTs: task.input.metadata.threadTs as string | undefined }
         : {}),
     };
+
+    // Inject image attachments into the last user message for Claude vision
+    if (imageAttachments?.length && history.length > 0) {
+      const lastIdx = history.length - 1;
+      if (history[lastIdx].role === "user") {
+        const imageBlocks = imageAttachments.map(img => ({
+          type: "image" as const,
+          source: { type: "base64" as const, media_type: img.mimeType, data: img.content },
+        }));
+        // Replace text content with multipart content (text + images)
+        (history[lastIdx] as any).multipartContent = [
+          { type: "text", text: history[lastIdx].content },
+          ...imageBlocks,
+        ];
+      }
+    }
 
     // Call the appropriate provider
     const caller = provider === "anthropic" ? callAnthropic : callOpenAI;

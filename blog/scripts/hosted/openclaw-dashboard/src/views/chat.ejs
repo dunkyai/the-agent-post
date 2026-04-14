@@ -27,9 +27,14 @@
         <% } %>
       </div>
       <div class="chat-error" id="chatError"></div>
+      <div id="filePreview" style="display:none; padding:6px 12px; background:var(--bg-secondary, #f5f5f5); border-radius:8px 8px 0 0; font-size:12px; color:var(--text-secondary); display:none; flex-wrap:wrap; gap:6px; align-items:center;"></div>
       <form class="chat-input-form" id="chatForm" style="position: relative;">
         <div id="shortcutDropdown" style="display:none; position:absolute; bottom:100%; left:0; right:60px; background:var(--bg, #fff); border:1px solid var(--border, #e0e0e0); border-radius:8px; box-shadow:0 -4px 16px rgba(0,0,0,0.1); max-height:200px; overflow-y:auto; z-index:100; margin-bottom:4px;"></div>
         <input type="text" id="chatInput" placeholder="Type a message... (;shortcut for quick actions)" autocomplete="off" required>
+        <label id="fileBtn" class="btn file-btn" title="Attach files">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          <input type="file" id="fileInput" multiple accept="image/*,audio/*,video/*,.pdf,.txt,.csv,.md,.json" style="display:none">
+        </label>
         <button type="button" id="micBtn" class="btn mic-btn" title="Record audio message">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
         </button>
@@ -252,5 +257,155 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
 }
+.file-btn {
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border, #e0e0e0);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.file-btn:hover { color: var(--fg); background: var(--bg-secondary, #f5f5f5); }
+.drop-overlay {
+  position: absolute; inset: 0; z-index: 200;
+  background: rgba(124, 58, 237, 0.08);
+  border: 2px dashed var(--accent, #7C3AED);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 600; color: var(--accent, #7C3AED);
+  pointer-events: none;
+}
+.file-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--bg, #fff); border: 1px solid var(--border, #e0e0e0);
+  border-radius: 6px; padding: 2px 8px; font-size: 12px;
+}
+.file-chip-x { cursor: pointer; opacity: 0.5; font-size: 14px; }
+.file-chip-x:hover { opacity: 1; }
 </style>
+<script>
+(function() {
+  var chatArea = document.querySelector('.chat-area');
+  var chatInput = document.getElementById('chatInput');
+  var chatForm = document.getElementById('chatForm');
+  var fileInput = document.getElementById('fileInput');
+  var filePreview = document.getElementById('filePreview');
+  var pendingFiles = [];
+  var dropOverlay = null;
+
+  function updatePreview() {
+    if (pendingFiles.length === 0) {
+      filePreview.style.display = 'none';
+      filePreview.innerHTML = '';
+      return;
+    }
+    filePreview.style.display = 'flex';
+    filePreview.innerHTML = pendingFiles.map(function(f, i) {
+      var size = f.size < 1024 * 1024 ? Math.round(f.size / 1024) + 'KB' : (f.size / 1024 / 1024).toFixed(1) + 'MB';
+      return '<span class="file-chip">' + escapeHtml(f.name) + ' (' + size + ') <span class="file-chip-x" data-idx="' + i + '">&times;</span></span>';
+    }).join('');
+  }
+
+  function escapeHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+  function addFiles(fileList) {
+    for (var i = 0; i < fileList.length; i++) {
+      if (pendingFiles.length >= 10) break;
+      pendingFiles.push(fileList[i]);
+    }
+    updatePreview();
+  }
+
+  // File button
+  fileInput.addEventListener('change', function() {
+    if (this.files.length) addFiles(this.files);
+    this.value = '';
+  });
+
+  // Remove file chips
+  filePreview.addEventListener('click', function(e) {
+    var x = e.target.closest('.file-chip-x');
+    if (!x) return;
+    var idx = parseInt(x.getAttribute('data-idx'));
+    pendingFiles.splice(idx, 1);
+    updatePreview();
+  });
+
+  // Drag and drop on the entire chat area
+  var dragCounter = 0;
+  chatArea.addEventListener('dragenter', function(e) {
+    e.preventDefault();
+    dragCounter++;
+    if (!dropOverlay) {
+      dropOverlay = document.createElement('div');
+      dropOverlay.className = 'drop-overlay';
+      dropOverlay.textContent = 'Drop files here';
+      chatArea.style.position = 'relative';
+      chatArea.appendChild(dropOverlay);
+    }
+  });
+  chatArea.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter <= 0) {
+      dragCounter = 0;
+      if (dropOverlay) { dropOverlay.remove(); dropOverlay = null; }
+    }
+  });
+  chatArea.addEventListener('dragover', function(e) { e.preventDefault(); });
+  chatArea.addEventListener('drop', function(e) {
+    e.preventDefault();
+    dragCounter = 0;
+    if (dropOverlay) { dropOverlay.remove(); dropOverlay = null; }
+    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+  });
+
+  // Override form submit to handle files
+  chatForm.addEventListener('submit', function(e) {
+    if (pendingFiles.length === 0) return; // let normal submit handle text-only
+    e.preventDefault();
+    var text = chatInput.value.trim();
+    if (!text && pendingFiles.length === 0) return;
+
+    // Show user message
+    var displayMsg = text || ('Attached ' + pendingFiles.length + ' file(s)');
+    if (pendingFiles.length > 0) {
+      displayMsg += '\n[' + pendingFiles.map(function(f) { return f.name; }).join(', ') + ']';
+    }
+    if (window.addUserMessage) window.addUserMessage(displayMsg);
+    chatInput.value = '';
+
+    var formData = new FormData();
+    formData.append('message', text);
+    for (var i = 0; i < pendingFiles.length; i++) {
+      formData.append('files', pendingFiles[i]);
+    }
+    pendingFiles = [];
+    updatePreview();
+
+    chatInput.disabled = true;
+    document.getElementById('chatSend').disabled = true;
+    document.getElementById('chatSend').textContent = '...';
+
+    fetch('/chat/upload', { method: 'POST', body: formData })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.ok) {
+          if (window.startPolling) window.startPolling();
+        } else {
+          document.getElementById('chatError').textContent = data.error || 'Upload failed';
+          chatInput.disabled = false;
+          document.getElementById('chatSend').disabled = false;
+          document.getElementById('chatSend').textContent = 'Send';
+        }
+      })
+      .catch(function(err) {
+        document.getElementById('chatError').textContent = err.message || 'Upload failed';
+        chatInput.disabled = false;
+        document.getElementById('chatSend').disabled = false;
+        document.getElementById('chatSend').textContent = 'Send';
+      });
+  });
+})();
+</script>
 <%- include('partials/foot') %>

@@ -3022,9 +3022,9 @@ export async function callAnthropic(
     tools.push(...PUBLIC_GDOC_TOOLS);
   }
 
-  const apiMessages: any[] = messages.map((m) => ({
+  const apiMessages: any[] = messages.map((m: any) => ({
     role: m.role === "user" ? "user" : "assistant",
-    content: m.content,
+    content: m.multipartContent || m.content,
   }));
 
   // Extract last user message for rules-based dispatch (e.g. gmail send vs draft)

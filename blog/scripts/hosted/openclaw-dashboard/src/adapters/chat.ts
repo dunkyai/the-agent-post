@@ -74,7 +74,7 @@ function looksLikeAccept(msg: string): boolean {
  * been asked yet this session, intercept with a canned prompt before
  * the message reaches the AI pipeline.
  */
-export function submitChatMessage(sessionId: string, message: string): { taskId: string } {
+export function submitChatMessage(sessionId: string, message: string, imageAttachments?: { name: string; content: string; mimeType: string }[]): { taskId: string } {
   // Cancel any pending cleanup timer from a previous request
   const oldTimer = cleanupTimers.get(sessionId);
   if (oldTimer) clearTimeout(oldTimer);
@@ -134,7 +134,11 @@ export function submitChatMessage(sessionId: string, message: string): { taskId:
     raw_input: taskInput,
     source_channel: "chat",
     reply_channel: "chat",
-    metadata: { sessionId, ...extraMetadata },
+    metadata: {
+      sessionId,
+      ...extraMetadata,
+      ...(imageAttachments?.length ? { images: imageAttachments } : {}),
+    },
     conversation_id: conversationId,
   });
 
