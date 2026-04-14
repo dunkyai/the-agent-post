@@ -3130,7 +3130,7 @@ export async function callAnthropic(
       const googleToolNames = [
         "gmail_search", "gmail_read_message", "gmail_get_attachment", "gmail_send", "gmail_create_draft", "gmail_label", "gmail_list_aliases",
         "calendar_list_events", "calendar_create_event", "calendar_update_event",
-        "drive_search", "drive_read_file", "drive_open_url",
+        "drive_search", "drive_read_file", "drive_open_url", "drive_upload_image",
         "contacts_search",
         "docs_create", "docs_read", "docs_append", "docs_insert", "docs_suggest_edit", "docs_format_text", "docs_paragraph_style", "docs_list", "docs_insert_image", "docs_replace_text",
         "sheets_create", "sheets_read", "sheets_write", "sheets_append", "sheets_list_sheets",
