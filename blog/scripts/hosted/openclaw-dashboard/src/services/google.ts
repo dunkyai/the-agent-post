@@ -819,6 +819,70 @@ export async function driveCreateFile(
   });
 }
 
+/**
+ * Upload a base64 image to Google Drive and make it viewable by anyone with the link.
+ * Returns { fileId, webViewLink, webContentLink } for embedding in Docs.
+ */
+export async function driveUploadImage(
+  base64Data: string,
+  filename: string,
+  mimeType: string,
+  accountId?: string
+): Promise<string> {
+  const imageBuffer = Buffer.from(base64Data, "base64");
+
+  // Step 1: Upload the file
+  const boundary = "openclaw_img_boundary";
+  const metadata = JSON.stringify({ name: filename });
+  const metadataPart = Buffer.from(
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\nContent-Transfer-Encoding: binary\r\n\r\n`
+  );
+  const endPart = Buffer.from(`\r\n--${boundary}--`);
+  const body = Buffer.concat([metadataPart, imageBuffer, endPart]);
+
+  const res = await googleFetch(
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,webContentLink",
+    {
+      method: "POST",
+      headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+      body,
+    },
+    accountId
+  );
+
+  if (!res.ok) {
+    const err: any = await res.json().catch(() => ({}));
+    return JSON.stringify({ error: err.error?.message || `Image upload failed (${res.status})` });
+  }
+
+  const file: any = await res.json();
+
+  // Step 2: Make file viewable by anyone with the link (needed for Google Docs image insertion)
+  try {
+    await googleFetch(
+      `https://www.googleapis.com/drive/v3/files/${file.id}/permissions`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: "reader", type: "anyone" }),
+      },
+      accountId
+    );
+  } catch {
+    // Non-fatal — image still uploaded, just may not be embeddable
+  }
+
+  const publicUrl = `https://drive.google.com/uc?id=${file.id}`;
+
+  return JSON.stringify({
+    success: true,
+    fileId: file.id,
+    name: file.name,
+    webViewLink: file.webViewLink,
+    publicUrl,
+  });
+}
+
 export function extractDriveFileId(url: string): string | null {
   // Matches: docs.google.com/document/d/{ID}, spreadsheets/d/{ID}, presentation/d/{ID}, drive.google.com/file/d/{ID}
   const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);

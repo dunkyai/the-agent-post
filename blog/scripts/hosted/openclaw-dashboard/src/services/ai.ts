@@ -9,7 +9,7 @@ import {
   isGoogleRunning, getConnectedServices, getGoogleAccounts,
   gmailSearch, gmailReadMessage, gmailGetAttachment, gmailSend, gmailCreateDraft, gmailAddLabel, gmailGetSendAsAliases,
   calendarListEvents, calendarCreateEvent, calendarUpdateEvent,
-  driveSearch, driveReadFile, extractDriveFileId,
+  driveSearch, driveReadFile, driveUploadImage, extractDriveFileId,
   contactsSearch,
   docsCreate, docsRead, docsAppend, docsInsert, docsSuggestEdit, docsFormatText, docsParagraphStyle, docsCreateList, docsInsertImage, docsReplaceText,
   sheetsCreate, sheetsRead, sheetsWrite, sheetsAppend, sheetsListSheets,
@@ -2251,6 +2251,18 @@ const GOOGLE_DRIVE_TOOLS = [
     },
   },
   {
+    name: "drive_upload_image",
+    description: "Upload an image from the current chat to Google Drive. Use this when the user attaches an image and wants it stored, shared, or embedded in a Google Doc. Returns a public URL that can be used to insert the image into Google Docs. IMPORTANT: Tell the user you are uploading to their Google Drive before calling this.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        image_index: { type: "number", description: "Index of the image in the current message attachments (0 for the first image). Default: 0." },
+        filename: { type: "string", description: "Filename for the uploaded image (e.g. 'meeting-notes.png')" },
+        account: { type: "string", description: "Google account email to use (optional)" },
+      },
+    },
+  },
+  {
     name: "drive_open_url",
     description: "Open and read a Google Docs, Sheets, Slides, or Drive URL. Use this when the user pastes a Google document link.",
     input_schema: {
@@ -2630,6 +2642,14 @@ export async function executeGoogleTool(toolName: string, input: any, userRawInp
         if (!fileId) return JSON.stringify({ error: "Could not extract file ID from URL. Make sure it's a Google Docs, Sheets, Slides, or Drive link." });
         return await driveReadFile(fileId, acct);
       }
+      case "drive_upload_image": {
+        const images = sourceContext?.imageAttachments;
+        if (!images?.length) return JSON.stringify({ error: "No images attached to the current message. Ask the user to upload an image first." });
+        const idx = input.image_index || 0;
+        if (idx >= images.length) return JSON.stringify({ error: `Image index ${idx} out of range. ${images.length} image(s) attached.` });
+        const img = images[idx];
+        return await driveUploadImage(img.content, input.filename || img.name, img.mimeType, acct);
+      }
       case "contacts_search":
         return await contactsSearch(input.query, acct);
       case "docs_create":
@@ -2955,6 +2975,7 @@ export interface SourceContext {
   threadTs?: string;
   sourceChannel?: string; // "chat" | "slack" | "email" — used to restrict tools for email-triggered tasks
   isOwnEmail?: boolean;   // true when email task was sent by the user themselves — gets full tool access
+  imageAttachments?: { name: string; content: string; mimeType: string }[]; // base64 images for Drive upload
 }
 
 export async function callAnthropic(
@@ -3772,7 +3793,7 @@ export function buildSystemPrompt(extraContext?: string, options?: { skipMemorie
         }
       } catch {}
       if (allSvcs.has("calendar")) googleContext += " You can view, create, update, and delete Google Calendar events.";
-      if (allSvcs.has("drive")) googleContext += " You can search and read Google Drive files including Google Docs, Sheets, and Slides.";
+      if (allSvcs.has("drive")) googleContext += " You can search and read Google Drive files including Google Docs, Sheets, and Slides. You can also upload images to Google Drive using drive_upload_image — use this when the user attaches an image and wants it in a Google Doc. Workflow: (1) tell the user you'll upload to their Google Drive, (2) call drive_upload_image to get a public URL, (3) use docs_insert_image with that URL. If Google Drive is not connected, tell the user they need to connect Google Drive on the integrations page.";
       if (allSvcs.has("contacts")) googleContext += " You can search Google Contacts.";
       if (allSvcs.has("docs")) googleContext += " You can create, read, and edit Google Docs using the docs_* tools. Use docs_create to make new documents, docs_read to read content (including all tabs), and docs_append or docs_insert to add text. Use docs_format_text to change text formatting (bold, italic, underline, strikethrough, font size, font family, text color, and hyperlinks). Use docs_paragraph_style to change paragraph-level formatting (headings, alignment, line spacing). Use docs_list to convert text into bullet or numbered lists. Use docs_insert_image to add images from URLs. IMPORTANT — EDITING EXISTING TEXT: When the user asks you to edit, revise, rewrite, or update existing text in a Google Doc, ALWAYS use docs_suggest_edit. This marks the original text in red strikethrough and inserts the replacement in blue, so the user can review the change. NEVER use docs_replace_text to edit content — that does a destructive overwrite with no way to review. Only use docs_replace_text for mechanical bulk operations (like removing all emojis or fixing a repeated typo). For docs with multiple tabs: docs_read returns all tabs with their tabId and title. To write to a specific tab, pass the tab_id parameter. If the user refers to a tab by name or content, use docs_read first to find the matching tab, then use its tabId. IMPORTANT: When docs_append returns success, the text IS at the end of the document — do NOT re-read to verify and do NOT retry with docs_insert.";
       if (allSvcs.has("sheets")) googleContext += " You can create, read, and write Google Sheets using the sheets_* tools. Use sheets_list_sheets to see tabs, sheets_read to read cell ranges, sheets_write to update cells, and sheets_append to add rows.";

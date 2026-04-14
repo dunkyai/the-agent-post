@@ -200,6 +200,7 @@ export async function processTask(
       ...(task.input.source_channel === "slack" && task.input.metadata?.channelId
         ? { channelId: task.input.metadata.channelId as string, threadTs: task.input.metadata.threadTs as string | undefined }
         : {}),
+      ...(imageAttachments?.length ? { imageAttachments } : {}),
     };
 
     // Inject image attachments into the last user message for Claude vision
