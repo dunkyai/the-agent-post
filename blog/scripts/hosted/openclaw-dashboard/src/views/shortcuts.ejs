@@ -1,32 +1,11 @@
-<%- include('partials/head', { title: 'Settings — Shortcuts' }) %>
+<%- include('partials/head', { title: 'Shortcuts' }) %>
 <div class="app">
-  <%- include('partials/nav', { active: 'settings' }) %>
+  <%- include('partials/nav', { active: 'shortcuts' }) %>
   <div class="main">
-    <h2>Settings</h2>
+    <h2>Shortcuts</h2>
     <%- include('partials/flash', { flash }) %>
-
-    <div class="tab-bar" style="display: flex; gap: 0; margin-bottom: 16px; border-bottom: 2px solid var(--border, #e0e0e0);">
-      <a href="/integrations" class="tab-link">Integrations</a>
-      <a href="/shortcuts" class="tab-link tab-active">Shortcuts</a>
-      <a href="/settings?tab=details" class="tab-link">Details</a>
-      <a href="/settings?tab=memories" class="tab-link">Memories (<%= memories.length %>)</a>
-    </div>
 
     <%- include('partials/shortcuts-content') %>
   </div>
 </div>
-<style>
-.tab-link {
-  padding: 8px 20px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  text-decoration: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  transition: color 0.15s, border-color 0.15s;
-}
-.tab-link:hover { color: var(--fg); }
-.tab-active { color: var(--accent); border-bottom-color: var(--accent); }
-</style>
 <%- include('partials/foot') %>
