@@ -168,6 +168,11 @@ while IFS='|' read -r ID PORT TOKEN PLAN MLIMIT; do
   deploy_instance "$ID" "$PORT" "$TOKEN" "$PLAN" "$MLIMIT" || FAILED=$((FAILED + 1))
 done <<< "$FILTERED"
 
+# --- Rebuild Caddy config with all routes (survives Caddy restarts) ---
+echo ""
+echo "Rebuilding Caddy config..."
+ssh "$SERVER" "/opt/agentpost/rebuild-caddy-config.sh --reload" 2>&1 || echo "⚠ Caddy config rebuild failed (non-fatal)"
+
 # --- Summary ---
 echo ""
 if [ "$FAILED" -gt 0 ]; then
