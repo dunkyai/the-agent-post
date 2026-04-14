@@ -3,6 +3,7 @@ import multer from "multer";
 import { getOrCreateConversation, getMessages, deleteConversation, getSetting } from "../services/db";
 import { submitChatMessage, pollChatStatus } from "../adapters/chat";
 import { transcribeAudio } from "../services/transcription";
+import { scanBuffer } from "../services/antivirus";
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 // Supported file types for chat uploads
@@ -102,6 +103,13 @@ router.post("/chat/upload", upload.array("files", 10), async (req: Request, res:
     for (const file of files || []) {
       const mime = file.mimetype;
       const name = file.originalname || "file";
+
+      // Virus scan
+      const scanResult = await scanBuffer(file.buffer, name);
+      if (!scanResult.safe) {
+        res.status(400).json({ error: `File "${name}" was rejected: malware detected (${scanResult.threat})` });
+        return;
+      }
 
       if (IMAGE_TYPES.has(mime)) {
         // Images: base64 for Claude vision (cap at 5MB to avoid DB bloat)

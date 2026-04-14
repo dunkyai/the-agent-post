@@ -132,6 +132,8 @@ deploy_instance() {
       -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \\
       -e MESSAGE_LIMIT="$INST_MLIMIT" \\
       -e PLAN="$INST_PLAN" \\
+      -e CLAMD_HOST="host.docker.internal" \\
+      -e CLAMD_PORT="3310" \\
       $([ "$ID" = "cb1d6d97" ] && echo '-e SKIP_AUTH=true') \\
       $IMAGE
 EOF
