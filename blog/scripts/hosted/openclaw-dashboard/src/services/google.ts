@@ -35,7 +35,7 @@ const SCOPE_MAP: Record<string, string[]> = {
     "https://www.googleapis.com/auth/calendar.events",
   ],
   drive: [
-    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/drive.file",
   ],
   contacts: [
     "https://www.googleapis.com/auth/contacts.readonly",
