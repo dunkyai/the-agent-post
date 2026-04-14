@@ -291,6 +291,7 @@
   var fileInput = document.getElementById('fileInput');
   var filePreview = document.getElementById('filePreview');
   var pendingFiles = [];
+  window.__pendingFiles = pendingFiles;
   var dropOverlay = null;
 
   function updatePreview() {
@@ -313,6 +314,7 @@
       if (pendingFiles.length >= 10) break;
       pendingFiles.push(fileList[i]);
     }
+    window.__pendingFiles = pendingFiles;
     updatePreview();
   }
 
@@ -360,12 +362,9 @@
     if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
   });
 
-  // Override form submit to handle files
-  chatForm.addEventListener('submit', function(e) {
-    if (pendingFiles.length === 0) return; // let normal submit handle text-only
-    e.preventDefault();
+  // File upload handler — called by chat.js when pendingFiles exist
+  window.__handleFileUpload = function() {
     var text = chatInput.value.trim();
-    if (!text && pendingFiles.length === 0) return;
 
     // Show user message
     var displayMsg = text || ('Attached ' + pendingFiles.length + ' file(s)');
@@ -381,6 +380,7 @@
       formData.append('files', pendingFiles[i]);
     }
     pendingFiles = [];
+    window.__pendingFiles = pendingFiles;
     updatePreview();
 
     chatInput.disabled = true;
@@ -405,7 +405,7 @@
         document.getElementById('chatSend').disabled = false;
         document.getElementById('chatSend').textContent = 'Send';
       });
-  });
+  };
 })();
 </script>
 <%- include('partials/foot') %>

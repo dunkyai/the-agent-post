@@ -202,6 +202,11 @@
 
   form.addEventListener("submit", function (e) {
     e.preventDefault();
+    // If files are pending, let the upload handler in chat.ejs handle it
+    if (window.__pendingFiles && window.__pendingFiles.length > 0) {
+      window.__handleFileUpload();
+      return;
+    }
     var text = input.value.trim();
     if (!text) return;
 
