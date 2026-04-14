@@ -104,13 +104,17 @@ router.post("/chat/upload", upload.array("files", 10), async (req: Request, res:
       const name = file.originalname || "file";
 
       if (IMAGE_TYPES.has(mime)) {
-        // Images: base64 for Claude vision
-        attachments.push({
-          type: "image",
-          name,
-          content: file.buffer.toString("base64"),
-          mimeType: mime,
-        });
+        // Images: base64 for Claude vision (cap at 5MB to avoid DB bloat)
+        if (file.size > 5 * 1024 * 1024) {
+          attachments.push({ type: "text", name, content: `[Image ${name} is too large (${Math.round(file.size / 1024 / 1024)}MB). Max 5MB for vision.]`, mimeType: "text/plain" });
+        } else {
+          attachments.push({
+            type: "image",
+            name,
+            content: file.buffer.toString("base64"),
+            mimeType: mime,
+          });
+        }
       } else if (AUDIO_TYPES.has(mime)) {
         // Audio: transcribe
         try {
