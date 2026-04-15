@@ -283,9 +283,6 @@ After completing all emails, share a summary: how many were sent/drafted, and an
 ];
 
 function seedDefaultShortcuts(): void {
-  const count = db.prepare("SELECT COUNT(*) as c FROM shortcuts").get() as { c: number };
-  if (count.c > 0) return; // Don't overwrite user shortcuts
-
   const insert = db.prepare(
     "INSERT OR IGNORE INTO shortcuts (trigger, name, description, prompt, continuation_prompt) VALUES (?, ?, ?, ?, ?)"
   );
