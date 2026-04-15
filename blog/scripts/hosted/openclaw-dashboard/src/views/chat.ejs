@@ -189,12 +189,18 @@
 
         if (audioChunks.length === 0) return;
 
-        // If there's text in the input (e.g. a shortcut), attach as file instead of auto-sending
+        // If there's text in the input (e.g. a shortcut), attach as file and auto-submit
         var inputText = chatInput.value.trim();
-        if (inputText) {
+        if (inputText || window.__submitAfterRecording) {
+          window.__submitAfterRecording = false;
           var blob = new Blob(audioChunks, { type: 'audio/webm' });
           var file = new File([blob], 'recording.webm', { type: 'audio/webm' });
           if (typeof addFiles === 'function') addFiles([file]);
+          // Trigger submit now that the file is attached
+          setTimeout(function() {
+            var form = document.getElementById('chatForm');
+            if (form) form.dispatchEvent(new Event('submit'));
+          }, 50);
           return;
         }
 
