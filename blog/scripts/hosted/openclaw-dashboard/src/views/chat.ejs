@@ -195,7 +195,7 @@
           window.__submitAfterRecording = false;
           var blob = new Blob(audioChunks, { type: 'audio/webm' });
           var file = new File([blob], 'recording.webm', { type: 'audio/webm' });
-          if (typeof addFiles === 'function') addFiles([file]);
+          if (window.__addFiles) window.__addFiles([file]);
           // Trigger submit now that the file is attached
           setTimeout(function() {
             var form = document.getElementById('chatForm');
@@ -337,6 +337,7 @@
     window.__pendingFiles = pendingFiles;
     updatePreview();
   }
+  window.__addFiles = addFiles;
 
   // File button
   fileInput.addEventListener('change', function() {
