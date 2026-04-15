@@ -17,6 +17,7 @@ export function getDb(): Database.Database {
     db.pragma("journal_mode = WAL");
     db.pragma("foreign_keys = ON");
     initSchema();
+    seedDefaultShortcuts();
   }
   return db;
 }
@@ -206,6 +207,91 @@ function initSchema(): void {
   try { db.exec("ALTER TABLE email_thread_state ADD COLUMN reply_mode TEXT NOT NULL DEFAULT 'draft'"); } catch {}
   try { db.exec("ALTER TABLE shortcuts ADD COLUMN continuation_prompt TEXT"); } catch {}
   try { db.exec("ALTER TABLE shortcuts ADD COLUMN workflow_steps TEXT"); } catch {}
+}
+
+const DEFAULT_SHORTCUTS = [
+  {
+    trigger: "coldemail",
+    name: "Cold Email Outreach",
+    description: "Research prospects matching your ideal customer profile, build a lead list in Google Sheets, and draft personalized outreach emails.",
+    prompt: `You are a customer acquisition specialist. The user wants to build a cold outreach campaign.
+
+{{input}}
+
+Follow these steps IN ORDER:
+
+**Step 1 — Gather the Ideal Customer Profile (ICP)**
+If the user has NOT provided enough detail about who they want to reach, ask them for:
+- Target job titles (e.g. VP of Marketing, Head of Growth, Founder)
+- Company size (e.g. 10-50 employees, Series A-B startups)
+- Industry or vertical (e.g. SaaS, fintech, e-commerce)
+- Location (e.g. US, Bay Area, Europe)
+- Any other qualifying criteria (e.g. "uses Shopify", "recently raised funding")
+
+Do NOT proceed until you have a clear ICP. If the user already provided this info in their message, move directly to Step 2.
+
+**Step 2 — Research & Build the Prospect List**
+IMPORTANT: Before doing ANY research, check if Google Sheets is connected by attempting to use the sheets_create tool. If it fails or is not available, STOP and tell the user:
+"To use this shortcut, you need to connect Google Sheets in your integration settings. Go to Settings → Integrations and connect your Google account with Sheets access enabled."
+
+Using web_search and browse_webpage, research real people who match the ICP. For each prospect, find:
+- First name
+- Last name
+- Job title
+- Company name
+- Email address (search for it on company websites, LinkedIn, team pages, press releases, etc.)
+
+Find up to 50 prospects. Be thorough — check company team pages, LinkedIn profiles, blog author bios, conference speaker lists, press mentions, and industry directories.
+
+**Step 3 — Create the Google Sheet**
+Create a Google Sheets spreadsheet titled "Cold Outreach — [ICP summary] — [today's date]" with these columns:
+- A: First Name
+- B: Last Name
+- C: Title
+- D: Company
+- E: Email
+- F: Status (leave blank — for tracking later)
+- G: Notes (any useful context you found about the person)
+
+Write all 50 prospects into the sheet.
+
+**Step 4 — Present Results & Offer Email Drafting**
+Share the link to the Google Sheet and summarize what you found (e.g. "Found 50 prospects — mostly VPs of Marketing at Series A SaaS companies in the US").
+
+Then ask:
+"Would you like me to draft a personalized cold email to each person? If so, please provide:
+1. The email copy you'd like to use (you can use {first_name}, {last_name}, and {company} for personalization)
+2. The subject line
+3. Whether to send or save as drafts
+
+Or I can suggest email copy based on your ICP if you'd like."`,
+    continuation_prompt: `The user has reviewed the prospect list and wants to proceed with email drafting.
+
+Based on their reply, draft and send (or save as drafts) personalized emails to each prospect in the Google Sheet.
+
+IMPORTANT: Before sending or drafting emails, check if Gmail is connected by attempting to use gmail_create_draft or gmail_send. If it fails or is not available, STOP and tell the user:
+"To send emails, you need to connect Gmail in your integration settings. Go to Settings → Integrations and connect your Google account with Gmail access enabled."
+
+For each prospect:
+1. Read their row from the Google Sheet
+2. Replace {first_name}, {last_name}, and {company} in the user's email template
+3. Send or save as draft based on the user's preference
+4. Update the "Status" column in the sheet to "Sent" or "Drafted"
+
+After completing all emails, share a summary: how many were sent/drafted, and any that failed (e.g. missing email address).`,
+  },
+];
+
+function seedDefaultShortcuts(): void {
+  const count = db.prepare("SELECT COUNT(*) as c FROM shortcuts").get() as { c: number };
+  if (count.c > 0) return; // Don't overwrite user shortcuts
+
+  const insert = db.prepare(
+    "INSERT OR IGNORE INTO shortcuts (trigger, name, description, prompt, continuation_prompt) VALUES (?, ?, ?, ?, ?)"
+  );
+  for (const s of DEFAULT_SHORTCUTS) {
+    insert.run(s.trigger, s.name, s.description, s.prompt, s.continuation_prompt);
+  }
 }
 
 export function getGmailProcessedThread(threadId: string): { last_message_id: string } | undefined {
