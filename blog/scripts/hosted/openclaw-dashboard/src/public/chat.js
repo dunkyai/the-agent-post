@@ -44,14 +44,17 @@
     html = html.replace(/\*\*(https?:\/\/[^\s*]+)\*\*/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
 
     // Bare URLs — auto-link URLs not already inside an href or src attribute
-    // Exclude trailing markdown chars (*, _, `) so **url** doesn't capture ** in the URL
-    html = html.replace(/(?<!=&quot;|="|src="|href=")(https?:\/\/[^\s<)\]*_`]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    // Allow underscores in URLs (common in query params, paths, etc.)
+    html = html.replace(/(?<!=&quot;|="|src="|href=")(https?:\/\/[^\s<)\]*`]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
 
     // Bold **text**
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 
-    // Italic *text*
+    // Italic *text* — but not inside URLs (href/src attributes)
     html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+
+    // Italic _text_ — only match word-boundary underscores, not underscores inside URLs
+    html = html.replace(/(?<![\/\w])_([^_]+)_(?![\/\w])/g, '<em>$1</em>');
 
     // Split into paragraphs by double newlines
     var blocks = html.split(/\n{2,}/);
