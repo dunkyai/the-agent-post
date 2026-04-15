@@ -387,9 +387,21 @@
     document.getElementById('chatSend').disabled = true;
     document.getElementById('chatSend').textContent = '...';
 
+    // Show uploading indicator
+    var messages = document.getElementById('chatMessages');
+    var uploading = document.createElement('div');
+    uploading.className = 'chat-message assistant thinking-indicator';
+    uploading.id = 'uploadingIndicator';
+    var agentName = window.__chatConfig?.agentName || 'Agent';
+    uploading.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><span class="spinner"></span> <span class="thinking-text">Uploading files...</span></div>';
+    messages.appendChild(uploading);
+    messages.scrollTop = messages.scrollHeight;
+
     fetch('/chat/upload', { method: 'POST', body: formData })
       .then(function(r) { return r.json(); })
       .then(function(data) {
+        var ind = document.getElementById('uploadingIndicator');
+        if (ind) ind.remove();
         if (data.ok) {
           if (window.startPolling) window.startPolling();
         } else {
@@ -400,6 +412,8 @@
         }
       })
       .catch(function(err) {
+        var ind = document.getElementById('uploadingIndicator');
+        if (ind) ind.remove();
         document.getElementById('chatError').textContent = err.message || 'Upload failed';
         chatInput.disabled = false;
         document.getElementById('chatSend').disabled = false;
