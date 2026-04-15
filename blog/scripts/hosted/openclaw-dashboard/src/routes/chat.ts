@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import multer from "multer";
 import { getOrCreateConversation, getMessages, deleteConversation, getSetting } from "../services/db";
-import { submitChatMessage, pollChatStatus } from "../adapters/chat";
+import { submitChatMessage, pollChatStatus, pollChatTasks } from "../adapters/chat";
 import { transcribeAudio } from "../services/transcription";
 import { scanBuffer } from "../services/antivirus";
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
@@ -54,9 +54,19 @@ router.post("/chat/message", (req: Request, res: Response) => {
 // GET: poll for status/result
 router.get("/chat/poll", (req: Request, res: Response) => {
   const sessionId = req.cookies?.openclaw_session || "anon";
-  const result = pollChatStatus(sessionId);
-  console.log(`[chat] POLL from ${sessionId.slice(0, 8)}... -> status=${result.status}, done=${result.done}`);
-  res.json(result);
+  const taskId = req.query.taskId as string | undefined;
+
+  if (taskId) {
+    // Multi-task format: return tasks array
+    const result = pollChatTasks(sessionId, taskId);
+    console.log(`[chat] POLL from ${sessionId.slice(0, 8)}... taskId=${taskId.slice(0, 8)}... -> ${result.tasks.length} task(s)`);
+    res.json(result);
+  } else {
+    // Backward-compat: single-task format
+    const result = pollChatStatus(sessionId);
+    console.log(`[chat] POLL from ${sessionId.slice(0, 8)}... -> status=${result.status}, done=${result.done}`);
+    res.json(result);
+  }
 });
 
 // POST: submit audio — transcribe then process as a chat message

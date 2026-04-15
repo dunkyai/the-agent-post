@@ -2,7 +2,7 @@ import type { Task } from "../types/task";
 import { createTask } from "../services/task";
 import { getOrCreateConversation, getSetting, addMessage, getDb, expandShortcut } from "../services/db";
 
-// --- In-memory pending state (same pattern as old chat.ts) ---
+// --- In-memory pending state (supports multiple concurrent tasks per session) ---
 
 interface PendingState {
   status: string;
@@ -12,7 +12,8 @@ interface PendingState {
   taskId: string;
 }
 
-const pending = new Map<string, PendingState>();
+// sessionId → (taskId → PendingState)
+const pending = new Map<string, Map<string, PendingState>>();
 const cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 const CHAT_CONVERSATION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
@@ -66,6 +67,11 @@ function looksLikeAccept(msg: string): boolean {
   return /^(yes|yeah|yep|sure|ok|okay|go ahead|let's do it|let's go|absolutely|of course)\b/.test(lower);
 }
 
+function getSessionTasks(sessionId: string): Map<string, PendingState> {
+  if (!pending.has(sessionId)) pending.set(sessionId, new Map());
+  return pending.get(sessionId)!;
+}
+
 /**
  * Submit a chat message — creates a task with status "pending".
  * The scheduler picks it up within ~2s.
@@ -75,10 +81,6 @@ function looksLikeAccept(msg: string): boolean {
  * the message reaches the AI pipeline.
  */
 export function submitChatMessage(sessionId: string, message: string, imageAttachments?: { name: string; content: string; mimeType: string }[]): { taskId: string } {
-  // Cancel any pending cleanup timer from a previous request
-  const oldTimer = cleanupTimers.get(sessionId);
-  if (oldTimer) clearTimeout(oldTimer);
-
   const conversationId = getChatConversation();
 
   // --- Onboarding gate ---
@@ -100,7 +102,7 @@ export function submitChatMessage(sessionId: string, message: string, imageAttac
         done: true,
         taskId: "onboarding-gate",
       };
-      pending.set(sessionId, state);
+      getSessionTasks(sessionId).set("onboarding-gate", state);
       console.log(`[chat-adapter] Onboarding gate triggered for session ${sessionId.slice(0, 8)}...`);
       return { taskId: "onboarding-gate" };
     }
@@ -149,14 +151,65 @@ export function submitChatMessage(sessionId: string, message: string, imageAttac
     done: false,
     taskId: task.task_id,
   };
-  pending.set(sessionId, state);
+  getSessionTasks(sessionId).set(task.task_id, state);
 
   console.log(`[chat-adapter] Task ${task.task_id} created for session ${sessionId.slice(0, 8)}...`);
   return { taskId: task.task_id };
 }
 
 /**
+ * Poll for a specific task's status. Returns tasks array format.
+ */
+export function pollChatTasks(sessionId: string, taskId?: string): {
+  tasks: Array<{
+    taskId: string;
+    status: string;
+    done: boolean;
+    result?: { role: string; content: string };
+    error?: string;
+  }>;
+} {
+  const sessionTasks = pending.get(sessionId);
+  if (!sessionTasks || sessionTasks.size === 0) {
+    return { tasks: [] };
+  }
+
+  const toCheck: [string, PendingState][] = taskId
+    ? (sessionTasks.has(taskId) ? [[taskId, sessionTasks.get(taskId)!]] : [])
+    : Array.from(sessionTasks.entries());
+
+  const results: Array<{
+    taskId: string;
+    status: string;
+    done: boolean;
+    result?: { role: string; content: string };
+    error?: string;
+  }> = [];
+
+  for (const [tid, state] of toCheck) {
+    if (state.done) {
+      const entry = state.error
+        ? { taskId: tid, status: "error", error: state.error, done: true as const }
+        : { taskId: tid, status: "done", result: state.result!, done: true as const };
+      results.push(entry);
+      // Remove completed task from map on read
+      sessionTasks.delete(tid);
+    } else {
+      results.push({ taskId: tid, status: state.status, done: false });
+    }
+  }
+
+  // Clean up empty session map
+  if (sessionTasks.size === 0) {
+    pending.delete(sessionId);
+  }
+
+  return { tasks: results };
+}
+
+/**
  * Poll for current status of a chat session's pending request.
+ * Backward-compatible single-task format.
  */
 export function pollChatStatus(sessionId: string): {
   status: string;
@@ -165,19 +218,14 @@ export function pollChatStatus(sessionId: string): {
   error?: string;
   taskId?: string;
 } {
-  const state = pending.get(sessionId);
-  if (!state) {
+  const { tasks } = pollChatTasks(sessionId);
+  if (tasks.length === 0) {
     return { status: "idle", done: true };
   }
-  if (state.done) {
-    const result = state.error
-      ? { status: "error", error: state.error, done: true, taskId: state.taskId }
-      : { status: "done", result: state.result!, done: true, taskId: state.taskId };
-    // Clean up immediately on read — client got the result
-    pending.delete(sessionId);
-    return result;
-  }
-  return { status: state.status, done: false, taskId: state.taskId };
+  // Return first done task, or first in-progress task
+  const done = tasks.find((t) => t.done);
+  if (done) return { ...done };
+  return { ...tasks[0] };
 }
 
 /**
@@ -192,10 +240,15 @@ export function onTaskComplete(task: Task): void {
     return;
   }
 
-  const state = pending.get(sessionId);
-  if (!state || state.taskId !== task.task_id) {
-    // Session already cleaned up or different task — ignore
+  const sessionTasks = pending.get(sessionId);
+  if (!sessionTasks) {
     console.log(`[chat-adapter] No pending state for session ${sessionId.slice(0, 8)}... (task ${task.task_id})`);
+    return;
+  }
+
+  const state = sessionTasks.get(task.task_id);
+  if (!state) {
+    console.log(`[chat-adapter] No pending state for task ${task.task_id} in session ${sessionId.slice(0, 8)}...`);
     return;
   }
 
@@ -218,12 +271,17 @@ export function onTaskComplete(task: Task): void {
   state.done = true;
   console.log(`[chat-adapter] Task ${task.task_id} routed to session ${sessionId.slice(0, 8)}...`);
 
-  // Clean up after 30s
+  // Clean up after 30s if client doesn't poll
+  const timerKey = `${sessionId}:${task.task_id}`;
   cleanupTimers.set(
-    sessionId,
+    timerKey,
     setTimeout(() => {
-      pending.delete(sessionId);
-      cleanupTimers.delete(sessionId);
+      const st = pending.get(sessionId);
+      if (st) {
+        st.delete(task.task_id);
+        if (st.size === 0) pending.delete(sessionId);
+      }
+      cleanupTimers.delete(timerKey);
     }, 30_000)
   );
 }
@@ -233,8 +291,9 @@ export function onTaskComplete(task: Task): void {
  * Called by the processor via scheduler.
  */
 export function updateChatStatus(taskId: string, status: string): void {
-  for (const [, state] of pending) {
-    if (state.taskId === taskId && !state.done) {
+  for (const [, sessionTasks] of pending) {
+    const state = sessionTasks.get(taskId);
+    if (state && !state.done) {
       state.status = status;
       return;
     }

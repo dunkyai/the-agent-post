@@ -10,6 +10,9 @@
   var messageCount = messages.querySelectorAll(".chat-message").length;
   var memorySaved = false;
 
+  // Ordered task queue — results appear in submission order
+  var taskQueue = [];
+
   // Minimal markdown-to-HTML renderer
   function renderMarkdown(src) {
     // Clean up malformed nested image markdown before rendering
@@ -133,14 +136,21 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: "Please review our conversation and save the important details, decisions, and preferences to your memory so you remember them in the future." }),
       })
-        .then(function () {
-          // Poll until done
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (!data.ok || !data.taskId) {
+            link.innerHTML = '<span style="color: var(--danger);">Failed to save</span>';
+            memorySaved = false;
+            return;
+          }
+          var memTaskId = data.taskId;
           function pollMemory() {
-            fetch("/chat/poll").then(function (r) { return r.json(); }).then(function (data) {
-              if (data.done) {
-                if (data.result) {
+            fetch("/chat/poll?taskId=" + encodeURIComponent(memTaskId)).then(function (r) { return r.json(); }).then(function (d) {
+              var t = d.tasks && d.tasks[0];
+              if (t && t.done) {
+                if (t.result) {
                   link.innerHTML = '<span style="color: var(--text-secondary);">Saved to memory</span>';
-                  addMessage("assistant", data.result.content);
+                  addMessage("assistant", t.result.content);
                 } else {
                   link.innerHTML = '<span style="color: var(--danger);">Failed to save</span>';
                   memorySaved = false;
@@ -196,6 +206,101 @@
     scrollToBottom();
   }
 
+  function createThinkingIndicator(taskId) {
+    var thinking = document.createElement("div");
+    thinking.className = "chat-message assistant thinking-indicator";
+    thinking.setAttribute("data-task-id", taskId || "pending");
+    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><div class="thinking-top"><span class="thinking-dots"><span></span><span></span><span></span></span> <span class="thinking-text">Thinking...</span></div><div class="thinking-progress"><div class="thinking-progress-bar"></div></div></div>';
+    messages.appendChild(thinking);
+    scrollToBottom();
+    return thinking;
+  }
+
+  /**
+   * Flush completed tasks from the front of the queue in order.
+   * If task B finishes before task A, B's result is held until A completes.
+   */
+  function flushTaskQueue() {
+    while (taskQueue.length > 0 && taskQueue[0].result !== null) {
+      var entry = taskQueue.shift();
+      entry.thinkingEl.remove();
+      if (entry.result.error) {
+        errorEl.textContent = entry.result.error;
+      } else if (entry.result.content) {
+        addMessage("assistant", entry.result.content);
+        maybeShowMemoryLink();
+      }
+    }
+  }
+
+  /**
+   * Poll for a specific task's status. Each task has its own poll loop.
+   */
+  function pollForTask(taskId, thinkingEl) {
+    fetch("/chat/poll?taskId=" + encodeURIComponent(taskId))
+      .then(function (res) {
+        if (!res.ok) {
+          if (res.status === 302 || res.redirected) {
+            errorEl.textContent = "Session expired. Please refresh the page.";
+            return Promise.reject("redirect");
+          }
+          return res.text().then(function (t) {
+            return { tasks: [{ taskId: taskId, status: "error", error: t, done: true }] };
+          });
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        if (!data) return;
+        var task = data.tasks && data.tasks[0];
+        if (!task) {
+          // Task disappeared — mark in queue and flush
+          for (var i = 0; i < taskQueue.length; i++) {
+            if (taskQueue[i].taskId === taskId) {
+              taskQueue[i].result = { error: null, content: null };
+              break;
+            }
+          }
+          flushTaskQueue();
+          return;
+        }
+
+        if (task.done) {
+          // Store result in queue entry and flush in order
+          for (var i = 0; i < taskQueue.length; i++) {
+            if (taskQueue[i].taskId === taskId) {
+              if (task.status === "error") {
+                taskQueue[i].result = { error: task.error || "Something went wrong.", content: null };
+              } else if (task.result) {
+                taskQueue[i].result = { error: null, content: task.result.content };
+              } else {
+                taskQueue[i].result = { error: null, content: null };
+              }
+              break;
+            }
+          }
+          flushTaskQueue();
+          return;
+        }
+
+        // Update this specific thinking indicator's status text
+        var thinkingText = thinkingEl.querySelector(".thinking-text");
+        if (thinkingText && task.status && thinkingText.textContent !== task.status) {
+          thinkingText.classList.add("fade-out");
+          setTimeout(function () {
+            thinkingText.textContent = task.status;
+            thinkingText.classList.remove("fade-out");
+          }, 300);
+        }
+        scrollToBottom();
+        setTimeout(function () { pollForTask(taskId, thinkingEl); }, 1000);
+      })
+      .catch(function (err) {
+        if (err === "redirect") return;
+        setTimeout(function () { pollForTask(taskId, thinkingEl); }, 2000);
+      });
+  }
+
   // Re-render server-rendered assistant bubbles with markdown on load
   var existingBubbles = messages.querySelectorAll(".chat-message.assistant .bubble");
   for (var i = 0; i < existingBubbles.length; i++) {
@@ -221,17 +326,10 @@
 
     addMessage("user", text);
     input.value = "";
-    input.disabled = true;
-    sendBtn.disabled = true;
-    sendBtn.textContent = "...";
     errorEl.textContent = "";
 
-    // Show thinking indicator
-    var thinking = document.createElement("div");
-    thinking.className = "chat-message assistant thinking-indicator";
-    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><div class="thinking-top"><span class="thinking-dots"><span></span><span></span><span></span></span> <span class="thinking-text">Thinking...</span></div><div class="thinking-progress"><div class="thinking-progress-bar"></div></div></div>';
-    messages.appendChild(thinking);
-    scrollToBottom();
+    // Create thinking indicator (will be tagged with taskId after POST)
+    var thinking = createThinkingIndicator("pending");
 
     // Submit message
     fetch("/chat/message", {
@@ -246,102 +344,31 @@
       .then(function (data) {
         console.log("[post] response:", JSON.stringify(data));
         if (data.error) {
-          var t = messages.querySelector(".thinking-indicator");
-          if (t) t.remove();
+          thinking.remove();
           errorEl.textContent = data.error;
-          input.disabled = false;
-          sendBtn.disabled = false;
-          sendBtn.textContent = "Send";
-          input.focus();
           return;
         }
-        // Start polling for status updates
-        pollForResult();
+        // Tag the thinking indicator with the real task ID
+        thinking.setAttribute("data-task-id", data.taskId);
+        // Add to ordered queue
+        taskQueue.push({ taskId: data.taskId, thinkingEl: thinking, result: null });
+        // Start polling for this task
+        pollForTask(data.taskId, thinking);
       })
       .catch(function (err) {
-        var t = messages.querySelector(".thinking-indicator");
-        if (t) t.remove();
+        thinking.remove();
         errorEl.textContent = err.message || "Connection error";
-        input.disabled = false;
-        sendBtn.disabled = false;
-        sendBtn.textContent = "Send";
-        input.focus();
       });
   });
 
-  function pollForResult() {
-    fetch("/chat/poll")
-      .then(function (res) {
-        if (!res.ok) {
-          console.error("[poll] HTTP error:", res.status);
-          // Auth redirect — page might need refresh
-          if (res.status === 302 || res.redirected) {
-            errorEl.textContent = "Session expired. Please refresh the page.";
-            input.disabled = false;
-            sendBtn.disabled = false;
-            sendBtn.textContent = "Send";
-            return Promise.reject("redirect");
-          }
-          return res.text().then(function (t) { return { status: "error", error: t, done: true }; });
-        }
-        return res.json();
-      })
-      .then(function (data) {
-        if (!data) return;
-        console.log("[poll]", JSON.stringify(data).slice(0, 200));
-
-        if (data.done) {
-          var t = messages.querySelector(".thinking-indicator");
-          if (t) t.remove();
-
-          if (data.status === "error") {
-            errorEl.textContent = data.error || "Hmm, that didn't work. Try again or rephrase your request.";
-          } else if (data.result) {
-            addMessage("assistant", data.result.content);
-            maybeShowMemoryLink();
-          }
-
-          input.disabled = false;
-          sendBtn.disabled = false;
-          sendBtn.textContent = "Send";
-          input.focus();
-          return;
-        }
-
-        // Update thinking text with current status (fade transition)
-        var thinkingText = messages.querySelector(".thinking-text");
-        if (thinkingText && data.status && thinkingText.textContent !== data.status) {
-          thinkingText.classList.add("fade-out");
-          setTimeout(function () {
-            thinkingText.textContent = data.status;
-            thinkingText.classList.remove("fade-out");
-          }, 300);
-        }
-        scrollToBottom();
-
-        // Poll again in 1 second
-        setTimeout(pollForResult, 1000);
-      })
-      .catch(function (err) {
-        if (err === "redirect") return;
-        console.error("[poll] error:", err);
-        // Network error during poll — retry
-        setTimeout(pollForResult, 2000);
-      });
-  }
-
-  // Expose for audio recording integration
+  // Expose for audio recording and file upload integration
   window.addUserMessage = function(text) { addMessage("user", text); };
-  window.startPolling = function() {
-    var thinking = document.createElement("div");
-    thinking.className = "chat-message assistant thinking-indicator";
-    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><div class="thinking-top"><span class="thinking-dots"><span></span><span></span><span></span></span> <span class="thinking-text">Thinking...</span></div><div class="thinking-progress"><div class="thinking-progress-bar"></div></div></div>';
-    messages.appendChild(thinking);
-    scrollToBottom();
-    input.disabled = true;
-    sendBtn.disabled = true;
-    sendBtn.textContent = "...";
-    pollForResult();
+  window.startPolling = function(taskId) {
+    var thinking = createThinkingIndicator(taskId || "unknown");
+    if (taskId) {
+      taskQueue.push({ taskId: taskId, thinkingEl: thinking, result: null });
+      pollForTask(taskId, thinking);
+    }
   };
 
   scrollToBottom();
