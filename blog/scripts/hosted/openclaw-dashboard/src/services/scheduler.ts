@@ -1,4 +1,4 @@
-import { getDueJobs, getScheduledJob, markJobRun, updateScheduledJob, deleteScheduledJob, deleteConversation, getOrCreateConversation, getSetting } from "./db";
+import { getDueJobs, getScheduledJob, markJobRun, updateScheduledJob, deleteScheduledJob, deleteConversation, getOrCreateConversation, getSetting, cleanupMemories } from "./db";
 import { processMessage } from "./ai";
 import { getNextRun } from "./cron";
 import { getPendingTasks, markStuckTasksFailed, deactivateOldTasks } from "./task";
@@ -85,6 +85,16 @@ async function tick(): Promise<void> {
         console.log(`[scheduler] Deactivated ${deactivated} old task(s)`);
       }
       cleanupStaleThreads();
+
+      // Memory cleanup: deduplicate and remove operational logs
+      try {
+        const cleaned = cleanupMemories();
+        if (cleaned > 0) {
+          console.log(`[scheduler] Cleaned up ${cleaned} duplicate/operational memories`);
+        }
+      } catch (err) {
+        console.error("[scheduler] Memory cleanup error:", err instanceof Error ? err.message : err);
+      }
     }
   } catch (err: unknown) {
     console.error("Scheduler tick error:", err instanceof Error ? err.message : err);
