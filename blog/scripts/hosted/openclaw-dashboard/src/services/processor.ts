@@ -32,9 +32,10 @@ export type StatusCallback = (status: string) => void;
  * Returns a clarification message if ambiguous, null if routing is clear.
  */
 function detectRoutingAmbiguity(input: string): string | null {
-  // Calendar: both Google Calendar and Luma connected
-  const eventPattern = /\b(event|meeting|appointment|invite|calendar)\b/i;
-  if (eventPattern.test(input)) {
+  // Calendar: both Google Calendar and Luma connected — only when CREATING an event
+  const createEventPattern = /\b(create|schedule|set up|book|plan|organize|make)\b.*\b(event|meeting|appointment|invite)\b/i;
+  const createEventPattern2 = /\b(event|meeting|appointment|invite)\b.*\b(for|on|at|this|next|tomorrow)\b/i;
+  if (createEventPattern.test(input) || createEventPattern2.test(input)) {
     const googleServices = getConnectedServices();
     const hasGoogleCalendar = googleServices?.includes("calendar") ?? false;
     const hasLuma = isLumaRunning();
@@ -43,6 +44,8 @@ function detectRoutingAmbiguity(input: string): string | null {
       // If user explicitly mentions which one, no ambiguity
       if (/\b(google|gcal|google calendar)\b/i.test(input)) return null;
       if (/\bluma\b/i.test(input)) return null;
+      // If user is asking about existing events (check, list, what's on), skip
+      if (/\b(check|list|show|what'?s|do i have|any)\b/i.test(input)) return null;
 
       return "You have both Google Calendar and Luma connected. Which would you like me to use?\n\n" +
         "- **Google Calendar** — personal calendar events\n" +

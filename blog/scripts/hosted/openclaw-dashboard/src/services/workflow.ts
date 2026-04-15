@@ -6,7 +6,7 @@
 
 import type { WorkflowStep, WorkflowState } from "../types/workflow";
 import type { Task } from "../types/task";
-import { getWorkflowState, upsertWorkflowState, deleteWorkflowState, getShortcut, type Shortcut } from "./db";
+import { getWorkflowState, upsertWorkflowState, deleteWorkflowState, getShortcut, type Shortcut, addMessage, getOrCreateConversation, addMemory } from "./db";
 import { executeTool } from "./tools";
 import { callAnthropic, getProvider, getApiKey, buildSystemPrompt } from "./ai";
 import { getSetting } from "./db";
@@ -251,9 +251,53 @@ export async function executeWorkflow(
     }
   }
 
-  // Workflow complete
+  // Workflow complete — save context for follow-up questions
+  const completedStepResults = { ...stepResults };
   deleteWorkflowState(threadId);
   console.log(`[workflow] Completed all ${steps.length} steps for thread ${threadId}`);
+
+  // 1. Save key outputs to conversation history so follow-ups work
+  try {
+    const source = task.input.source_channel;
+    const convExternalId = task.input.metadata?.threadTs
+      ? `${task.input.metadata.channelId}:${task.input.metadata.threadTs}`
+      : task.task_id;
+    const conversationId = task.conversation_id || getOrCreateConversation(source, convExternalId);
+
+    // Build a summary of what was produced
+    const outputSummary: string[] = [`[Workflow "${shortcut.name}" completed]`];
+    for (const step of steps) {
+      const result = completedStepResults[step.id];
+      if (!result?.result) continue;
+      const resultStr = typeof result.result === "string" ? result.result : JSON.stringify(result.result);
+      if (step.type === "ai" && resultStr.length > 0) {
+        outputSummary.push(`--- ${step.label || step.id} ---\n${resultStr}`);
+      } else if (step.type === "system") {
+        // For system steps, include URLs/IDs but not full payloads
+        const parsed = typeof result.result === "object" ? result.result : null;
+        if (parsed?.documentUrl) outputSummary.push(`Google Doc: ${parsed.documentUrl}`);
+        else if (parsed?.url) outputSummary.push(`URL: ${parsed.url}`);
+      }
+    }
+    addMessage(conversationId, "assistant", outputSummary.join("\n\n"));
+  } catch (err) {
+    console.error("[workflow] Failed to save conversation history:", err instanceof Error ? err.message : err);
+  }
+
+  // 2. Save a one-liner to long-term memory with doc URL for future recall
+  try {
+    const docStep = Object.values(completedStepResults).find(
+      (r: any) => r?.result?.documentUrl || r?.result?.url
+    ) as any;
+    const docUrl = docStep?.result?.documentUrl || docStep?.result?.url || "";
+    const topic = state?.user_input?.slice(0, 80) || "content";
+    const memoryContent = `Workflow "${shortcut.name}" completed. Topic: ${topic}${docUrl ? `. Google Doc: ${docUrl}` : ""}`;
+    addMemory(memoryContent);
+    console.log(`[workflow] Memory saved for "${shortcut.name}"`);
+  } catch (err) {
+    console.error("[workflow] Failed to save memory:", err instanceof Error ? err.message : err);
+  }
+
   return { response: lastResponse || "Workflow completed.", status: "completed" };
 }
 

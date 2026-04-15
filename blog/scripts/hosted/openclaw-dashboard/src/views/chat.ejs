@@ -182,11 +182,27 @@
 
       mediaRecorder.onstop = async function() {
         recording = false;
+        window.__isRecording = false;
         micBtn.classList.remove('mic-recording');
         micBtn.title = 'Record audio message';
         stream.getTracks().forEach(function(t) { t.stop(); });
 
         if (audioChunks.length === 0) return;
+
+        // If there's text in the input (e.g. a shortcut), attach as file and auto-submit
+        var inputText = chatInput.value.trim();
+        if (inputText || window.__submitAfterRecording) {
+          window.__submitAfterRecording = false;
+          var blob = new Blob(audioChunks, { type: 'audio/webm' });
+          var file = new File([blob], 'recording.webm', { type: 'audio/webm' });
+          if (window.__addFiles) window.__addFiles([file]);
+          // Trigger submit now that the file is attached
+          setTimeout(function() {
+            var form = document.getElementById('chatForm');
+            if (form) form.dispatchEvent(new Event('submit'));
+          }, 50);
+          return;
+        }
 
         var blob = new Blob(audioChunks, { type: 'audio/webm' });
         var formData = new FormData();
@@ -223,6 +239,10 @@
 
       mediaRecorder.start();
       recording = true;
+      window.__isRecording = true;
+      window.__stopRecording = function() {
+        if (mediaRecorder && recording) mediaRecorder.stop();
+      };
       micBtn.classList.add('mic-recording');
       micBtn.title = 'Stop recording';
     } catch (err) {
@@ -317,6 +337,7 @@
     window.__pendingFiles = pendingFiles;
     updatePreview();
   }
+  window.__addFiles = addFiles;
 
   // File button
   fileInput.addEventListener('change', function() {
