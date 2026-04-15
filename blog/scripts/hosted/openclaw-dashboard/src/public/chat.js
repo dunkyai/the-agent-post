@@ -205,6 +205,13 @@
 
   form.addEventListener("submit", function (e) {
     e.preventDefault();
+    // If recording, stop it — audio gets attached as a file
+    if (window.__isRecording && window.__stopRecording) {
+      window.__stopRecording();
+      // Wait briefly for onstop to fire and attach the file, then re-submit
+      setTimeout(function() { form.dispatchEvent(new Event("submit")); }, 300);
+      return;
+    }
     // If files are pending, let the upload handler in chat.ejs handle it
     if (window.__pendingFiles && window.__pendingFiles.length > 0) {
       window.__handleFileUpload();
