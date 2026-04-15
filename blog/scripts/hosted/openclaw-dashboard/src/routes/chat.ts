@@ -185,6 +185,26 @@ router.post("/chat/upload", upload.array("files", 10), async (req: Request, res:
   }
 });
 
+// GET: check if there's an in-flight task (for resuming after page navigation)
+router.get("/chat/pending", (req: Request, res: Response) => {
+  const sessionId = req.cookies?.openclaw_session || "anon";
+  const result = pollChatStatus(sessionId);
+  if (!result.done || result.status !== "idle") {
+    res.json(result);
+    return;
+  }
+  // Check DB for processing/pending tasks from chat
+  const db = require("../services/db");
+  const row = db.getDb()
+    .prepare("SELECT task_id, status FROM tasks WHERE active = 1 AND status IN ('pending', 'processing') AND input LIKE '%\"source_channel\":\"chat\"%' ORDER BY created_at DESC LIMIT 1")
+    .get() as { task_id: string; status: string } | undefined;
+  if (row) {
+    res.json({ status: "Processing...", done: false, taskId: row.task_id, resumed: true });
+  } else {
+    res.json({ status: "idle", done: true });
+  }
+});
+
 router.post("/chat/reset", (req: Request, res: Response) => {
   const conversationId = getOrCreateConversation("dashboard", CHAT_EXTERNAL_ID);
   deleteConversation(conversationId);
