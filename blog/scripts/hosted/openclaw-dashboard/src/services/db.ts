@@ -233,7 +233,8 @@ If the user has NOT provided enough detail, ask them for ALL of the following (y
 If the user already provided this info, move to Step 2.
 
 **Step 2 — Research 10 Prospects**
-Use web_search and browse_webpage to find 10 real people matching the ICP. For each prospect, find:
+IMPORTANT: Only use web_search and browse_webpage for research. Do NOT use contactout tools — they are unreliable for this task.
+Find 10 real people matching the ICP. For each prospect, find:
 - First name
 - Last name
 - Job title
