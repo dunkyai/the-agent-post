@@ -214,82 +214,65 @@ const DEFAULT_SHORTCUTS = [
     trigger: "coldemail",
     name: "Cold Email Outreach",
     description: "Research 10 prospects matching your ICP, build a lead list in Google Sheets, then draft personalized outreach emails after your approval.",
-    prompt: `You are a customer acquisition specialist helping the user build a cold outreach campaign.
+    prompt: `If the user provided ICP details, summarize them. Otherwise ask for target job titles, company size, industry, location, and their value proposition.`,
+    continuation_prompt: `The user reviewed the prospect list. Draft ONE sample cold email template using {first_name}, {last_name}, {company} placeholders. Show it and ask for approval before drafting in Gmail.
 
-{{input}}
+After approval, read the spreadsheet with sheets_read, create gmail_create_draft for each prospect with an email, and update the Status column to "Drafted".`,
+    workflow_steps: JSON.stringify([
+      {
+        type: "ai",
+        id: "clarify",
+        prompt: `You are a customer acquisition specialist. The user wants cold outreach. Their request: "{{input}}"
 
-**Your job in this phase is to gather information, research prospects, and deliver a spreadsheet. Do NOT draft any emails.**
+If they provided enough detail (target titles, industry, and what they're selling), respond with ONLY a JSON object:
+{"ready": true, "icp": "<summary of ideal customer profile>", "query": "<search query for finding prospects>"}
 
-**Step 1 — Gather the Ideal Customer Profile**
-If the user has NOT provided enough detail, ask them for ALL of the following (you can ask in one message):
-- Target job titles (e.g. VP of Marketing, Head of Growth, Founder)
-- Company size (e.g. 10-50 employees, Series A-B startups)
-- Industry or vertical (e.g. SaaS, fintech, e-commerce)
-- Location (e.g. US, Bay Area, Europe)
-- About their company/product — what are they selling or offering?
-- Key messaging or value proposition — why should prospects care?
-- Any other qualifying criteria (e.g. "uses Shopify", "recently raised funding")
+If too vague, respond with ONLY:
+{"ready": false, "question": "<ask for missing ICP details: job titles, company size, industry, location, value prop>"}`,
+        label: "Understanding ICP",
+      },
+      {
+        type: "ai",
+        id: "research",
+        prompt: `You are a prospect researcher. Find 10 real people matching this ICP:
 
-If the user already provided this info, move to Step 2.
+ICP: {{step.clarify.result}}
+User request: {{input}}
 
-**Step 2 — Research 10 Prospects**
-Try contactout_search_people first to find people matching the ICP. If it works, use contactout_enrich_person to get their work email.
+INSTRUCTIONS:
+1. Try contactout_search_people first. If ContactOut errors, switch to web_search immediately.
+2. For each prospect find: first_name, last_name, title, company, email (blank if not found)
+3. Use web_search to find company team pages, LinkedIn profiles, conference speakers
+4. Return findings as JSON array: [{"first_name":"...","last_name":"...","title":"...","company":"...","email":"...","notes":"..."}, ...]
 
-If ContactOut returns ANY error (400, 500, etc.), IMMEDIATELY stop using ContactOut and switch to web_search and browse_webpage for ALL remaining research. Do NOT keep retrying ContactOut after an error. Use web search to:
-- Search for "[job title] at [company] email" or "[company] team page"
-- Browse company about/team pages to find names and emails
-- Check LinkedIn profiles, conference speaker lists, press mentions
+You MUST call contactout_search_people or web_search. Do NOT generate prospects from memory. Every name must come from a tool call.`,
+        label: "Researching prospects",
+        tools: true,
+      },
+      {
+        type: "system",
+        id: "create_sheet",
+        tool: "sheets_create",
+        input: { title: "Cold Outreach — {{step.clarify.result.icp}} — {{date}}" },
+        label: "Creating spreadsheet",
+      },
+      {
+        type: "ai",
+        id: "populate",
+        prompt: `Write the prospect data to the spreadsheet.
 
-You MUST find 10 real people with real names. Do NOT use placeholders like "[To be found]" or "[Contact info pending]". If you cannot find someone's email, leave the email cell blank but still include their real name, title, and company.
+Prospects: {{step.research.result}}
+Spreadsheet ID: {{step.create_sheet.result.spreadsheetId}}
 
-For each prospect, collect:
-- First name
-- Last name
-- Job title
-- Company name
-- Email address (work email preferred, blank if not found)
+Use sheets_write to:
+1. Write headers in row 1: First Name, Last Name, Title, Company, Email, Status, Notes
+2. Write all prospect data starting row 2
 
-**Step 3 — Create the Google Sheet**
-Check if Google Sheets is connected by using sheets_create. If it fails, tell the user:
-"To use this shortcut, connect Google Sheets in Settings → Integrations."
-
-Create a spreadsheet titled "Cold Outreach — [ICP summary] — [today's date]" with columns:
-A: First Name, B: Last Name, C: Title, D: Company, E: Email, F: Status (blank), G: Notes
-
-Write all 10 prospects into the sheet using sheets_write.
-
-**Step 4 — Deliver the spreadsheet**
-Share the Google Sheet link and summarize: how many prospects found, how many have email addresses, and a brief overview of the companies represented.
-
-Then say: "Take a look at the list. If it looks good, let me know and I'll draft a personalized email for your approval before sending to anyone."
-
-**Do NOT draft any emails. Do NOT move to Phase 2. Your job ends after delivering the spreadsheet.**`,
-    continuation_prompt: `The user has reviewed the prospect spreadsheet and wants to proceed with email outreach.
-
-**Step 1 — Draft a sample email for approval**
-Using the ICP context and the user's company/product info from Phase 1, write ONE compelling cold email template. Use these placeholders: {first_name}, {last_name}, {company}.
-
-The email should:
-- Have a clear, non-spammy subject line
-- Open with something relevant to the prospect (not generic)
-- Briefly explain the value proposition
-- End with a clear, low-friction CTA (e.g. "Would you be open to a 15-minute call?")
-- Be concise (under 150 words)
-
-Show the draft to the user and ask: "Here's the email I'd send to all 10 prospects. Want me to go ahead and draft these in Gmail, or would you like to make changes first?"
-
-**Do NOT proceed until the user explicitly approves the email copy.**
-
-**Step 2 — Draft the emails in Gmail**
-Check if Gmail is connected by using gmail_create_draft. If it fails, tell the user:
-"To draft emails, connect Gmail in Settings → Integrations."
-
-Read the prospect list from the Google Sheet using sheets_read. For each prospect with an email address:
-1. Replace {first_name}, {last_name}, and {company} in the approved template
-2. Create a Gmail draft using gmail_create_draft with the prospect's email, subject line, and personalized body
-3. Update the "Status" column in the sheet to "Drafted" using sheets_write
-
-After completing all drafts, share a summary: how many drafts created, any skipped (missing email), and remind the user to review the drafts in Gmail before sending.`,
+After writing, share the spreadsheet URL and summarize: how many found, how many have emails. Then say: "Take a look. If it looks good, let me know and I'll draft a personalized email for your approval."`,
+        label: "Populating spreadsheet",
+        tools: true,
+      },
+    ]),
   },
   {
     trigger: "createevent",
@@ -314,107 +297,139 @@ After creating the event, ALWAYS share the event URL with the user so they can v
     trigger: "research",
     name: "Research & Spreadsheet",
     description: "Research any topic and compile results into a Google Spreadsheet",
-    prompt: `You are a research assistant. The user wants you to research a topic and compile the results into a Google Spreadsheet.
-
-First, understand what they want to research. Common categories include:
-- **People** (investors, founders, executives, experts in a field)
-- **Places** (cities, neighborhoods, coworking spaces)
-- **Accommodation** (Airbnbs, hotels, vacation rentals)
-- **Restaurants & Food** (restaurants, cafes, bars in an area)
-- **Products & Services** (SaaS tools, agencies, vendors)
-- **Companies** (startups, competitors, partners)
-- Anything else — be flexible
-
-Before starting research, make sure you have enough context. Ask clarifying questions ONE AT A TIME if needed:
-- Location or geography (if relevant)
-- Budget or price range (if relevant)
-- Specific criteria or filters (ratings, size, type, cuisine, industry, etc.)
-- How many results they want (default to 10-15)
-- Any must-haves or dealbreakers
-
-Once you have enough context:
-1. Use web_search and browse_webpage to find real, current results
-2. Gather key details for each result (name, description, price, rating, URL, etc.)
-3. Create a Google Spreadsheet using sheets_create with well-organized columns
-4. Populate it with the research results using sheets_write
-5. Share the spreadsheet link with the user
-
-IMPORTANT: Use REAL data from web searches. Do NOT make up results or fabricate URLs. If you cannot find enough results, say so honestly and share what you found.
-
-{{input}}`,
+    prompt: `If the user provided a clear research topic, summarize it. If not, ask what they want to research.`,
     continuation_prompt: null,
+    workflow_steps: JSON.stringify([
+      {
+        type: "ai",
+        id: "clarify",
+        prompt: `You are a research assistant. The user wants to research a topic. Their request: "{{input}}"
+
+If the request is clear enough to research (has a topic, and optionally location/criteria), respond with ONLY a JSON object (no other text):
+{"ready": true, "query": "<the main search query>", "topic": "<short topic label>", "columns": ["Name", "<col2>", "<col3>", ...]}
+
+Pick columns appropriate for the topic (e.g. hotels: Name, Location, Price, Rating, URL; companies: Name, Industry, Size, Website; restaurants: Name, Cuisine, Price Range, Rating, Address, URL).
+
+If the request is too vague, respond with ONLY:
+{"ready": false, "question": "<one clarifying question>"}`,
+        label: "Understanding request",
+      },
+      {
+        type: "ai",
+        id: "research",
+        prompt: `You are a research assistant. Research the following topic using web_search and browse_webpage tools.
+
+Topic: {{input}}
+Search query: {{step.clarify.result}}
+
+INSTRUCTIONS:
+1. Call web_search multiple times with different queries to find 10-15 results
+2. Call browse_webpage on promising URLs to get detailed information
+3. For each result, gather: name, and any relevant details (price, rating, location, URL, etc.)
+4. Return your findings as a JSON array: [{"name": "...", "col2": "...", ...}, ...]
+
+You MUST call web_search. Do NOT generate results from memory. Every data point must come from a tool call.
+Only include actual found data in the results. Leave fields blank rather than writing "not found", "not available", "no job posting", or similar placeholder text.`,
+        label: "Researching",
+        tools: true,
+      },
+      {
+        type: "system",
+        id: "create_sheet",
+        tool: "sheets_create",
+        input: { title: "Research — {{step.clarify.result.topic}} — {{date}}" },
+        label: "Creating spreadsheet",
+      },
+      {
+        type: "ai",
+        id: "populate",
+        prompt: `You have research results and a Google Spreadsheet. Write the data to the spreadsheet.
+
+Research results: {{step.research.result}}
+Spreadsheet ID: {{step.create_sheet.result.spreadsheetId}}
+
+Use sheets_write to:
+1. Write column headers in row 1
+2. Write all research data starting from row 2
+
+After writing, respond with the spreadsheet URL and a brief summary of what you found.`,
+        label: "Populating spreadsheet",
+        tools: true,
+      },
+    ]),
   },
   {
     trigger: "jobdesc",
     name: "Job Description Generator",
     description: "Research comparable roles and generate a polished job description in Google Docs.",
-    prompt: `You are an experienced HR and recruiting specialist. The user wants to create a job description.
+    prompt: `If the user provided role details, summarize them. Otherwise ask for: job title, seniority, responsibilities, required skills, work arrangement, and salary range.`,
+    continuation_prompt: `The user reviewed the job description and wants changes. Use docs_read to get current content, then docs_suggest_edit or docs_insert to make changes. Share the updated link.`,
+    workflow_steps: JSON.stringify([
+      {
+        type: "ai",
+        id: "clarify",
+        prompt: `You are an HR specialist. The user wants to create a job description. Their request: "{{input}}"
 
-{{input}}
+If they provided enough detail (at minimum: job title and some responsibilities or context), respond with ONLY a JSON object:
+{"ready": true, "title": "<job title>", "query": "<search query for comparable job postings>"}
 
-Follow these steps IN ORDER:
+If too vague, respond with ONLY:
+{"ready": false, "question": "<ask for: job title, seniority, key responsibilities, must-have skills>"}`,
+        label: "Understanding role",
+      },
+      {
+        type: "ai",
+        id: "research",
+        prompt: `Research comparable job postings and market data for this role.
 
-**Step 1 — Gather Role Details**
-If the user has NOT provided enough detail, ask them for:
-- Job title
-- Department or team
-- Seniority level (entry, mid, senior, lead, director, VP)
-- Work arrangement (remote, hybrid, on-site) and location
-- Key responsibilities (what will this person do day-to-day?)
-- Must-have skills or qualifications
-- Any specific requirements (years of experience, certifications, tools, etc.)
-- Salary range (or say "research market rate")
-- Anything else that makes this role unique
+Role: {{input}}
+Job title: {{step.clarify.result}}
 
-If the user already provided enough detail in their message, move directly to Step 2. Use reasonable defaults for anything minor they didn't mention.
+INSTRUCTIONS:
+1. Call web_search to find 3-5 comparable job postings for this role
+2. Call browse_webpage on the most relevant postings to extract: common responsibilities, required skills, salary ranges
+3. Summarize your findings as JSON: {"comparable_salary": "...", "common_requirements": [...], "common_responsibilities": [...], "market_insights": "..."}
 
-**Step 2 — Research**
-Using web_search, research:
-- Comparable job postings for this role to understand market-standard language, common requirements, and typical compensation ranges
-- The user's company (using information from your context/memory) to pull in mission, culture, and product details for the "About Us" section
+You MUST call web_search. Do NOT generate job description content from memory alone.`,
+        label: "Researching comparable roles",
+        tools: true,
+      },
+      {
+        type: "ai",
+        id: "write_jd",
+        prompt: `Write a complete job description using the research data and user's requirements.
 
-**Step 3 — Create the Google Doc**
-IMPORTANT: Before creating the doc, check if Google Docs is connected by attempting to use the docs_create tool. If it fails or is not available, STOP and tell the user:
-"To use this shortcut, you need to connect Google Docs in your integration settings. Go to Settings → Integrations and connect your Google account with Docs access enabled."
+User request: {{input}}
+Research: {{step.research.result}}
 
-Create a Google Doc titled "[Job Title] — Job Description" with these sections:
+Write the FULL job description with these sections ONLY:
+1. About [Company Name] — 2-3 sentences (use context from memory/system prompt about the user's company)
+2. The Role — 2-3 sentence overview
+3. What You'll Do — 6-8 bullet points
+4. What We're Looking For — 5-7 required qualifications
+5. Nice to Have — 3-5 preferred qualifications
+6. Compensation & Benefits — salary range from research, standard benefits
+7. How to Apply — brief closing
 
-**About [Company Name]**
-A compelling 2-3 sentence overview of the company, its mission, and what makes it a great place to work.
+Tone: professional but approachable. No jargon like "rockstar" or "ninja". Use inclusive language. Be specific.
 
-**The Role**
-A 2-3 sentence overview of the position — what it is, why it exists, and what impact this person will have.
-
-**What You'll Do**
-- 6-8 bullet points of key responsibilities, starting with the most impactful
-
-**What We're Looking For**
-- 5-7 bullet points of required qualifications and experience
-
-**Nice to Have**
-- 3-5 bullet points of preferred but not required qualifications
-
-**Compensation & Benefits**
-Include salary range (researched or provided), and standard benefits. If the user didn't provide benefits info, include common ones (health insurance, PTO, equity, etc.) with a note to customize.
-
-**How to Apply**
-A brief closing with instructions (customize placeholder).
-
-Write in a tone that is professional but approachable — avoid corporate jargon and clichés like "rockstar" or "ninja." Use inclusive language. Be specific about what the person will actually do rather than vague statements.
-
-IMPORTANT: Only include the sections listed above. Do NOT add candidate tracking systems, sourcing strategies, candidate profiles, outreach templates, interview guides, or any other extras. Keep it focused on the job description only.
-
-**Step 4 — Present the Result**
-Share the Google Doc link and a brief summary of what you created. Ask if they'd like any changes.`,
-    continuation_prompt: `The user has reviewed the job description and wants changes.
-
-Based on their feedback, update the Google Doc using docs_read to get the current content, then docs_replace_text or docs_insert to make the requested changes.
-
-After updating, share the doc link again and ask if there's anything else to adjust.
-
-If the user asks to share or post the job description:
-- If they want it emailed: use gmail_create_draft or gmail_send to draft/send it
-- If they want it posted somewhere: format it appropriately and let them know what you can help with (email, Slack, etc.)`,
+Return the full text content (not JSON).`,
+        label: "Writing job description",
+      },
+      {
+        type: "system",
+        id: "create_doc",
+        tool: "docs_create",
+        input: { title: "{{step.clarify.result.title}} — Job Description", content: "{{step.write_jd.result}}" },
+        label: "Creating Google Doc",
+      },
+      {
+        type: "pause",
+        id: "review",
+        message: "Here's your job description: {{step.create_doc.result.documentUrl}}\n\nTake a look and let me know if you'd like any changes!",
+        label: "Ready for review",
+      },
+    ]),
   },
   {
     trigger: "amplify",
@@ -479,17 +494,17 @@ After publishing, confirm what was posted and where.`,
 function seedDefaultShortcuts(): void {
   const upsert = db.prepare(
     `INSERT INTO shortcuts (trigger, name, description, prompt, continuation_prompt, workflow_steps)
-     VALUES (?, ?, ?, ?, ?, NULL)
+     VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(trigger) DO UPDATE SET
        name = excluded.name,
        description = excluded.description,
        prompt = excluded.prompt,
        continuation_prompt = excluded.continuation_prompt,
-       workflow_steps = NULL,
+       workflow_steps = excluded.workflow_steps,
        updated_at = datetime('now')`
   );
   for (const s of DEFAULT_SHORTCUTS) {
-    upsert.run(s.trigger, s.name, s.description, s.prompt, s.continuation_prompt || null);
+    upsert.run(s.trigger, s.name, s.description, s.prompt, s.continuation_prompt || null, (s as any).workflow_steps || null);
   }
 }
 

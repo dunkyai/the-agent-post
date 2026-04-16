@@ -230,7 +230,7 @@ export function getSlackUserInstance(teamId: string, slackUserId: string): strin
 
 export function createMagicLinkToken(instanceId: string): string {
   const token = crypto.randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
   db.prepare(
     "INSERT INTO magic_link_tokens (token, instance_id, expires_at) VALUES (?, ?, ?)"
   ).run(token, instanceId, expiresAt);

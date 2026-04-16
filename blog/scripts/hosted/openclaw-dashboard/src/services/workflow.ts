@@ -184,7 +184,22 @@ export async function executeWorkflow(
 
         case "ai": {
           const result = await executeAiStep(step as any, context, task.task_id);
-          stepResults[step.id] = { result };
+          // Check if AI step returned a "not ready" response — pause and ask the user
+          let parsed: any = null;
+          try { parsed = JSON.parse(result); } catch {}
+          if (parsed && parsed.ready === false && parsed.question) {
+            stepResults[step.id] = { result: parsed };
+            upsertWorkflowState(threadId, {
+              shortcut_id: shortcut.id,
+              current_step: i,  // re-run this step after user replies
+              step_results: JSON.stringify(stepResults),
+              user_input: state.user_input,
+              status: "prompting",
+            });
+            console.log(`[workflow] Step "${step.id}" needs more info — pausing for user input`);
+            return { response: parsed.question, status: "prompting" };
+          }
+          stepResults[step.id] = { result: parsed || result };
           break;
         }
 
@@ -348,10 +363,10 @@ export async function resumeWorkflow(
       });
     }
   } else {
-    // Normal pause/prompt resume — save user reply
+    // Normal pause/prompt resume — save user reply and update input
     stepResults.user_reply = userReply;
-    // If user_input was empty (initial prompt for content), set it now
-    const effectiveInput = state.user_input || userReply;
+    // Update user_input with the reply so the step re-runs with actual content
+    const effectiveInput = userReply || state.user_input;
     upsertWorkflowState(threadId, {
       shortcut_id: shortcut.id,
       step_results: JSON.stringify(stepResults),
