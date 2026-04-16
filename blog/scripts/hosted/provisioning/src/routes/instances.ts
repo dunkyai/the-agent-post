@@ -470,9 +470,26 @@ function registerCaddyRoute(subdomain: string, port: number): void {
     terminal: true,
   });
 
+  // Find the wildcard *.dunky.ai catch-all route index so we insert before it
+  let insertIdx = 0;
+  try {
+    const routesJson = execSync(
+      `curl -sf ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes`,
+      { timeout: 5000 }
+    ).toString();
+    const routes = JSON.parse(routesJson);
+    for (let i = 0; i < routes.length; i++) {
+      const hosts = routes[i]?.match?.[0]?.host || [];
+      if (hosts.includes("*.dunky.ai")) {
+        insertIdx = i;
+        break;
+      }
+    }
+  } catch {}
+
   try {
     execSync(
-      `curl -sf -X POST ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes/0 -H "Content-Type: application/json" -d '${routeConfig}'`,
+      `curl -sf -X POST ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes/${insertIdx} -H "Content-Type: application/json" -d '${routeConfig}'`,
       { timeout: 5000 }
     );
   } catch (err) {
