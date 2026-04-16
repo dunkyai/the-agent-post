@@ -328,7 +328,8 @@ INSTRUCTIONS:
 3. For each result, gather: name, and any relevant details (price, rating, location, URL, etc.)
 4. Return your findings as a JSON array: [{"name": "...", "col2": "...", ...}, ...]
 
-You MUST call web_search. Do NOT generate results from memory. Every data point must come from a tool call.`,
+You MUST call web_search. Do NOT generate results from memory. Every data point must come from a tool call.
+Only include actual found data in the results. Leave fields blank rather than writing "not found", "not available", "no job posting", or similar placeholder text.`,
         label: "Researching",
         tools: true,
       },
