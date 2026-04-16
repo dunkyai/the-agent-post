@@ -283,9 +283,6 @@ After completing all emails, share a summary: how many were sent/drafted, and an
 ];
 
 function seedDefaultShortcuts(): void {
-  const count = db.prepare("SELECT COUNT(*) as c FROM shortcuts").get() as { c: number };
-  if (count.c > 0) return; // Don't overwrite user shortcuts
-
   const insert = db.prepare(
     "INSERT OR IGNORE INTO shortcuts (trigger, name, description, prompt, continuation_prompt) VALUES (?, ?, ?, ?, ?)"
   );
@@ -683,6 +680,92 @@ export function deleteMemory(id: number): void {
 
 export function getMemory(id: number): Memory | undefined {
   return getDb().prepare("SELECT * FROM memories WHERE id = ?").get(id) as Memory | undefined;
+}
+
+/**
+ * Daily memory cleanup: remove exact duplicates and operational logs.
+ * NEVER removes user preferences, rules, or explicit "remember this" entries.
+ * Returns count of removed memories.
+ */
+export function cleanupMemories(): number {
+  const memories = getAllMemories();
+  const toDelete: number[] = [];
+  const seen = new Map<string, number>(); // normalized content → first ID
+
+  // Patterns that indicate operational logs (action confirmations, not preferences)
+  const operationalPatterns = [
+    /^successfully\s+(posted|created|sent|queued|scheduled|updated|deleted|drafted)/i,
+    /^created google (spreadsheet|doc|document)/i,
+    /^posted \d+-tweet thread/i,
+    /^queued linkedin post/i,
+    /^user (posted|queued|asked warren to create|asked warren to search|requested warren hippo to create a tweet)/i,
+    /^workflow ".*" completed\./i,
+  ];
+
+  // Patterns that indicate preferences/rules — NEVER delete these
+  const preferencePatterns = [
+    /user prefers/i,
+    /user requested.*to (avoid|stop|keep|make|only|never|always)/i,
+    /\b(always|never|important|must)\b.*\b(respond|reply|use|format|show|draft|send)\b/i,
+    /\bformat\b.*\bprefer/i,
+    /\bno (bold|hashtag|emoji)/i,
+  ];
+
+  for (const mem of memories) {
+    // Normalize for dedup comparison
+    const normalized = mem.content.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+
+    // 1. Exact duplicate check (keep the first, delete later ones)
+    if (seen.has(normalized)) {
+      toDelete.push(mem.id);
+      continue;
+    }
+    seen.set(normalized, mem.id);
+
+    // 2. Near-duplicate check (60%+ word overlap with an earlier memory)
+    const words = new Set(normalized.split(" ").filter(w => w.length > 2));
+    let isDuplicate = false;
+    for (const [seenNorm, seenId] of seen) {
+      if (seenId === mem.id) continue;
+      const seenWords = new Set(seenNorm.split(" ").filter(w => w.length > 2));
+      if (seenWords.size === 0 || words.size === 0) continue;
+      let overlap = 0;
+      for (const w of words) {
+        if (seenWords.has(w)) overlap++;
+      }
+      const ratio = overlap / Math.min(words.size, seenWords.size);
+      if (ratio >= 0.75) {
+        isDuplicate = true;
+        break;
+      }
+    }
+    if (isDuplicate) {
+      // Only delete if it's NOT a preference/rule
+      const isPreference = preferencePatterns.some(p => p.test(mem.content));
+      if (!isPreference) {
+        toDelete.push(mem.id);
+        continue;
+      }
+    }
+
+    // 3. Operational log check — remove action confirmations
+    const isOperational = operationalPatterns.some(p => p.test(mem.content));
+    if (isOperational) {
+      // Double-check it's not also a preference
+      const isPreference = preferencePatterns.some(p => p.test(mem.content));
+      if (!isPreference) {
+        toDelete.push(mem.id);
+      }
+    }
+  }
+
+  // Delete in batch
+  if (toDelete.length > 0) {
+    const placeholders = toDelete.map(() => "?").join(",");
+    getDb().prepare(`DELETE FROM memories WHERE id IN (${placeholders})`).run(...toDelete);
+  }
+
+  return toDelete.length;
 }
 
 // --- Sessions ---

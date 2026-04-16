@@ -1806,9 +1806,10 @@ export async function sheetsRead(spreadsheetId: string, range: string, accountId
     valueRenderOption: "FORMATTED_VALUE",
     dateTimeRenderOption: "FORMATTED_STRING",
   });
+  const encodedRange = encodeURIComponent(range).replace(/%21/g, "!").replace(/%3A/g, ":");
 
   const res = await googleFetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?${params}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodedRange}?${params}`,
     {},
     accountId
   );
@@ -1828,9 +1829,11 @@ export async function sheetsRead(spreadsheetId: string, range: string, accountId
 
 export async function sheetsWrite(spreadsheetId: string, range: string, values: any[][], accountId?: string): Promise<string> {
   const params = new URLSearchParams({ valueInputOption: "USER_ENTERED" });
+  // Encode range but preserve ! and : which the Sheets API expects unencoded
+  const encodedRange = encodeURIComponent(range).replace(/%21/g, "!").replace(/%3A/g, ":");
 
   const res = await googleFetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?${params}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodedRange}?${params}`,
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -1859,9 +1862,10 @@ export async function sheetsAppend(spreadsheetId: string, range: string, values:
     valueInputOption: "USER_ENTERED",
     insertDataOption: "INSERT_ROWS",
   });
+  const encodedRange = encodeURIComponent(range).replace(/%21/g, "!").replace(/%3A/g, ":");
 
   const res = await googleFetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}:append?${params}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodedRange}:append?${params}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

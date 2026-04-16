@@ -208,9 +208,7 @@
         var formData = new FormData();
         formData.append('audio', blob, 'recording.webm');
 
-        chatInput.disabled = true;
         chatInput.placeholder = 'Transcribing audio...';
-        micBtn.disabled = true;
 
         try {
           var res = await fetch('/chat/audio', { method: 'POST', body: formData });
@@ -231,9 +229,7 @@
         } catch (err) {
           alert('Failed to send audio: ' + err.message);
         } finally {
-          chatInput.disabled = false;
           chatInput.placeholder = 'Type a message... (;shortcut for quick actions)';
-          micBtn.disabled = false;
         }
       };
 
@@ -404,10 +400,6 @@
     window.__pendingFiles = pendingFiles;
     updatePreview();
 
-    chatInput.disabled = true;
-    document.getElementById('chatSend').disabled = true;
-    document.getElementById('chatSend').textContent = '...';
-
     // Show uploading indicator
     var messages = document.getElementById('chatMessages');
     var uploading = document.createElement('div');
@@ -424,21 +416,15 @@
         var ind = document.getElementById('uploadingIndicator');
         if (ind) ind.remove();
         if (data.ok) {
-          if (window.startPolling) window.startPolling();
+          if (window.startPolling) window.startPolling(data.taskId);
         } else {
           document.getElementById('chatError').textContent = data.error || 'Upload failed';
-          chatInput.disabled = false;
-          document.getElementById('chatSend').disabled = false;
-          document.getElementById('chatSend').textContent = 'Send';
         }
       })
       .catch(function(err) {
         var ind = document.getElementById('uploadingIndicator');
         if (ind) ind.remove();
         document.getElementById('chatError').textContent = err.message || 'Upload failed';
-        chatInput.disabled = false;
-        document.getElementById('chatSend').disabled = false;
-        document.getElementById('chatSend').textContent = 'Send';
       });
   };
 })();
