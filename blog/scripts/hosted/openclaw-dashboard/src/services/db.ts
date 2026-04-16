@@ -233,15 +233,18 @@ If the user has NOT provided enough detail, ask them for ALL of the following (y
 If the user already provided this info, move to Step 2.
 
 **Step 2 — Research 10 Prospects**
-IMPORTANT: Only use web_search and browse_webpage for research. Do NOT use contactout tools — they are unreliable for this task.
-Find 10 real people matching the ICP. For each prospect, find:
+Use contactout_search_people to find people matching the ICP (by job title, location, industry, company). Then use contactout_enrich_person on each result to get their work email address.
+
+If ContactOut returns an error or no results, fall back to web_search and browse_webpage to find prospects manually (check company team pages, LinkedIn profiles, conference speaker lists, press mentions).
+
+For each prospect, collect:
 - First name
 - Last name
 - Job title
 - Company name
-- Email address (check company websites, team pages, press releases, about pages, LinkedIn profiles)
+- Email address (work email preferred)
 
-Be thorough in finding email addresses. Check company team/about pages, author bios, press mentions, and conference speaker lists. If you cannot find an email, leave it blank.
+Find exactly 10 prospects. If you cannot find an email for someone, leave it blank.
 
 **Step 3 — Create the Google Sheet**
 Check if Google Sheets is connected by using sheets_create. If it fails, tell the user:
