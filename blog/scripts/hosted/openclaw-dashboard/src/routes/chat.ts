@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import multer from "multer";
 import { getOrCreateConversation, getMessages, deleteConversation, getSetting } from "../services/db";
-import { submitChatMessage, pollChatStatus, pollChatTasks } from "../adapters/chat";
+import { submitChatMessage, pollChatStatus, pollChatTasks, clearSessionState } from "../adapters/chat";
 import { transcribeAudio } from "../services/transcription";
 import { scanBuffer } from "../services/antivirus";
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
@@ -216,6 +216,8 @@ router.get("/chat/pending", (req: Request, res: Response) => {
 });
 
 router.post("/chat/reset", (req: Request, res: Response) => {
+  const sessionId = req.cookies?.openclaw_session || "anon";
+  clearSessionState(sessionId);
   const conversationId = getOrCreateConversation("dashboard", CHAT_EXTERNAL_ID);
   deleteConversation(conversationId);
   res.redirect(303, "/chat");

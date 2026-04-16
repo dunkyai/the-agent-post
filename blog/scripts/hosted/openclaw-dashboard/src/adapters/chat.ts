@@ -393,6 +393,17 @@ export function onTaskComplete(task: Task): void {
 }
 
 /**
+ * Clear all in-memory state for a session (called on chat reset).
+ */
+export function clearSessionState(sessionId: string): void {
+  pending.delete(sessionId);
+  sessionContinuationShortcuts.delete(sessionId);
+  const contKey = `chat:${sessionId}`;
+  deletePendingContinuation(contKey);
+  console.log(`[chat-adapter] Session state cleared for ${sessionId.slice(0, 8)}...`);
+}
+
+/**
  * Update the status message shown during polling.
  * Called by the processor via scheduler.
  */
