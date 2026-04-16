@@ -239,7 +239,7 @@ export async function processTask(
     // Hallucination guard: if the AI made zero tool calls but claims it performed an action,
     // that's a hallucination. Rules-based — check the OUTPUT for success claims, not the input
     // for action keywords. Legitimate 0-tool responses (follow-up questions, conversation) pass through.
-    const claimsAction = /\b(I've sent|I've drafted|I've created|I've searched|I've saved|I've uploaded|I've updated|I've deleted|I've added|I've removed|I've scheduled|I've posted|I've modified|I've edited|I've found|I've checked|I've confirmed|successfully sent|successfully created|successfully saved|successfully drafted|successfully posted|successfully updated|Email Sent|Event Created|Draft Created|File Saved)\b/i;
+    const claimsAction = /\b(I've sent|I've drafted|I've created|I've searched|I've saved|I've uploaded|I've updated|I've deleted|I've added|I've removed|I've scheduled|I've posted|I've modified|I've edited|I've found|I've checked|I've confirmed|successfully sent|successfully created|successfully saved|successfully drafted|successfully posted|successfully updated|Email Sent|Event Created|Draft Created|File Saved|Based on my research|Based on my search|Here are the results|Let me search for|I searched for|I found the following|my research shows|from my research)\b/i;
     let hallucinationCaught = false;
     if (toolCallsCount === 0 && claimsAction.test(response.content || "")) {
       console.log(`[processor] Hallucination guard: task ${taskId} claims action with 0 tool calls — retrying with clean context`);
