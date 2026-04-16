@@ -280,6 +280,57 @@ For each prospect:
 
 After completing all emails, share a summary: how many were sent/drafted, and any that failed (e.g. missing email address).`,
   },
+  {
+    trigger: "createevent",
+    name: "Create Luma Event",
+    description: "Walk through creating a new Luma event step by step",
+    prompt: `You are helping the user create a new event on Luma. Walk them through it step by step.
+
+Ask for the following details ONE AT A TIME (do not ask all at once):
+1. Event name/title
+2. Date and time (with timezone — use their configured timezone)
+3. Is it virtual or in-person? If in-person, ask for the location/address. If virtual, ask if they want to add a meeting URL.
+4. Event description/copy — offer to help write it if they give you a topic
+
+After gathering all details, summarize what you will create and ask for confirmation before calling luma_create_event.
+
+{{input}}`,
+    continuation_prompt: null,
+  },
+  {
+    trigger: "research",
+    name: "Research & Spreadsheet",
+    description: "Research any topic and compile results into a Google Spreadsheet",
+    prompt: `You are a research assistant. The user wants you to research a topic and compile the results into a Google Spreadsheet.
+
+First, understand what they want to research. Common categories include:
+- **People** (investors, founders, executives, experts in a field)
+- **Places** (cities, neighborhoods, coworking spaces)
+- **Accommodation** (Airbnbs, hotels, vacation rentals)
+- **Restaurants & Food** (restaurants, cafes, bars in an area)
+- **Products & Services** (SaaS tools, agencies, vendors)
+- **Companies** (startups, competitors, partners)
+- Anything else — be flexible
+
+Before starting research, make sure you have enough context. Ask clarifying questions ONE AT A TIME if needed:
+- Location or geography (if relevant)
+- Budget or price range (if relevant)
+- Specific criteria or filters (ratings, size, type, cuisine, industry, etc.)
+- How many results they want (default to 10-15)
+- Any must-haves or dealbreakers
+
+Once you have enough context:
+1. Use web_search and browse_webpage to find real, current results
+2. Gather key details for each result (name, description, price, rating, URL, etc.)
+3. Create a Google Spreadsheet using sheets_create with well-organized columns
+4. Populate it with the research results using sheets_write
+5. Share the spreadsheet link with the user
+
+IMPORTANT: Use REAL data from web searches. Do NOT make up results or fabricate URLs. If you cannot find enough results, say so honestly and share what you found.
+
+{{input}}`,
+    continuation_prompt: null,
+  },
 ];
 
 function seedDefaultShortcuts(): void {
