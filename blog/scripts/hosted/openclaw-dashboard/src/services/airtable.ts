@@ -198,7 +198,8 @@ export async function airtableListRecords(
     const params = new URLSearchParams();
     if (options?.view) params.set("view", options.view);
     if (options?.filterByFormula) params.set("filterByFormula", options.filterByFormula);
-    if (options?.maxRecords) params.set("maxRecords", String(options.maxRecords));
+    // Default to 25 records to avoid context overflow; user can request more explicitly
+    params.set("maxRecords", String(options?.maxRecords || 25));
     if (options?.sort) {
       options.sort.forEach((s, i) => {
         params.set(`sort[${i}][field]`, s.field);
@@ -222,7 +223,21 @@ export async function airtableListRecords(
       createdTime: r.createdTime,
     }));
 
-    return JSON.stringify({ base_id: baseId, table: tableIdOrName, records, count: records.length });
+    const result = JSON.stringify({ base_id: baseId, table: tableIdOrName, records, count: records.length });
+    // Truncate if response is too large for AI context (>100KB)
+    if (result.length > 100000) {
+      const truncatedRecords = records.slice(0, 10);
+      return JSON.stringify({
+        base_id: baseId,
+        table: tableIdOrName,
+        records: truncatedRecords,
+        count: truncatedRecords.length,
+        total_available: records.length,
+        truncated: true,
+        note: `Response was too large (${records.length} records). Showing first 10. Use filterByFormula to narrow your query.`,
+      });
+    }
+    return result;
   } catch (err) {
     return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to list records" });
   }
