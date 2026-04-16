@@ -403,14 +403,80 @@ If the user asks to share or post the job description:
 - If they want it emailed: use gmail_create_draft or gmail_send to draft/send it
 - If they want it posted somewhere: format it appropriately and let them know what you can help with (email, Slack, etc.)`,
   },
+  {
+    trigger: "amplify",
+    name: "Amplify Content",
+    description: "Turn a voice note or written content into social posts, save to Google Docs, and publish via Buffer/Twitter.",
+    prompt: `You are a social media content specialist. The user wants to turn their ideas into polished social media content.
+
+{{input}}
+
+**If the user has NOT provided any content yet** (no text, no audio attachment, {{input}} is empty or just whitespace), ask them:
+
+"What content would you like me to amplify? You can:
+1. **Record a voice note** — hit the mic button and share your thoughts
+2. **Paste your content** — copy and paste text, a blog post, notes, etc.
+3. **Share a URL** — I'll read the page and work from that
+
+What would you like to do?"
+
+Do NOT proceed until the user provides content. Wait for their reply.
+
+**If the user HAS provided content** (text after the trigger, an audio attachment, or a URL), proceed immediately:
+
+1. If audio is attached, the transcription is already included above — use it as the source content.
+2. If a URL is provided, use browse_webpage to read the page content.
+3. Create the following in a Google Doc titled "Social Content — [brief topic] — [today's date]":
+
+**LinkedIn Post**
+- Professional but conversational tone
+- 3-4 paragraphs with line breaks for readability
+- No hashtags
+- Hook in the first line
+
+**Twitter/X Thread**
+- 5-7 tweets, each under 280 characters
+- Numbered (1/, 2/, etc.)
+- First tweet is the hook
+- Last tweet is a CTA or takeaway
+
+4. Share the Google Doc link and ask:
+"Here's your content draft — please review it. When you're ready, tell me:
+1. Which channels to post to (LinkedIn, Twitter/X, or both)
+2. When to post (now, or a specific date/time)
+3. Any edits you'd like first"`,
+    continuation_prompt: `The user has reviewed the content and wants to proceed.
+
+Based on their reply:
+
+**If they want edits:** Update the Google Doc with their changes using docs_read then docs_replace_text. Share the updated link and ask again about publishing.
+
+**If they want to publish:**
+1. Use buffer_list_channels to see available channels
+2. For LinkedIn: use buffer_create_post with the LinkedIn channel ID and the LinkedIn post content. If scheduling, use the due_at parameter.
+3. For Twitter/X: use twitter_post_thread with the thread content. Post immediately (no scheduling).
+4. If a channel is not connected, tell the user which integration they need to set up in Settings → Integrations.
+
+Publish exactly what was written in the Google Doc. Do NOT modify the content.
+
+After publishing, confirm what was posted and where.`,
+  },
 ];
 
 function seedDefaultShortcuts(): void {
-  const insert = db.prepare(
-    "INSERT OR IGNORE INTO shortcuts (trigger, name, description, prompt, continuation_prompt) VALUES (?, ?, ?, ?, ?)"
+  const upsert = db.prepare(
+    `INSERT INTO shortcuts (trigger, name, description, prompt, continuation_prompt, workflow_steps)
+     VALUES (?, ?, ?, ?, ?, NULL)
+     ON CONFLICT(trigger) DO UPDATE SET
+       name = excluded.name,
+       description = excluded.description,
+       prompt = excluded.prompt,
+       continuation_prompt = excluded.continuation_prompt,
+       workflow_steps = NULL,
+       updated_at = datetime('now')`
   );
   for (const s of DEFAULT_SHORTCUTS) {
-    insert.run(s.trigger, s.name, s.description, s.prompt, s.continuation_prompt);
+    upsert.run(s.trigger, s.name, s.description, s.prompt, s.continuation_prompt || null);
   }
 }
 
