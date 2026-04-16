@@ -14,7 +14,7 @@ router.get("/magic-link", (req, res) => {
 
   const result = store.consumeMagicLinkToken(token);
   if (!result) {
-    res.status(410).send(errorPage("Link expired or invalid", "This sign-in link has already been used or has expired. Please request a new one from the login page."));
+    res.status(410).send(errorPage("Link expired or invalid", "This sign-in link has already been used or has expired. To get a new one, go to your dashboard URL and click \"Sign in\" — a fresh magic link will be sent to your email."));
     return;
   }
 
