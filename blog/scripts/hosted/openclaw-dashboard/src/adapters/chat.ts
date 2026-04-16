@@ -132,6 +132,9 @@ export function submitChatMessage(sessionId: string, message: string, imageAttac
   }
 
   // --- Normal flow ---
+  // Shortcuts get a fresh conversation so prior chat history doesn't bleed in
+  const taskConversationId = shortcutMatch ? undefined : conversationId;
+
   const task = createTask({
     raw_input: taskInput,
     source_channel: "chat",
@@ -141,7 +144,7 @@ export function submitChatMessage(sessionId: string, message: string, imageAttac
       ...extraMetadata,
       ...(imageAttachments?.length ? { images: imageAttachments } : {}),
     },
-    conversation_id: conversationId,
+    conversation_id: taskConversationId,
   });
 
   const state: PendingState = {
