@@ -150,18 +150,27 @@ export function submitChatMessage(sessionId: string, message: string, imageAttac
       } else {
         taskInput = shortcutMatch.expanded;
         console.log(`[chat-adapter] Shortcut ;${shortcutMatch.shortcut.trigger} expanded for session ${sessionId.slice(0, 8)}...`);
-        // If this shortcut has a continuation_prompt, save it for Phase 2
+        // If this shortcut has a continuation_prompt, store the shortcut ID in task metadata
+        // so we can save the continuation when Phase 1 completes (not now — Phase 1 may
+        // need multiple back-and-forth messages before it's done)
         if (shortcutMatch.shortcut.continuation_prompt) {
-          setPendingContinuation(contKey, shortcutMatch.shortcut.id);
-          console.log(`[chat-adapter] Pending continuation saved for session ${sessionId.slice(0, 8)}...`);
+          extraMetadata.continuation_shortcut_id = shortcutMatch.shortcut.id;
         }
       }
     }
   }
 
   // --- Normal flow ---
-  // Shortcuts and continuations get a fresh conversation so prior chat history doesn't bleed in
-  const taskConversationId = (shortcutMatch || isContinuation) ? undefined : conversationId;
+  // Continuations get a fresh conversation. Shortcuts keep a conversation for multi-turn
+  // (e.g. ICP gathering in ;coldemail), but use a shortcut-specific one, not the main chat.
+  let taskConversationId: string | undefined = conversationId;
+  if (isContinuation) {
+    taskConversationId = undefined; // fresh conversation for Phase 2
+  } else if (shortcutMatch) {
+    // Use a dedicated conversation for this shortcut so Phase 1 can have back-and-forth
+    // without polluting the main chat history
+    taskConversationId = getOrCreateConversation("shortcut", `${shortcutMatch.shortcut.trigger}:${sessionId}`);
+  }
 
   const task = createTask({
     raw_input: taskInput,
@@ -285,6 +294,13 @@ export function onTaskComplete(task: Task): void {
 
   if (task.status === "completed") {
     state.result = { role: "assistant", content: task.output.result || "" };
+    // If this task was Phase 1 of a shortcut with continuation, save the pending continuation now
+    const contShortcutId = task.input.metadata?.continuation_shortcut_id as number | undefined;
+    if (contShortcutId) {
+      const contKey = `chat:${sessionId}`;
+      setPendingContinuation(contKey, contShortcutId);
+      console.log(`[chat-adapter] Pending continuation saved after Phase 1 completion for session ${sessionId.slice(0, 8)}...`);
+    }
   } else if (task.status === "failed") {
     const error = task.output.error || "Task failed";
     if (error === "MESSAGE_LIMIT_REACHED") {
