@@ -1,6 +1,6 @@
 import type { Task } from "../types/task";
 import { createTask } from "../services/task";
-import { getOrCreateConversation, getSetting, addMessage, getDb, expandShortcut } from "../services/db";
+import { getOrCreateConversation, getSetting, addMessage, getDb, expandShortcut, getPendingContinuation, setPendingContinuation, deletePendingContinuation, getShortcut } from "../services/db";
 
 // --- In-memory pending state (supports multiple concurrent tasks per session) ---
 
@@ -116,24 +116,52 @@ export function submitChatMessage(sessionId: string, message: string, imageAttac
     // If accepted or anything else, the system prompt onboarding directive handles the rest
   }
 
-  // --- Shortcut expansion ---
-  const shortcutMatch = expandShortcut(message);
+  // --- Continuation check: if this session has a pending Phase 2, run it ---
+  const contKey = `chat:${sessionId}`;
+  const pendingCont = getPendingContinuation(contKey);
+  let isContinuation = false;
   let taskInput = message;
   let extraMetadata: Record<string, any> = {};
-  if (shortcutMatch) {
-    if (shortcutMatch.shortcut.workflow_steps) {
-      // Workflow shortcut — pass shortcut_id, keep original text as input
-      extraMetadata = { shortcut_id: shortcutMatch.shortcut.id };
-      console.log(`[chat-adapter] Workflow shortcut ;${shortcutMatch.shortcut.trigger} detected for session ${sessionId.slice(0, 8)}...`);
-    } else {
-      taskInput = shortcutMatch.expanded;
-      console.log(`[chat-adapter] Shortcut ;${shortcutMatch.shortcut.trigger} expanded for session ${sessionId.slice(0, 8)}...`);
+
+  if (pendingCont) {
+    const shortcut = getShortcut(pendingCont.shortcut_id);
+    if (shortcut?.continuation_prompt) {
+      deletePendingContinuation(contKey);
+      let contPrompt = shortcut.continuation_prompt;
+      contPrompt = contPrompt.replace(/\{\{input\}\}/g, message);
+      taskInput = `[SHORTCUT WORKFLOW: "${shortcut.name}" — Phase 2]\n\n`
+        + `The user has reviewed the Phase 1 output and replied. Execute Phase 2 now.\n`
+        + `User's reply: "${message}"\n\n`
+        + `INSTRUCTIONS:\n${contPrompt}`;
+      isContinuation = true;
+      console.log(`[chat-adapter] Continuation of ;${shortcut.trigger} triggered for session ${sessionId.slice(0, 8)}...`);
+    }
+  }
+
+  // --- Shortcut expansion (only if not a continuation) ---
+  let shortcutMatch: ReturnType<typeof expandShortcut> = null;
+  if (!isContinuation) {
+    shortcutMatch = expandShortcut(message);
+    if (shortcutMatch) {
+      if (shortcutMatch.shortcut.workflow_steps) {
+        // Workflow shortcut — pass shortcut_id, keep original text as input
+        extraMetadata = { shortcut_id: shortcutMatch.shortcut.id };
+        console.log(`[chat-adapter] Workflow shortcut ;${shortcutMatch.shortcut.trigger} detected for session ${sessionId.slice(0, 8)}...`);
+      } else {
+        taskInput = shortcutMatch.expanded;
+        console.log(`[chat-adapter] Shortcut ;${shortcutMatch.shortcut.trigger} expanded for session ${sessionId.slice(0, 8)}...`);
+        // If this shortcut has a continuation_prompt, save it for Phase 2
+        if (shortcutMatch.shortcut.continuation_prompt) {
+          setPendingContinuation(contKey, shortcutMatch.shortcut.id);
+          console.log(`[chat-adapter] Pending continuation saved for session ${sessionId.slice(0, 8)}...`);
+        }
+      }
     }
   }
 
   // --- Normal flow ---
-  // Shortcuts get a fresh conversation so prior chat history doesn't bleed in
-  const taskConversationId = shortcutMatch ? undefined : conversationId;
+  // Shortcuts and continuations get a fresh conversation so prior chat history doesn't bleed in
+  const taskConversationId = (shortcutMatch || isContinuation) ? undefined : conversationId;
 
   const task = createTask({
     raw_input: taskInput,

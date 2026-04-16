@@ -218,8 +218,6 @@ const DEFAULT_SHORTCUTS = [
 
 {{input}}
 
-IMPORTANT: Do NOT use contactout_search_people or contactout_search_company for this task. Only use web_search and browse_webpage for research.
-
 **If the user has NOT provided enough detail about who they want to reach** (no ICP details, {{input}} is empty or vague), ask them for:
 - Target job titles (e.g. VP of Marketing, Head of Growth, Founder)
 - Company size (e.g. 10-50 employees, Series A-B startups)
@@ -235,16 +233,16 @@ Do NOT proceed until you have a clear ICP. Wait for their reply.
 1. Check if Google Sheets is connected by using the sheets_create tool. If it fails or is not available, STOP and tell the user:
    "To use this shortcut, you need to connect Google Sheets in your integration settings. Go to Settings → Integrations and connect your Google account with Sheets access enabled."
 
-2. Using web_search and browse_webpage, research real people who match the ICP. For each prospect, find:
+2. Research prospects matching the ICP. Use contactout_search_people and contactout_enrich_person to find people with their email addresses. Supplement with web_search and browse_webpage if needed. For each prospect, find:
    - First name
    - Last name
    - Job title
    - Company name
-   - Email address (search company websites, team pages, press releases, etc.)
+   - Email address (use contactout_enrich_person to get work emails)
 
-   Find the number of prospects the user requested (default 20). Be thorough — check company team pages, LinkedIn profiles, blog author bios, conference speaker lists, press mentions, and industry directories.
+   Find the number of prospects the user requested (default 20).
 
-3. Create a Google Sheets spreadsheet titled "Cold Outreach — [ICP summary] — [today's date]" with columns:
+3. IMPORTANT: After completing research, you MUST create a Google Sheets spreadsheet. Do NOT skip this step. Create a spreadsheet titled "Cold Outreach — [ICP summary] — [today's date]" with columns:
    A: First Name, B: Last Name, C: Title, D: Company, E: Email, F: Status (blank), G: Notes
 
    Write all prospects into the sheet.
