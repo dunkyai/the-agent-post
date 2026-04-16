@@ -391,6 +391,8 @@ A brief closing with instructions (customize placeholder).
 
 Write in a tone that is professional but approachable — avoid corporate jargon and clichés like "rockstar" or "ninja." Use inclusive language. Be specific about what the person will actually do rather than vague statements.
 
+IMPORTANT: Only include the sections listed above. Do NOT add candidate tracking systems, sourcing strategies, candidate profiles, outreach templates, interview guides, or any other extras. Keep it focused on the job description only.
+
 **Step 4 — Present the Result**
 Share the Google Doc link and a brief summary of what you created. Ask if they'd like any changes.`,
     continuation_prompt: `The user has reviewed the job description and wants changes.
