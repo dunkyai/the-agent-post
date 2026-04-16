@@ -213,70 +213,76 @@ const DEFAULT_SHORTCUTS = [
   {
     trigger: "coldemail",
     name: "Cold Email Outreach",
-    description: "Research prospects matching your ideal customer profile, build a lead list in Google Sheets, and draft personalized outreach emails.",
-    prompt: `You are a customer acquisition specialist. The user wants to build a cold outreach campaign.
+    description: "Research 10 prospects matching your ICP, build a lead list in Google Sheets, then draft personalized outreach emails after your approval.",
+    prompt: `You are a customer acquisition specialist helping the user build a cold outreach campaign.
 
 {{input}}
 
-**If the user has NOT provided enough detail about who they want to reach** (no ICP details, {{input}} is empty or vague), ask them for:
+**Your job in this phase is to gather information, research prospects, and deliver a spreadsheet. Do NOT draft any emails.**
+
+**Step 1 — Gather the Ideal Customer Profile**
+If the user has NOT provided enough detail, ask them for ALL of the following (you can ask in one message):
 - Target job titles (e.g. VP of Marketing, Head of Growth, Founder)
 - Company size (e.g. 10-50 employees, Series A-B startups)
 - Industry or vertical (e.g. SaaS, fintech, e-commerce)
 - Location (e.g. US, Bay Area, Europe)
-- How many prospects to find (default: 20)
+- About their company/product — what are they selling or offering?
+- Key messaging or value proposition — why should prospects care?
 - Any other qualifying criteria (e.g. "uses Shopify", "recently raised funding")
 
-Do NOT proceed until you have a clear ICP. Wait for their reply.
+If the user already provided this info, move to Step 2.
 
-**If the user HAS provided enough ICP detail**, proceed immediately:
+**Step 2 — Research 10 Prospects**
+Use web_search and browse_webpage to find 10 real people matching the ICP. For each prospect, find:
+- First name
+- Last name
+- Job title
+- Company name
+- Email address (check company websites, team pages, press releases, about pages, LinkedIn profiles)
 
-1. Check if Google Sheets is connected by using the sheets_create tool. If it fails or is not available, STOP and tell the user:
-   "To use this shortcut, you need to connect Google Sheets in your integration settings. Go to Settings → Integrations and connect your Google account with Sheets access enabled."
+Be thorough in finding email addresses. Check company team/about pages, author bios, press mentions, and conference speaker lists. If you cannot find an email, leave it blank.
 
-2. Research prospects matching the ICP. Use contactout_search_people and contactout_enrich_person to find people with their email addresses. Supplement with web_search and browse_webpage if needed. For each prospect, find:
-   - First name
-   - Last name
-   - Job title
-   - Company name
-   - Email address (use contactout_enrich_person to get work emails)
+**Step 3 — Create the Google Sheet**
+Check if Google Sheets is connected by using sheets_create. If it fails, tell the user:
+"To use this shortcut, connect Google Sheets in Settings → Integrations."
 
-   Find the number of prospects the user requested (default 20).
+Create a spreadsheet titled "Cold Outreach — [ICP summary] — [today's date]" with columns:
+A: First Name, B: Last Name, C: Title, D: Company, E: Email, F: Status (blank), G: Notes
 
-3. IMPORTANT: After completing research, you MUST create a Google Sheets spreadsheet. Do NOT skip this step. Create a spreadsheet titled "Cold Outreach — [ICP summary] — [today's date]" with columns:
-   A: First Name, B: Last Name, C: Title, D: Company, E: Email, F: Status (blank), G: Notes
+Write all 10 prospects into the sheet using sheets_write.
 
-   Write all prospects into the sheet.
+**Step 4 — Deliver the spreadsheet**
+Share the Google Sheet link and summarize: how many prospects found, how many have email addresses, and a brief overview of the companies represented.
 
-4. Share the link to the Google Sheet and summarize what you found (e.g. "Found 20 prospects — mostly VPs of Marketing at Series A SaaS companies in the US").
+Then say: "Take a look at the list. If it looks good, let me know and I'll draft a personalized email for your approval before sending to anyone."
 
-Then ask:
-"Would you like me to draft a personalized cold email to each person on this list? If so:
-1. Share the email copy you'd like to use (you can use {first_name}, {last_name}, and {company} for personalization), or I can suggest copy for you
-2. The subject line
-3. Whether to send or save as drafts"
+**Do NOT draft any emails. Do NOT move to Phase 2. Your job ends after delivering the spreadsheet.**`,
+    continuation_prompt: `The user has reviewed the prospect spreadsheet and wants to proceed with email outreach.
 
-**STOP here and wait for the user's reply. Do NOT draft or send any emails yet.**`,
-    continuation_prompt: `The user has reviewed the prospect list and wants to proceed with email drafting.
+**Step 1 — Draft a sample email for approval**
+Using the ICP context and the user's company/product info from Phase 1, write ONE compelling cold email template. Use these placeholders: {first_name}, {last_name}, {company}.
 
-IMPORTANT: Before sending or drafting ANY emails, you MUST confirm the exact email copy with the user first.
+The email should:
+- Have a clear, non-spammy subject line
+- Open with something relevant to the prospect (not generic)
+- Briefly explain the value proposition
+- End with a clear, low-friction CTA (e.g. "Would you be open to a 15-minute call?")
+- Be concise (under 150 words)
 
-**Step 1 — Confirm the email copy:**
-- If the user provided email copy: show them the full draft with a sample personalization (pick the first prospect) and ask "Does this look good? I'll send this to all [N] prospects on the list."
-- If the user asked you to suggest copy: write a compelling cold email template using {first_name}, {last_name}, and {company} placeholders. Show it to the user and ask for approval.
+Show the draft to the user and ask: "Here's the email I'd send to all 10 prospects. Want me to go ahead and draft these in Gmail, or would you like to make changes first?"
 
-**Do NOT proceed to Step 2 until the user explicitly approves the copy.**
+**Do NOT proceed until the user explicitly approves the email copy.**
 
-**Step 2 — Draft/send the emails:**
-Check if Gmail is connected by attempting to use gmail_create_draft or gmail_send. If it fails or is not available, STOP and tell the user:
-"To send emails, you need to connect Gmail in your integration settings. Go to Settings → Integrations and connect your Google account with Gmail access enabled."
+**Step 2 — Draft the emails in Gmail**
+Check if Gmail is connected by using gmail_create_draft. If it fails, tell the user:
+"To draft emails, connect Gmail in Settings → Integrations."
 
-For each prospect:
-1. Read their row from the Google Sheet (use sheets_read)
-2. Replace {first_name}, {last_name}, and {company} in the approved email template
-3. Send or save as draft based on the user's preference
-4. Update the "Status" column in the sheet to "Sent" or "Drafted" (use sheets_write)
+Read the prospect list from the Google Sheet using sheets_read. For each prospect with an email address:
+1. Replace {first_name}, {last_name}, and {company} in the approved template
+2. Create a Gmail draft using gmail_create_draft with the prospect's email, subject line, and personalized body
+3. Update the "Status" column in the sheet to "Drafted" using sheets_write
 
-After completing all emails, share a summary: how many were sent/drafted, and any that failed (e.g. missing email address).`,
+After completing all drafts, share a summary: how many drafts created, any skipped (missing email), and remind the user to review the drafts in Gmail before sending.`,
   },
   {
     trigger: "createevent",
