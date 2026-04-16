@@ -437,7 +437,7 @@ function magicLinkEmailHtml(link: string): string {
   <p style="color: #444; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">Click the button below to sign in. This link can only be used once and expires in 10 minutes.</p>
   <a href="${link}" style="display: inline-block; background: #6c5ce7; color: #fff; text-decoration: none; padding: 12px 32px; border-radius: 6px; font-size: 15px; font-weight: 500;">Sign in to OpenClaw</a>
   <p style="color: #888; font-size: 13px; margin-top: 32px; line-height: 1.5;">If you didn't request this link, you can safely ignore this email.</p>
-  <p style="color: #bbb; font-size: 12px; margin-top: 24px;">— The Agent Post</p>
+  <p style="color: #bbb; font-size: 12px; margin-top: 24px;">— Dunky</p>
 </div>`;
 }
 
