@@ -310,6 +310,8 @@ If the request is clear enough to research (has a topic, and optionally location
 
 Pick columns appropriate for the topic (e.g. hotels: Name, Location, Price, Rating, URL; companies: Name, Industry, Size, Website; restaurants: Name, Cuisine, Price Range, Rating, Address, URL).
 
+IMPORTANT: Do NOT include Email, Phone, or Contact columns. Web search cannot reliably find contact info — that requires a separate tool. Stick to publicly available data: names, titles, companies, websites, ratings, prices, locations, URLs.
+
 If the request is too vague, respond with ONLY:
 {"ready": false, "question": "<one clarifying question>"}`,
         label: "Understanding request",
@@ -329,7 +331,8 @@ INSTRUCTIONS:
 4. Return your findings as a JSON array: [{"name": "...", "col2": "...", ...}, ...]
 
 You MUST call web_search. Do NOT generate results from memory. Every data point must come from a tool call.
-Only include actual found data in the results. Leave fields blank rather than writing "not found", "not available", "no job posting", or similar placeholder text.`,
+Only include actual found data in the results. Leave fields blank rather than writing "not found", "not available", "no job posting", or similar placeholder text.
+Do NOT try to find email addresses, phone numbers, or personal contact info — web search is not reliable for that. Focus on publicly available data: names, titles, companies, websites, descriptions.`,
         label: "Researching",
         tools: true,
       },
