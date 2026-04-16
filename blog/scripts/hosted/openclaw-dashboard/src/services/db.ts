@@ -218,65 +218,65 @@ const DEFAULT_SHORTCUTS = [
 
 {{input}}
 
-Follow these steps IN ORDER:
+IMPORTANT: Do NOT use contactout_search_people or contactout_search_company for this task. Only use web_search and browse_webpage for research.
 
-**Step 1 — Gather the Ideal Customer Profile (ICP)**
-If the user has NOT provided enough detail about who they want to reach, ask them for:
+**If the user has NOT provided enough detail about who they want to reach** (no ICP details, {{input}} is empty or vague), ask them for:
 - Target job titles (e.g. VP of Marketing, Head of Growth, Founder)
 - Company size (e.g. 10-50 employees, Series A-B startups)
 - Industry or vertical (e.g. SaaS, fintech, e-commerce)
 - Location (e.g. US, Bay Area, Europe)
+- How many prospects to find (default: 20)
 - Any other qualifying criteria (e.g. "uses Shopify", "recently raised funding")
 
-Do NOT proceed until you have a clear ICP. If the user already provided this info in their message, move directly to Step 2.
+Do NOT proceed until you have a clear ICP. Wait for their reply.
 
-**Step 2 — Research & Build the Prospect List**
-IMPORTANT: Before doing ANY research, check if Google Sheets is connected by attempting to use the sheets_create tool. If it fails or is not available, STOP and tell the user:
-"To use this shortcut, you need to connect Google Sheets in your integration settings. Go to Settings → Integrations and connect your Google account with Sheets access enabled."
+**If the user HAS provided enough ICP detail**, proceed immediately:
 
-Using web_search and browse_webpage, research real people who match the ICP. For each prospect, find:
-- First name
-- Last name
-- Job title
-- Company name
-- Email address (search for it on company websites, LinkedIn, team pages, press releases, etc.)
+1. Check if Google Sheets is connected by using the sheets_create tool. If it fails or is not available, STOP and tell the user:
+   "To use this shortcut, you need to connect Google Sheets in your integration settings. Go to Settings → Integrations and connect your Google account with Sheets access enabled."
 
-Find up to 50 prospects. Be thorough — check company team pages, LinkedIn profiles, blog author bios, conference speaker lists, press mentions, and industry directories.
+2. Using web_search and browse_webpage, research real people who match the ICP. For each prospect, find:
+   - First name
+   - Last name
+   - Job title
+   - Company name
+   - Email address (search company websites, team pages, press releases, etc.)
 
-**Step 3 — Create the Google Sheet**
-Create a Google Sheets spreadsheet titled "Cold Outreach — [ICP summary] — [today's date]" with these columns:
-- A: First Name
-- B: Last Name
-- C: Title
-- D: Company
-- E: Email
-- F: Status (leave blank — for tracking later)
-- G: Notes (any useful context you found about the person)
+   Find the number of prospects the user requested (default 20). Be thorough — check company team pages, LinkedIn profiles, blog author bios, conference speaker lists, press mentions, and industry directories.
 
-Write all 50 prospects into the sheet.
+3. Create a Google Sheets spreadsheet titled "Cold Outreach — [ICP summary] — [today's date]" with columns:
+   A: First Name, B: Last Name, C: Title, D: Company, E: Email, F: Status (blank), G: Notes
 
-**Step 4 — Present Results & Offer Email Drafting**
-Share the link to the Google Sheet and summarize what you found (e.g. "Found 50 prospects — mostly VPs of Marketing at Series A SaaS companies in the US").
+   Write all prospects into the sheet.
+
+4. Share the link to the Google Sheet and summarize what you found (e.g. "Found 20 prospects — mostly VPs of Marketing at Series A SaaS companies in the US").
 
 Then ask:
-"Would you like me to draft a personalized cold email to each person? If so, please provide:
-1. The email copy you'd like to use (you can use {first_name}, {last_name}, and {company} for personalization)
+"Would you like me to draft a personalized cold email to each person on this list? If so:
+1. Share the email copy you'd like to use (you can use {first_name}, {last_name}, and {company} for personalization), or I can suggest copy for you
 2. The subject line
-3. Whether to send or save as drafts
+3. Whether to send or save as drafts"
 
-Or I can suggest email copy based on your ICP if you'd like."`,
+**STOP here and wait for the user's reply. Do NOT draft or send any emails yet.**`,
     continuation_prompt: `The user has reviewed the prospect list and wants to proceed with email drafting.
 
-Based on their reply, draft and send (or save as drafts) personalized emails to each prospect in the Google Sheet.
+IMPORTANT: Before sending or drafting ANY emails, you MUST confirm the exact email copy with the user first.
 
-IMPORTANT: Before sending or drafting emails, check if Gmail is connected by attempting to use gmail_create_draft or gmail_send. If it fails or is not available, STOP and tell the user:
+**Step 1 — Confirm the email copy:**
+- If the user provided email copy: show them the full draft with a sample personalization (pick the first prospect) and ask "Does this look good? I'll send this to all [N] prospects on the list."
+- If the user asked you to suggest copy: write a compelling cold email template using {first_name}, {last_name}, and {company} placeholders. Show it to the user and ask for approval.
+
+**Do NOT proceed to Step 2 until the user explicitly approves the copy.**
+
+**Step 2 — Draft/send the emails:**
+Check if Gmail is connected by attempting to use gmail_create_draft or gmail_send. If it fails or is not available, STOP and tell the user:
 "To send emails, you need to connect Gmail in your integration settings. Go to Settings → Integrations and connect your Google account with Gmail access enabled."
 
 For each prospect:
-1. Read their row from the Google Sheet
-2. Replace {first_name}, {last_name}, and {company} in the user's email template
+1. Read their row from the Google Sheet (use sheets_read)
+2. Replace {first_name}, {last_name}, and {company} in the approved email template
 3. Send or save as draft based on the user's preference
-4. Update the "Status" column in the sheet to "Sent" or "Drafted"
+4. Update the "Status" column in the sheet to "Sent" or "Drafted" (use sheets_write)
 
 After completing all emails, share a summary: how many were sent/drafted, and any that failed (e.g. missing email address).`,
   },
