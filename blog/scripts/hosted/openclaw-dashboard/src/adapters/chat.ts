@@ -1,6 +1,6 @@
 import type { Task } from "../types/task";
 import { createTask } from "../services/task";
-import { getOrCreateConversation, getSetting, addMessage, getDb, expandShortcut, getPendingContinuation, setPendingContinuation, deletePendingContinuation, getShortcut } from "../services/db";
+import { getOrCreateConversation, getSetting, addMessage, getDb, expandShortcut, getPendingContinuation, setPendingContinuation, deletePendingContinuation, getShortcut, getWorkflowState } from "../services/db";
 
 // --- In-memory pending state (supports multiple concurrent tasks per session) ---
 
@@ -18,6 +18,9 @@ const cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 // Track in-progress Phase 1 shortcuts per session (sessionId → shortcutId)
 const sessionContinuationShortcuts = new Map<string, number>();
+
+// Track active workflow thread IDs per session (sessionId → workflow threadId)
+const sessionWorkflowIds = new Map<string, string>();
 
 const CHAT_CONVERSATION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -119,10 +122,26 @@ export function submitChatMessage(sessionId: string, message: string, imageAttac
     // If accepted or anything else, the system prompt onboarding directive handles the rest
   }
 
-  // --- Check if this message is a new shortcut trigger first ---
+  // --- Check for active workflow that needs user input ---
   let taskInput = message;
   let extraMetadata: Record<string, any> = {};
   let shortcutMatch = expandShortcut(message);
+
+  // If not a new shortcut trigger, check if there's a paused/prompting workflow for this session
+  if (!shortcutMatch) {
+    const activeWorkflowId = sessionWorkflowIds.get(sessionId);
+    if (activeWorkflowId) {
+      const wfState = getWorkflowState(activeWorkflowId);
+      if (wfState && (wfState.status === "prompting" || wfState.status === "paused")) {
+        // Resume the workflow with the user's reply
+        extraMetadata = { workflow_resume: true, workflow_thread_id: activeWorkflowId, shortcut_id: wfState.shortcut_id };
+        console.log(`[chat-adapter] Resuming workflow ${activeWorkflowId} for session ${sessionId.slice(0, 8)}...`);
+      } else {
+        // Workflow completed or errored — clean up
+        sessionWorkflowIds.delete(sessionId);
+      }
+    }
+  }
 
   // --- Continuation check: only if this is NOT a new shortcut trigger ---
   const contKey = `chat:${sessionId}`;
@@ -203,6 +222,11 @@ export function submitChatMessage(sessionId: string, message: string, imageAttac
     },
     conversation_id: taskConversationId,
   });
+
+  // Track workflow thread ID for resume
+  if (shortcutMatch?.shortcut.workflow_steps) {
+    sessionWorkflowIds.set(sessionId, task.task_id);
+  }
 
   const state: PendingState = {
     status: "Thinking...",
