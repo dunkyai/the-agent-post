@@ -333,6 +333,76 @@ IMPORTANT: Use REAL data from web searches. Do NOT make up results or fabricate 
 {{input}}`,
     continuation_prompt: null,
   },
+  {
+    trigger: "jobdesc",
+    name: "Job Description Generator",
+    description: "Research comparable roles and generate a polished job description in Google Docs.",
+    prompt: `You are an experienced HR and recruiting specialist. The user wants to create a job description.
+
+{{input}}
+
+Follow these steps IN ORDER:
+
+**Step 1 — Gather Role Details**
+If the user has NOT provided enough detail, ask them for:
+- Job title
+- Department or team
+- Seniority level (entry, mid, senior, lead, director, VP)
+- Work arrangement (remote, hybrid, on-site) and location
+- Key responsibilities (what will this person do day-to-day?)
+- Must-have skills or qualifications
+- Any specific requirements (years of experience, certifications, tools, etc.)
+- Salary range (or say "research market rate")
+- Anything else that makes this role unique
+
+If the user already provided enough detail in their message, move directly to Step 2. Use reasonable defaults for anything minor they didn't mention.
+
+**Step 2 — Research**
+Using web_search, research:
+- Comparable job postings for this role to understand market-standard language, common requirements, and typical compensation ranges
+- The user's company (using information from your context/memory) to pull in mission, culture, and product details for the "About Us" section
+
+**Step 3 — Create the Google Doc**
+IMPORTANT: Before creating the doc, check if Google Docs is connected by attempting to use the docs_create tool. If it fails or is not available, STOP and tell the user:
+"To use this shortcut, you need to connect Google Docs in your integration settings. Go to Settings → Integrations and connect your Google account with Docs access enabled."
+
+Create a Google Doc titled "[Job Title] — Job Description" with these sections:
+
+**About [Company Name]**
+A compelling 2-3 sentence overview of the company, its mission, and what makes it a great place to work.
+
+**The Role**
+A 2-3 sentence overview of the position — what it is, why it exists, and what impact this person will have.
+
+**What You'll Do**
+- 6-8 bullet points of key responsibilities, starting with the most impactful
+
+**What We're Looking For**
+- 5-7 bullet points of required qualifications and experience
+
+**Nice to Have**
+- 3-5 bullet points of preferred but not required qualifications
+
+**Compensation & Benefits**
+Include salary range (researched or provided), and standard benefits. If the user didn't provide benefits info, include common ones (health insurance, PTO, equity, etc.) with a note to customize.
+
+**How to Apply**
+A brief closing with instructions (customize placeholder).
+
+Write in a tone that is professional but approachable — avoid corporate jargon and clichés like "rockstar" or "ninja." Use inclusive language. Be specific about what the person will actually do rather than vague statements.
+
+**Step 4 — Present the Result**
+Share the Google Doc link and a brief summary of what you created. Ask if they'd like any changes.`,
+    continuation_prompt: `The user has reviewed the job description and wants changes.
+
+Based on their feedback, update the Google Doc using docs_read to get the current content, then docs_replace_text or docs_insert to make the requested changes.
+
+After updating, share the doc link again and ask if there's anything else to adjust.
+
+If the user asks to share or post the job description:
+- If they want it emailed: use gmail_create_draft or gmail_send to draft/send it
+- If they want it posted somewhere: format it appropriately and let them know what you can help with (email, Slack, etc.)`,
+  },
 ];
 
 function seedDefaultShortcuts(): void {
