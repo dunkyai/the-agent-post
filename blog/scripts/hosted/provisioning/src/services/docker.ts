@@ -85,8 +85,8 @@ export async function createContainer(opts: {
         "/run": "rw,noexec,nosuid,size=8388608",
       },
       Ulimits: [
-        { Name: "nofile", Soft: 1024, Hard: 2048 },
-        { Name: "nproc", Soft: 256, Hard: 512 },
+        { Name: "nofile", Soft: 4096, Hard: 8192 },
+        { Name: "nproc", Soft: 2048, Hard: 4096 },
       ],
       NetworkMode: `openclaw-net-${opts.name}`,
       ExtraHosts: ["host.docker.internal:host-gateway"],
