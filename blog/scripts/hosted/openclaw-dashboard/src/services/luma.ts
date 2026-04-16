@@ -282,14 +282,30 @@ export async function lumaCreateEvent(input: {
 
     const data: any = await res.json();
     const evt = data.event || data;
+    const eventId = evt.api_id || evt.id;
+    let eventUrl = evt.url;
+
+    // If create response doesn't include URL, fetch the event to get it
+    if (!eventUrl && eventId) {
+      try {
+        const getRes = await fetch(`${LUMA_API}/v1/event/get?id=${encodeURIComponent(eventId)}`, { headers: headers() });
+        if (getRes.ok) {
+          const getEvt = ((await getRes.json()) as any).event;
+          if (getEvt?.url) eventUrl = getEvt.url;
+        }
+      } catch {}
+      // Fallback: construct URL from event ID
+      if (!eventUrl) eventUrl = `https://lu.ma/${eventId}`;
+    }
+
     return JSON.stringify({
       success: true,
-      id: evt.api_id || evt.id,
+      id: eventId,
       name: evt.name,
       start_at: evt.start_at,
       end_at: evt.end_at,
       timezone: evt.timezone,
-      url: evt.url,
+      url: eventUrl,
     });
   } catch (err) {
     return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to create event" });

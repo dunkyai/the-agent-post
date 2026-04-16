@@ -218,76 +218,265 @@ const DEFAULT_SHORTCUTS = [
 
 {{input}}
 
-Follow these steps IN ORDER:
+IMPORTANT: Do NOT use contactout_search_people or contactout_search_company for this task. Only use web_search and browse_webpage for research.
 
-**Step 1 — Gather the Ideal Customer Profile (ICP)**
-If the user has NOT provided enough detail about who they want to reach, ask them for:
+**If the user has NOT provided enough detail about who they want to reach** (no ICP details, {{input}} is empty or vague), ask them for:
 - Target job titles (e.g. VP of Marketing, Head of Growth, Founder)
 - Company size (e.g. 10-50 employees, Series A-B startups)
 - Industry or vertical (e.g. SaaS, fintech, e-commerce)
 - Location (e.g. US, Bay Area, Europe)
+- How many prospects to find (default: 20)
 - Any other qualifying criteria (e.g. "uses Shopify", "recently raised funding")
 
-Do NOT proceed until you have a clear ICP. If the user already provided this info in their message, move directly to Step 2.
+Do NOT proceed until you have a clear ICP. Wait for their reply.
 
-**Step 2 — Research & Build the Prospect List**
-IMPORTANT: Before doing ANY research, check if Google Sheets is connected by attempting to use the sheets_create tool. If it fails or is not available, STOP and tell the user:
-"To use this shortcut, you need to connect Google Sheets in your integration settings. Go to Settings → Integrations and connect your Google account with Sheets access enabled."
+**If the user HAS provided enough ICP detail**, proceed immediately:
 
-Using web_search and browse_webpage, research real people who match the ICP. For each prospect, find:
-- First name
-- Last name
-- Job title
-- Company name
-- Email address (search for it on company websites, LinkedIn, team pages, press releases, etc.)
+1. Check if Google Sheets is connected by using the sheets_create tool. If it fails or is not available, STOP and tell the user:
+   "To use this shortcut, you need to connect Google Sheets in your integration settings. Go to Settings → Integrations and connect your Google account with Sheets access enabled."
 
-Find up to 50 prospects. Be thorough — check company team pages, LinkedIn profiles, blog author bios, conference speaker lists, press mentions, and industry directories.
+2. Using web_search and browse_webpage, research real people who match the ICP. For each prospect, find:
+   - First name
+   - Last name
+   - Job title
+   - Company name
+   - Email address (search company websites, team pages, press releases, etc.)
 
-**Step 3 — Create the Google Sheet**
-Create a Google Sheets spreadsheet titled "Cold Outreach — [ICP summary] — [today's date]" with these columns:
-- A: First Name
-- B: Last Name
-- C: Title
-- D: Company
-- E: Email
-- F: Status (leave blank — for tracking later)
-- G: Notes (any useful context you found about the person)
+   Find the number of prospects the user requested (default 20). Be thorough — check company team pages, LinkedIn profiles, blog author bios, conference speaker lists, press mentions, and industry directories.
 
-Write all 50 prospects into the sheet.
+3. Create a Google Sheets spreadsheet titled "Cold Outreach — [ICP summary] — [today's date]" with columns:
+   A: First Name, B: Last Name, C: Title, D: Company, E: Email, F: Status (blank), G: Notes
 
-**Step 4 — Present Results & Offer Email Drafting**
-Share the link to the Google Sheet and summarize what you found (e.g. "Found 50 prospects — mostly VPs of Marketing at Series A SaaS companies in the US").
+   Write all prospects into the sheet.
+
+4. Share the link to the Google Sheet and summarize what you found (e.g. "Found 20 prospects — mostly VPs of Marketing at Series A SaaS companies in the US").
 
 Then ask:
-"Would you like me to draft a personalized cold email to each person? If so, please provide:
-1. The email copy you'd like to use (you can use {first_name}, {last_name}, and {company} for personalization)
+"Would you like me to draft a personalized cold email to each person on this list? If so:
+1. Share the email copy you'd like to use (you can use {first_name}, {last_name}, and {company} for personalization), or I can suggest copy for you
 2. The subject line
-3. Whether to send or save as drafts
+3. Whether to send or save as drafts"
 
-Or I can suggest email copy based on your ICP if you'd like."`,
+**STOP here and wait for the user's reply. Do NOT draft or send any emails yet.**`,
     continuation_prompt: `The user has reviewed the prospect list and wants to proceed with email drafting.
 
-Based on their reply, draft and send (or save as drafts) personalized emails to each prospect in the Google Sheet.
+IMPORTANT: Before sending or drafting ANY emails, you MUST confirm the exact email copy with the user first.
 
-IMPORTANT: Before sending or drafting emails, check if Gmail is connected by attempting to use gmail_create_draft or gmail_send. If it fails or is not available, STOP and tell the user:
+**Step 1 — Confirm the email copy:**
+- If the user provided email copy: show them the full draft with a sample personalization (pick the first prospect) and ask "Does this look good? I'll send this to all [N] prospects on the list."
+- If the user asked you to suggest copy: write a compelling cold email template using {first_name}, {last_name}, and {company} placeholders. Show it to the user and ask for approval.
+
+**Do NOT proceed to Step 2 until the user explicitly approves the copy.**
+
+**Step 2 — Draft/send the emails:**
+Check if Gmail is connected by attempting to use gmail_create_draft or gmail_send. If it fails or is not available, STOP and tell the user:
 "To send emails, you need to connect Gmail in your integration settings. Go to Settings → Integrations and connect your Google account with Gmail access enabled."
 
 For each prospect:
-1. Read their row from the Google Sheet
-2. Replace {first_name}, {last_name}, and {company} in the user's email template
+1. Read their row from the Google Sheet (use sheets_read)
+2. Replace {first_name}, {last_name}, and {company} in the approved email template
 3. Send or save as draft based on the user's preference
-4. Update the "Status" column in the sheet to "Sent" or "Drafted"
+4. Update the "Status" column in the sheet to "Sent" or "Drafted" (use sheets_write)
 
 After completing all emails, share a summary: how many were sent/drafted, and any that failed (e.g. missing email address).`,
+  },
+  {
+    trigger: "createevent",
+    name: "Create Luma Event",
+    description: "Walk through creating a new Luma event step by step",
+    prompt: `You are helping the user create a new event on Luma. Walk them through it step by step.
+
+Ask for the following details ONE AT A TIME (do not ask all at once):
+1. Event name/title
+2. Date and time (with timezone — use their configured timezone)
+3. Is it virtual or in-person? If in-person, ask for the location/address. If virtual, ask if they want to add a meeting URL.
+4. Event description/copy — offer to help write it if they give you a topic
+
+After gathering all details, summarize what you will create and ask for confirmation before calling luma_create_event.
+
+After creating the event, ALWAYS share the event URL with the user so they can view and share it.
+
+{{input}}`,
+    continuation_prompt: null,
+  },
+  {
+    trigger: "research",
+    name: "Research & Spreadsheet",
+    description: "Research any topic and compile results into a Google Spreadsheet",
+    prompt: `You are a research assistant. The user wants you to research a topic and compile the results into a Google Spreadsheet.
+
+First, understand what they want to research. Common categories include:
+- **People** (investors, founders, executives, experts in a field)
+- **Places** (cities, neighborhoods, coworking spaces)
+- **Accommodation** (Airbnbs, hotels, vacation rentals)
+- **Restaurants & Food** (restaurants, cafes, bars in an area)
+- **Products & Services** (SaaS tools, agencies, vendors)
+- **Companies** (startups, competitors, partners)
+- Anything else — be flexible
+
+Before starting research, make sure you have enough context. Ask clarifying questions ONE AT A TIME if needed:
+- Location or geography (if relevant)
+- Budget or price range (if relevant)
+- Specific criteria or filters (ratings, size, type, cuisine, industry, etc.)
+- How many results they want (default to 10-15)
+- Any must-haves or dealbreakers
+
+Once you have enough context:
+1. Use web_search and browse_webpage to find real, current results
+2. Gather key details for each result (name, description, price, rating, URL, etc.)
+3. Create a Google Spreadsheet using sheets_create with well-organized columns
+4. Populate it with the research results using sheets_write
+5. Share the spreadsheet link with the user
+
+IMPORTANT: Use REAL data from web searches. Do NOT make up results or fabricate URLs. If you cannot find enough results, say so honestly and share what you found.
+
+{{input}}`,
+    continuation_prompt: null,
+  },
+  {
+    trigger: "jobdesc",
+    name: "Job Description Generator",
+    description: "Research comparable roles and generate a polished job description in Google Docs.",
+    prompt: `You are an experienced HR and recruiting specialist. The user wants to create a job description.
+
+{{input}}
+
+Follow these steps IN ORDER:
+
+**Step 1 — Gather Role Details**
+If the user has NOT provided enough detail, ask them for:
+- Job title
+- Department or team
+- Seniority level (entry, mid, senior, lead, director, VP)
+- Work arrangement (remote, hybrid, on-site) and location
+- Key responsibilities (what will this person do day-to-day?)
+- Must-have skills or qualifications
+- Any specific requirements (years of experience, certifications, tools, etc.)
+- Salary range (or say "research market rate")
+- Anything else that makes this role unique
+
+If the user already provided enough detail in their message, move directly to Step 2. Use reasonable defaults for anything minor they didn't mention.
+
+**Step 2 — Research**
+Using web_search, research:
+- Comparable job postings for this role to understand market-standard language, common requirements, and typical compensation ranges
+- The user's company (using information from your context/memory) to pull in mission, culture, and product details for the "About Us" section
+
+**Step 3 — Create the Google Doc**
+IMPORTANT: Before creating the doc, check if Google Docs is connected by attempting to use the docs_create tool. If it fails or is not available, STOP and tell the user:
+"To use this shortcut, you need to connect Google Docs in your integration settings. Go to Settings → Integrations and connect your Google account with Docs access enabled."
+
+Create a Google Doc titled "[Job Title] — Job Description" with these sections:
+
+**About [Company Name]**
+A compelling 2-3 sentence overview of the company, its mission, and what makes it a great place to work.
+
+**The Role**
+A 2-3 sentence overview of the position — what it is, why it exists, and what impact this person will have.
+
+**What You'll Do**
+- 6-8 bullet points of key responsibilities, starting with the most impactful
+
+**What We're Looking For**
+- 5-7 bullet points of required qualifications and experience
+
+**Nice to Have**
+- 3-5 bullet points of preferred but not required qualifications
+
+**Compensation & Benefits**
+Include salary range (researched or provided), and standard benefits. If the user didn't provide benefits info, include common ones (health insurance, PTO, equity, etc.) with a note to customize.
+
+**How to Apply**
+A brief closing with instructions (customize placeholder).
+
+Write in a tone that is professional but approachable — avoid corporate jargon and clichés like "rockstar" or "ninja." Use inclusive language. Be specific about what the person will actually do rather than vague statements.
+
+**Step 4 — Present the Result**
+Share the Google Doc link and a brief summary of what you created. Ask if they'd like any changes.`,
+    continuation_prompt: `The user has reviewed the job description and wants changes.
+
+Based on their feedback, update the Google Doc using docs_read to get the current content, then docs_replace_text or docs_insert to make the requested changes.
+
+After updating, share the doc link again and ask if there's anything else to adjust.
+
+If the user asks to share or post the job description:
+- If they want it emailed: use gmail_create_draft or gmail_send to draft/send it
+- If they want it posted somewhere: format it appropriately and let them know what you can help with (email, Slack, etc.)`,
+  },
+  {
+    trigger: "amplify",
+    name: "Amplify Content",
+    description: "Turn a voice note or written content into social posts, save to Google Docs, and publish via Buffer/Twitter.",
+    prompt: `You are a social media content specialist. The user wants to turn their ideas into polished social media content.
+
+{{input}}
+
+**If the user has NOT provided any content yet** (no text, no audio attachment, {{input}} is empty or just whitespace), ask them:
+
+"What content would you like me to amplify? You can:
+1. **Record a voice note** — hit the mic button and share your thoughts
+2. **Paste your content** — copy and paste text, a blog post, notes, etc.
+3. **Share a URL** — I'll read the page and work from that
+
+What would you like to do?"
+
+Do NOT proceed until the user provides content. Wait for their reply.
+
+**If the user HAS provided content** (text after the trigger, an audio attachment, or a URL), proceed immediately:
+
+1. If audio is attached, the transcription is already included above — use it as the source content.
+2. If a URL is provided, use browse_webpage to read the page content.
+3. Create the following in a Google Doc titled "Social Content — [brief topic] — [today's date]":
+
+**LinkedIn Post**
+- Professional but conversational tone
+- 3-4 paragraphs with line breaks for readability
+- No hashtags
+- Hook in the first line
+
+**Twitter/X Thread**
+- 5-7 tweets, each under 280 characters
+- Numbered (1/, 2/, etc.)
+- First tweet is the hook
+- Last tweet is a CTA or takeaway
+
+4. Share the Google Doc link and ask:
+"Here's your content draft — please review it. When you're ready, tell me:
+1. Which channels to post to (LinkedIn, Twitter/X, or both)
+2. When to post (now, or a specific date/time)
+3. Any edits you'd like first"`,
+    continuation_prompt: `The user has reviewed the content and wants to proceed.
+
+Based on their reply:
+
+**If they want edits:** Update the Google Doc with their changes using docs_read then docs_replace_text. Share the updated link and ask again about publishing.
+
+**If they want to publish:**
+1. Use buffer_list_channels to see available channels
+2. For LinkedIn: use buffer_create_post with the LinkedIn channel ID and the LinkedIn post content. If scheduling, use the due_at parameter.
+3. For Twitter/X: use twitter_post_thread with the thread content. Post immediately (no scheduling).
+4. If a channel is not connected, tell the user which integration they need to set up in Settings → Integrations.
+
+Publish exactly what was written in the Google Doc. Do NOT modify the content.
+
+After publishing, confirm what was posted and where.`,
   },
 ];
 
 function seedDefaultShortcuts(): void {
-  const insert = db.prepare(
-    "INSERT OR IGNORE INTO shortcuts (trigger, name, description, prompt, continuation_prompt) VALUES (?, ?, ?, ?, ?)"
+  const upsert = db.prepare(
+    `INSERT INTO shortcuts (trigger, name, description, prompt, continuation_prompt, workflow_steps)
+     VALUES (?, ?, ?, ?, ?, NULL)
+     ON CONFLICT(trigger) DO UPDATE SET
+       name = excluded.name,
+       description = excluded.description,
+       prompt = excluded.prompt,
+       continuation_prompt = excluded.continuation_prompt,
+       workflow_steps = NULL,
+       updated_at = datetime('now')`
   );
   for (const s of DEFAULT_SHORTCUTS) {
-    insert.run(s.trigger, s.name, s.description, s.prompt, s.continuation_prompt);
+    upsert.run(s.trigger, s.name, s.description, s.prompt, s.continuation_prompt || null);
   }
 }
 
