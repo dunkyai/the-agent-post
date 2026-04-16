@@ -314,40 +314,65 @@ After creating the event, ALWAYS share the event URL with the user so they can v
     trigger: "research",
     name: "Research & Spreadsheet",
     description: "Research any topic and compile results into a Google Spreadsheet",
-    prompt: `You are a research assistant. The user wants you to research a topic and compile the results into a Google Spreadsheet.
-
-First, understand what they want to research. Common categories include:
-- **People** (investors, founders, executives, experts in a field)
-- **Places** (cities, neighborhoods, coworking spaces)
-- **Accommodation** (Airbnbs, hotels, vacation rentals)
-- **Restaurants & Food** (restaurants, cafes, bars in an area)
-- **Products & Services** (SaaS tools, agencies, vendors)
-- **Companies** (startups, competitors, partners)
-- Anything else — be flexible
-
-Before starting research, make sure you have enough context. Ask clarifying questions ONE AT A TIME if needed:
-- Location or geography (if relevant)
-- Budget or price range (if relevant)
-- Specific criteria or filters (ratings, size, type, cuisine, industry, etc.)
-- How many results they want (default to 10-15)
-- Any must-haves or dealbreakers
-
-Once you have enough context:
-1. CALL the web_search tool for EVERY piece of data you include. Do NOT generate results from memory.
-2. CALL browse_webpage to verify details from search results.
-3. CALL sheets_create to create a Google Spreadsheet with well-organized columns.
-4. CALL sheets_write to populate it with the research results.
-5. Share the spreadsheet link with the user.
-
-CRITICAL — TOOL USAGE IS MANDATORY:
-- You MUST call web_search at least once before presenting any research results. There is NO exception.
-- You MUST call sheets_create to make the spreadsheet. Do NOT just list results in chat.
-- NEVER claim you "searched" or "found" results without having called web_search in this conversation.
-- If you present research data without having called web_search, you are hallucinating. STOP and call the tool.
-- Every company name, URL, price, and rating MUST come from a tool call result, not from your training data.
-
-{{input}}`,
+    prompt: `If the user provided a clear research topic, summarize it. If not, ask what they want to research.`,
     continuation_prompt: null,
+    workflow_steps: JSON.stringify([
+      {
+        type: "ai",
+        id: "clarify",
+        prompt: `You are a research assistant. The user wants to research a topic. Their request: "{{input}}"
+
+If the request is clear enough to research (has a topic, and optionally location/criteria), respond with ONLY a JSON object (no other text):
+{"ready": true, "query": "<the main search query>", "topic": "<short topic label>", "columns": ["Name", "<col2>", "<col3>", ...]}
+
+Pick columns appropriate for the topic (e.g. hotels: Name, Location, Price, Rating, URL; companies: Name, Industry, Size, Website; restaurants: Name, Cuisine, Price Range, Rating, Address, URL).
+
+If the request is too vague, respond with ONLY:
+{"ready": false, "question": "<one clarifying question>"}`,
+        label: "Understanding request",
+      },
+      {
+        type: "ai",
+        id: "research",
+        prompt: `You are a research assistant. Research the following topic using web_search and browse_webpage tools.
+
+Topic: {{input}}
+Search query: {{step.clarify.result}}
+
+INSTRUCTIONS:
+1. Call web_search multiple times with different queries to find 10-15 results
+2. Call browse_webpage on promising URLs to get detailed information
+3. For each result, gather: name, and any relevant details (price, rating, location, URL, etc.)
+4. Return your findings as a JSON array: [{"name": "...", "col2": "...", ...}, ...]
+
+You MUST call web_search. Do NOT generate results from memory. Every data point must come from a tool call.`,
+        label: "Researching",
+        tools: true,
+      },
+      {
+        type: "system",
+        id: "create_sheet",
+        tool: "sheets_create",
+        input: { title: "Research — {{step.clarify.result.topic}} — {{date}}" },
+        label: "Creating spreadsheet",
+      },
+      {
+        type: "ai",
+        id: "populate",
+        prompt: `You have research results and a Google Spreadsheet. Write the data to the spreadsheet.
+
+Research results: {{step.research.result}}
+Spreadsheet ID: {{step.create_sheet.result.spreadsheetId}}
+
+Use sheets_write to:
+1. Write column headers in row 1
+2. Write all research data starting from row 2
+
+After writing, respond with the spreadsheet URL and a brief summary of what you found.`,
+        label: "Populating spreadsheet",
+        tools: true,
+      },
+    ]),
   },
   {
     trigger: "jobdesc",
