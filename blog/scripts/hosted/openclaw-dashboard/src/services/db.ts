@@ -294,6 +294,8 @@ Ask for the following details ONE AT A TIME (do not ask all at once):
 
 After gathering all details, summarize what you will create and ask for confirmation before calling luma_create_event.
 
+After creating the event, ALWAYS share the event URL with the user so they can view and share it.
+
 {{input}}`,
     continuation_prompt: null,
   },
