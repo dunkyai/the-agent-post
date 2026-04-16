@@ -16,6 +16,9 @@ interface PendingState {
 const pending = new Map<string, Map<string, PendingState>>();
 const cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+// Track in-progress Phase 1 shortcuts per session (sessionId → shortcutId)
+const sessionContinuationShortcuts = new Map<string, number>();
+
 const CHAT_CONVERSATION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
@@ -134,6 +137,7 @@ export function submitChatMessage(sessionId: string, message: string, imageAttac
         + `User's reply: "${message}"\n\n`
         + `INSTRUCTIONS:\n${contPrompt}`;
       isContinuation = true;
+      sessionContinuationShortcuts.delete(sessionId);
       console.log(`[chat-adapter] Continuation of ;${shortcut.trigger} triggered for session ${sessionId.slice(0, 8)}...`);
     }
   }
@@ -160,16 +164,27 @@ export function submitChatMessage(sessionId: string, message: string, imageAttac
     }
   }
 
+  // --- Check for in-progress Phase 1 shortcut (no new shortcut trigger, no continuation) ---
+  const activeShortcutId = sessionContinuationShortcuts.get(sessionId);
+  if (!isContinuation && !shortcutMatch && activeShortcutId) {
+    // This is a follow-up message during Phase 1 — carry the shortcut context
+    extraMetadata.continuation_shortcut_id = activeShortcutId;
+  }
+
   // --- Normal flow ---
-  // Continuations get a fresh conversation. Shortcuts keep a conversation for multi-turn
-  // (e.g. ICP gathering in ;coldemail), but use a shortcut-specific one, not the main chat.
+  // Continuations get a fresh conversation. Shortcuts and their follow-ups use a
+  // dedicated conversation for multi-turn (e.g. ICP gathering in ;coldemail).
   let taskConversationId: string | undefined = conversationId;
   if (isContinuation) {
     taskConversationId = undefined; // fresh conversation for Phase 2
   } else if (shortcutMatch) {
-    // Use a dedicated conversation for this shortcut so Phase 1 can have back-and-forth
-    // without polluting the main chat history
     taskConversationId = getOrCreateConversation("shortcut", `${shortcutMatch.shortcut.trigger}:${sessionId}`);
+  } else if (activeShortcutId) {
+    // Follow-up during Phase 1 — use the same shortcut conversation
+    const shortcut = getShortcut(activeShortcutId);
+    if (shortcut) {
+      taskConversationId = getOrCreateConversation("shortcut", `${shortcut.trigger}:${sessionId}`);
+    }
   }
 
   const task = createTask({
@@ -294,12 +309,27 @@ export function onTaskComplete(task: Task): void {
 
   if (task.status === "completed") {
     state.result = { role: "assistant", content: task.output.result || "" };
-    // If this task was Phase 1 of a shortcut with continuation, save the pending continuation now
+    // If this task was Phase 1 of a shortcut with continuation, check if Phase 1 is actually
+    // done (delivered a result with a Google Sheets/Docs URL or other deliverable).
+    // If the AI just asked a question, Phase 1 isn't done — don't save continuation yet,
+    // re-attach the continuation_shortcut_id so subsequent messages in the conversation continue Phase 1.
     const contShortcutId = task.input.metadata?.continuation_shortcut_id as number | undefined;
     if (contShortcutId) {
-      const contKey = `chat:${sessionId}`;
-      setPendingContinuation(contKey, contShortcutId);
-      console.log(`[chat-adapter] Pending continuation saved after Phase 1 completion for session ${sessionId.slice(0, 8)}...`);
+      const result = task.output.result || "";
+      const hasDeliverable = /docs\.google\.com|sheets\.google\.com|spreadsheets\/d\/|document\/d\//.test(result);
+      if (hasDeliverable) {
+        const contKey = `chat:${sessionId}`;
+        setPendingContinuation(contKey, contShortcutId);
+        sessionContinuationShortcuts.delete(sessionId);
+        console.log(`[chat-adapter] Pending continuation saved after Phase 1 delivery for session ${sessionId.slice(0, 8)}...`);
+      } else {
+        // Phase 1 not done yet — store shortcut ID in memory so subsequent messages
+        // in this session keep the shortcut context
+        if (!sessionContinuationShortcuts.has(sessionId)) {
+          sessionContinuationShortcuts.set(sessionId, contShortcutId);
+        }
+        console.log(`[chat-adapter] Phase 1 still in progress for session ${sessionId.slice(0, 8)}... (no deliverable yet)`);
+      }
     }
   } else if (task.status === "failed") {
     const error = task.output.error || "Task failed";
