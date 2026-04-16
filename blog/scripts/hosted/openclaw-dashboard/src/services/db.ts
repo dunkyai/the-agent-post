@@ -493,17 +493,17 @@ After publishing, confirm what was posted and where.`,
 function seedDefaultShortcuts(): void {
   const upsert = db.prepare(
     `INSERT INTO shortcuts (trigger, name, description, prompt, continuation_prompt, workflow_steps)
-     VALUES (?, ?, ?, ?, ?, NULL)
+     VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(trigger) DO UPDATE SET
        name = excluded.name,
        description = excluded.description,
        prompt = excluded.prompt,
        continuation_prompt = excluded.continuation_prompt,
-       workflow_steps = NULL,
+       workflow_steps = excluded.workflow_steps,
        updated_at = datetime('now')`
   );
   for (const s of DEFAULT_SHORTCUTS) {
-    upsert.run(s.trigger, s.name, s.description, s.prompt, s.continuation_prompt || null);
+    upsert.run(s.trigger, s.name, s.description, s.prompt, s.continuation_prompt || null, (s as any).workflow_steps || null);
   }
 }
 
