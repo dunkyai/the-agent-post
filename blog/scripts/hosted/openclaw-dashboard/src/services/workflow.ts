@@ -363,10 +363,10 @@ export async function resumeWorkflow(
       });
     }
   } else {
-    // Normal pause/prompt resume — save user reply
+    // Normal pause/prompt resume — save user reply and update input
     stepResults.user_reply = userReply;
-    // If user_input was empty (initial prompt for content), set it now
-    const effectiveInput = state.user_input || userReply;
+    // Update user_input with the reply so the step re-runs with actual content
+    const effectiveInput = userReply || state.user_input;
     upsertWorkflowState(threadId, {
       shortcut_id: shortcut.id,
       step_results: JSON.stringify(stepResults),
