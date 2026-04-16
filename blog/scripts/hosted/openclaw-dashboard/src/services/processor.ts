@@ -107,9 +107,10 @@ export async function processTask(
     if (shortcutId) {
       const shortcut = getShortcut(shortcutId);
       if (shortcut?.workflow_steps || isWorkflowResume) {
-        const threadId = task.input.metadata?.threadTs
-          ? `${task.input.metadata.channelId}:${task.input.metadata.threadTs}`
-          : taskId;
+        const threadId = task.input.metadata?.workflow_thread_id as string
+          || (task.input.metadata?.threadTs
+            ? `${task.input.metadata.channelId}:${task.input.metadata.threadTs}`
+            : taskId);
         const userInput = task.input.raw_input;
 
         const result = isWorkflowResume
