@@ -1713,7 +1713,7 @@ const CONTACTOUT_TOOLS = [
         job_title: { type: "array", items: { type: "string" }, description: "Job titles to match (supports boolean: 'VP AND Product')" },
         company: { type: "array", items: { type: "string" }, description: "Company names" },
         location: { type: "array", items: { type: "string" }, description: "Locations (city, state, country)" },
-        seniority: { type: "array", items: { type: "string" }, description: "Seniority levels (e.g. 'Director', 'VP', 'C-Suite')" },
+        seniority: { type: "array", items: { type: "string" }, description: "Seniority levels. Accepted values ONLY: 'entry', 'senior', 'manager', 'director', 'vp', 'c_suite', 'owner', 'partner'" },
         industry: { type: "array", items: { type: "string" }, description: "Industries" },
         keyword: { type: "string", description: "Keyword search across entire profile" },
         reveal_info: { type: "boolean", description: "If true, return actual contact info (emails, phones). Costs credits. Default false." },
