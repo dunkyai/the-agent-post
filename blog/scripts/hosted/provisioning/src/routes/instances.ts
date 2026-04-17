@@ -443,7 +443,7 @@ function magicLinkEmailHtml(link: string): string {
 
 // --- Caddy route management ---
 
-function registerCaddyRoute(subdomain: string, port: number): void {
+export function registerCaddyRoute(subdomain: string, port: number): void {
   // First, try to delete any existing route with the same ID (idempotent)
   try {
     execSync(`curl -sf -X DELETE ${CADDY_ADMIN}/id/openclaw-${subdomain}`, { timeout: 5000 });
