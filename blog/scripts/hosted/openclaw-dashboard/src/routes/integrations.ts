@@ -914,7 +914,7 @@ router.post("/integrations/:type/health-check", async (req: Request, res: Respon
       const data: any = await resp.json();
       result = data.ok ? { success: true, detail: `Team: ${data.team}` } : { success: false, error: data.error };
 
-    } else if (type.startsWith("google:") || type === "google") {
+    } else if ((type as string).startsWith("google:") || type === "google") {
       // Find the Google integration
       const googleIntegrations = getGoogleIntegrations();
       const integration = type === "google" ? googleIntegrations[0] : googleIntegrations.find(g => g.type === type);
@@ -933,7 +933,7 @@ router.post("/integrations/:type/health-check", async (req: Request, res: Respon
 
     } else if (type === "supabase") {
       const probeResult = await (await import("../services/supabase")).probeSupabaseHealth();
-      result = probeResult;
+      result = { success: true, ...probeResult };
 
     } else if (type === "buffer") {
       const integration = getIntegration("buffer");
@@ -1011,7 +1011,7 @@ router.post("/integrations/:type/health-check", async (req: Request, res: Respon
 
     // Store last health check result
     try {
-      getIntegration(type); // ensure it exists
+      getIntegration(type as string); // ensure it exists
       const db = require("../services/db").getDb();
       db.prepare("UPDATE integrations SET last_health_check = datetime('now'), last_health_result = ? WHERE type = ?")
         .run(healthResult, type);
