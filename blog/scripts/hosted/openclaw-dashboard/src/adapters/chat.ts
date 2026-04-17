@@ -22,30 +22,10 @@ const sessionContinuationShortcuts = new Map<string, number>();
 // Track active workflow thread IDs per session (sessionId → workflow threadId)
 const sessionWorkflowIds = new Map<string, string>();
 
-const CHAT_CONVERSATION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-
 /**
- * Get or create a chat conversation, starting fresh if the last message
- * was more than 10 minutes ago. Prevents conversation history contamination.
+ * Get or create a chat conversation. No auto-reset — user manually resets via the reset button.
  */
 function getChatConversation(): string {
-  const existing = getDb()
-    .prepare("SELECT id, updated_at FROM conversations WHERE integration_type = 'dashboard' AND external_id = 'dashboard'")
-    .get() as { id: string; updated_at: string } | undefined;
-
-  if (existing) {
-    const lastActivity = new Date(existing.updated_at + "Z").getTime();
-    const now = Date.now();
-    if (now - lastActivity > CHAT_CONVERSATION_TIMEOUT_MS) {
-      // Stale conversation — archive it by changing its external_id, then create fresh
-      const archivedId = `dashboard-${existing.id.slice(0, 8)}`;
-      getDb()
-        .prepare("UPDATE conversations SET external_id = ? WHERE id = ?")
-        .run(archivedId, existing.id);
-      console.log(`[chat-adapter] Archived stale conversation ${existing.id.slice(0, 8)} (inactive ${Math.round((now - lastActivity) / 60000)}min)`);
-    }
-  }
-
   return getOrCreateConversation("dashboard", "dashboard");
 }
 
