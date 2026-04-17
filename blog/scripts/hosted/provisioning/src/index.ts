@@ -8,6 +8,7 @@ import authRouter from "./routes/auth";
 import slackEventsRouter from "./routes/slack-events";
 import stripeWebhooksRouter from "./routes/stripe-webhooks";
 import { ensureBrowserService } from "./services/browser";
+import analyticsRouter from "./routes/analytics";
 import { cleanExpiredTokens } from "./services/store";
 import { enforceBillingActions } from "./services/billing";
 
@@ -78,6 +79,9 @@ app.post("/stripe/checkout", async (req, res) => {
 
 // Protected routes
 app.use("/instances", authMiddleware, instancesRouter);
+
+// Admin analytics (self-authenticated via query param)
+app.use(analyticsRouter);
 
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Provisioning API running on 0.0.0.0:${PORT}`);
