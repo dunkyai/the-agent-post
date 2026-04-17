@@ -258,7 +258,8 @@ INSTRUCTIONS:
 1. Try contactout_search_people first. If ContactOut errors, switch to web_search immediately.
 2. For each prospect find: first_name, last_name, title, company, email (blank if not found)
 3. Use web_search to find company team pages, LinkedIn profiles, conference speakers
-4. Return findings as JSON array: [{"first_name":"...","last_name":"...","title":"...","company":"...","email":"...","notes":"..."}, ...]
+4. IMPORTANT: Each prospect must be from a DIFFERENT company. Do NOT include multiple people from the same company. 10 prospects = 10 unique companies.
+5. Return findings as JSON array: [{"first_name":"...","last_name":"...","title":"...","company":"...","email":"...","notes":"..."}, ...]
 
 You MUST call contactout_search_people or web_search. Do NOT generate prospects from memory. Every name must come from a tool call.`,
         label: "Researching prospects",
