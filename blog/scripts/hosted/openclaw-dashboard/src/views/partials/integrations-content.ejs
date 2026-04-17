@@ -385,9 +385,14 @@
             <div style="margin-bottom: 12px;">
               <p style="font-size: 14px;">Your Airtable account is connected. Your agent can list bases, read and write records.</p>
             </div>
-            <form method="POST" action="/integrations/airtable/disconnect">
-              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
-            </form>
+            <div style="display: flex; gap: 8px;">
+              <form method="POST" action="/integrations/airtable/connect">
+                <button type="submit" class="btn btn-sm" style="background: transparent; color: var(--fg); border: 1px solid var(--border);">Reconnect / Change Bases</button>
+              </form>
+              <form method="POST" action="/integrations/airtable/disconnect">
+                <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+              </form>
+            </div>
           <% } else { %>
             <form method="POST" action="/integrations/airtable/connect">
               <p style="font-size: 14px; margin-bottom: 12px;">Connect your Airtable account so your agent can read and write to your bases.</p>
