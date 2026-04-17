@@ -1,20 +1,104 @@
 import { Router } from "express";
+import crypto from "crypto";
 import * as store from "../services/store";
 
 const router = Router();
 
-// Admin analytics page — aggregates data from all instances
-router.get("/admin/analytics", async (req, res) => {
-  // Simple admin auth — require admin secret
-  const adminSecret = process.env.ADMIN_SECRET;
-  if (!adminSecret) {
-    res.status(500).send("ADMIN_SECRET not configured");
+// Admin whitelist — only these emails can access analytics
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "eyin@hustlefundvc.com").split(",").map(e => e.trim().toLowerCase());
+
+// In-memory admin sessions and magic link tokens
+const adminSessions = new Map<string, { email: string; expiresAt: number }>();
+const adminMagicTokens = new Map<string, { email: string; expiresAt: number }>();
+
+function parseCookies(req: any): Record<string, string> {
+  const header = req.headers.cookie || "";
+  const cookies: Record<string, string> = {};
+  header.split(";").forEach((c: string) => {
+    const [key, ...val] = c.trim().split("=");
+    if (key) cookies[key] = val.join("=");
+  });
+  return cookies;
+}
+
+function isAdminAuthenticated(req: any): string | null {
+  const cookies = parseCookies(req);
+  const sessionId = cookies.admin_session;
+  if (!sessionId) return null;
+  const session = adminSessions.get(sessionId);
+  if (!session || session.expiresAt < Date.now()) {
+    adminSessions.delete(sessionId);
+    return null;
+  }
+  return session.email;
+}
+
+// Login page
+router.get("/admin/login", (req, res) => {
+  const msg = req.query.msg || "";
+  res.send(loginPage(msg as string));
+});
+
+// Send magic link
+router.post("/admin/login", async (req, res) => {
+  const email = (req.body.email || "").trim().toLowerCase();
+  if (!ADMIN_EMAILS.includes(email)) {
+    res.redirect("/admin/login?msg=Not+authorized");
     return;
   }
 
-  const auth = req.query.key || req.headers["x-admin-key"];
-  if (auth !== adminSecret) {
-    res.status(401).send("Unauthorized");
+  const token = crypto.randomBytes(32).toString("hex");
+  adminMagicTokens.set(token, { email, expiresAt: Date.now() + 24 * 60 * 60 * 1000 });
+
+  // Send via Resend
+  try {
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!resendKey) throw new Error("RESEND_API_KEY not set");
+
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: "Dunky <noreply@dunky.ai>",
+        to: [email],
+        subject: "Dunky Analytics — Sign In",
+        html: `<p>Click to sign in to Dunky Analytics:</p><p><a href="https://api.dunky.ai/admin/auth?token=${token}" style="display:inline-block;padding:12px 24px;background:#7C3AED;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;">Sign In</a></p><p style="color:#999;font-size:13px;">This link expires in 24 hours.</p>`,
+      }),
+    });
+
+    res.redirect("/admin/login?msg=Check+your+email+for+the+sign-in+link");
+  } catch (err: any) {
+    console.error("Admin magic link error:", err.message);
+    res.redirect("/admin/login?msg=Failed+to+send+email");
+  }
+});
+
+// Magic link callback
+router.get("/admin/auth", (req, res) => {
+  const token = req.query.token as string;
+  if (!token) { res.redirect("/admin/login?msg=Invalid+link"); return; }
+
+  const entry = adminMagicTokens.get(token);
+  if (!entry || entry.expiresAt < Date.now()) {
+    adminMagicTokens.delete(token);
+    res.redirect("/admin/login?msg=Link+expired");
+    return;
+  }
+  adminMagicTokens.delete(token);
+
+  const sessionId = crypto.randomBytes(32).toString("hex");
+  adminSessions.set(sessionId, { email: entry.email, expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 });
+
+  res.setHeader("Set-Cookie", `admin_session=${sessionId}; Path=/admin; HttpOnly; Secure; SameSite=Lax; Max-Age=${30 * 24 * 60 * 60}`);
+  res.redirect("/admin/analytics");
+});
+
+// Analytics page
+router.get("/admin/analytics", async (req, res) => {
+  // Check admin session
+  const adminEmail = isAdminAuthenticated(req);
+  if (!adminEmail) {
+    res.redirect("/admin/login");
     return;
   }
 
@@ -141,5 +225,38 @@ router.get("/admin/analytics", async (req, res) => {
   </table>
 </body></html>`);
 });
+
+function loginPage(msg: string): string {
+  return `<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dunky Analytics — Sign In</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #FAFAF9; color: #1C1917; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+  .card { background: #fff; border: 1px solid #E7E5E4; border-radius: 16px; padding: 40px; max-width: 400px; width: 100%; text-align: center; }
+  .logo { font-size: 24px; font-weight: 800; color: #7C3AED; margin-bottom: 8px; }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .desc { color: #57534E; font-size: 14px; margin-bottom: 24px; }
+  input { width: 100%; padding: 12px 16px; border: 1px solid #E7E5E4; border-radius: 8px; font-size: 14px; font-family: inherit; margin-bottom: 12px; }
+  input:focus { outline: none; border-color: #7C3AED; }
+  button { width: 100%; padding: 12px; background: #7C3AED; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button:hover { background: #5B21B6; }
+  .msg { color: #7C3AED; font-size: 13px; margin-bottom: 16px; }
+</style>
+</head><body>
+<div class="card">
+  <div class="logo">dunky.ai</div>
+  <h1>Analytics</h1>
+  <p class="desc">Sign in with your admin email</p>
+  ${msg ? `<p class="msg">${msg}</p>` : ""}
+  <form method="POST" action="/admin/login">
+    <input type="email" name="email" placeholder="you@company.com" required autofocus>
+    <button type="submit">Send Sign-In Link</button>
+  </form>
+</div>
+</body></html>`;
+}
 
 export default router;
