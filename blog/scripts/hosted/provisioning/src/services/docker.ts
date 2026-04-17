@@ -12,9 +12,6 @@ export async function createNetwork(name: string): Promise<string> {
     Name: `openclaw-net-${name}`,
     Driver: "bridge",
     Internal: false, // allows egress to internet (for API calls)
-    Options: {
-      "com.docker.network.bridge.enable_icc": "false",
-    },
   });
   return network.id;
 }
