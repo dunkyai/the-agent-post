@@ -470,8 +470,8 @@ function registerCaddyRoute(subdomain: string, port: number): void {
     terminal: true,
   });
 
-  // Find the wildcard *.dunky.ai catch-all route index so we insert before it
-  let insertIdx = 0;
+  // Save and remove the wildcard catch-all, add the new route, then re-add wildcard at end
+  let wildcardRoute: string | null = null;
   try {
     const routesJson = execSync(
       `curl -sf ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes`,
@@ -481,19 +481,38 @@ function registerCaddyRoute(subdomain: string, port: number): void {
     for (let i = 0; i < routes.length; i++) {
       const hosts = routes[i]?.match?.[0]?.host || [];
       if (hosts.includes("*.dunky.ai")) {
-        insertIdx = i;
+        wildcardRoute = JSON.stringify(routes[i]);
+        execSync(`curl -sf -X DELETE ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes/${i}`, { timeout: 5000 });
+        console.log(`[caddy] Removed wildcard from index ${i} for ${subdomain}`);
         break;
       }
     }
-  } catch {}
+  } catch (err) {
+    console.error(`[caddy] Failed to find/remove wildcard:`, err instanceof Error ? err.message : err);
+  }
 
+  // Add the new instance route (appends to end, which is now before where wildcard will go)
   try {
     execSync(
-      `curl -sf -X POST ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes/${insertIdx} -H "Content-Type: application/json" -d '${routeConfig}'`,
+      `curl -sf -X POST ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes -H "Content-Type: application/json" -d '${routeConfig}'`,
       { timeout: 5000 }
     );
+    console.log(`[caddy] Route added for ${subdomain}.dunky.ai`);
   } catch (err) {
     throw new Error(`Caddy route registration failed for ${subdomain}`);
+  }
+
+  // Re-add wildcard at the very end
+  if (wildcardRoute) {
+    try {
+      execSync(
+        `curl -sf -X POST ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes -H "Content-Type: application/json" -d '${wildcardRoute}'`,
+        { timeout: 5000 }
+      );
+      console.log(`[caddy] Wildcard re-added at end`);
+    } catch (err) {
+      console.error(`[caddy] Failed to re-add wildcard:`, err instanceof Error ? err.message : err);
+    }
   }
 }
 
