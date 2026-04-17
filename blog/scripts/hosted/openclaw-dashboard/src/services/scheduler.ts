@@ -6,6 +6,7 @@ import { processTask } from "./processor";
 import { routeTaskOutput } from "./router";
 import { updateChatStatus } from "../adapters/chat";
 import { cleanupStaleThreads } from "../adapters/email";
+import { logActivity, cleanOldActivityLogs } from "./db";
 
 let tickInterval: ReturnType<typeof setInterval> | null = null;
 let lastDeactivateCheck = 0;
@@ -95,6 +96,15 @@ async function tick(): Promise<void> {
       } catch (err) {
         console.error("[scheduler] Memory cleanup error:", err instanceof Error ? err.message : err);
       }
+
+      // Activity log cleanup: prune entries older than 7 days
+      try {
+        const pruned = cleanOldActivityLogs();
+        if (pruned > 0) {
+          console.log(`[scheduler] Pruned ${pruned} old activity log entries`);
+        }
+      } catch {}
+
     }
   } catch (err: unknown) {
     console.error("Scheduler tick error:", err instanceof Error ? err.message : err);
@@ -111,8 +121,31 @@ async function processTaskAsync(task: ReturnType<typeof getPendingTasks>[0]): Pr
 
     const completedTask = await processTask(task, onStatus);
     routeTaskOutput(completedTask);
+
+    // Log task completion
+    const status = completedTask.status || "completed";
+    const level = status === "failed" ? "error" : "info";
+    const summary = status === "failed"
+      ? `Task failed: ${completedTask.output?.error || "unknown error"}`
+      : `Task completed (${task.input.source_channel})`;
+    logActivity({
+      type: "task",
+      level,
+      source: task.input.source_channel || "unknown",
+      summary,
+      task_id: task.task_id,
+    });
   } catch (err: unknown) {
-    console.error(`[scheduler] Task ${task.task_id} uncaught error:`, err instanceof Error ? err.message : err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[scheduler] Task ${task.task_id} uncaught error:`, msg);
+    logActivity({
+      type: "error",
+      level: "error",
+      source: task.input.source_channel || "scheduler",
+      summary: `Task ${task.task_id} uncaught error`,
+      detail: msg,
+      task_id: task.task_id,
+    });
   } finally {
     activeTasks.delete(task.task_id);
   }

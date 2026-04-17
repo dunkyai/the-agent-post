@@ -1,11 +1,11 @@
 import { Router, raw } from "express";
 import crypto from "crypto";
 import { v4 as uuidv4 } from "uuid";
-import { execSync } from "child_process";
 import * as store from "../services/store";
 import * as dockerService from "../services/docker";
 import { allocatePort } from "../services/port-manager";
 import { suspendForBilling, resumeFromBilling } from "../services/billing";
+import { registerCaddyRoute } from "./instances";
 
 const router = Router();
 
@@ -134,21 +134,7 @@ async function handleStripeEvent(event: StripeWebhookEvent): Promise<void> {
       });
 
       // Register Caddy route
-      const CADDY_ADMIN = "http://localhost:2019";
-      const routeConfig = JSON.stringify({
-        "@id": `openclaw-${subdomain}`,
-        match: [{ host: [`${subdomain}.dunky.ai`] }],
-        handle: [{ handler: "reverse_proxy", upstreams: [{ dial: `localhost:${port}` }] }],
-        terminal: true,
-      });
-      try {
-        execSync(
-          `curl -sf -X POST ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes/0 -H "Content-Type: application/json" -d '${routeConfig}'`,
-          { timeout: 5000 }
-        );
-      } catch (caddyErr) {
-        console.error(`[stripe] Caddy route registration failed for ${subdomain}:`, caddyErr);
-      }
+      registerCaddyRoute(subdomain, port);
 
       // Update instance to running
       store.updateInstance(id, { containerId, status: "running" });
@@ -168,6 +154,7 @@ async function handleStripeEvent(event: StripeWebhookEvent): Promise<void> {
             },
             body: JSON.stringify({
               from: "Dunky <noreply@dunky.ai>",
+              reply_to: "elizabeth@hustlefundvc.com",
               to: email,
               subject: "Your AI agent is ready — Dunky",
               html: welcomeEmailHtml(dashboardUrl),

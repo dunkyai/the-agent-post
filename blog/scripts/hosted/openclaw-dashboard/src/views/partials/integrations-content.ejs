@@ -385,9 +385,14 @@
             <div style="margin-bottom: 12px;">
               <p style="font-size: 14px;">Your Airtable account is connected. Your agent can list bases, read and write records.</p>
             </div>
-            <form method="POST" action="/integrations/airtable/disconnect">
-              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
-            </form>
+            <div style="display: flex; gap: 8px;">
+              <form method="POST" action="/integrations/airtable/connect">
+                <button type="submit" class="btn btn-sm" style="background: transparent; color: var(--fg); border: 1px solid var(--border);">Reconnect / Change Bases</button>
+              </form>
+              <form method="POST" action="/integrations/airtable/disconnect">
+                <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+              </form>
+            </div>
           <% } else { %>
             <form method="POST" action="/integrations/airtable/connect">
               <p style="font-size: 14px; margin-bottom: 12px;">Connect your Airtable account so your agent can read and write to your bases.</p>
@@ -704,7 +709,7 @@
         </div>
       </details>
 
-      <!-- ContactOut -->
+      <!-- ContactOut (platform-provided) -->
       <details class="integration-tile">
         <summary class="integration-tile-summary">
           <span class="integration-icon" style="background: #6C63FF;"><span style="font-size: 16px; color: #fff; font-weight: bold;">CO</span></span>
@@ -712,34 +717,15 @@
             <h3>ContactOut</h3>
             <p>Find contact info for people — emails, phone numbers, and professional profiles</p>
           </div>
-          <span class="status-badge status-<%= contactout.status === 'connected' ? 'connected' : 'disconnected' %>">
-            <%= contactout.status === 'connected' ? 'Connected' : 'Not connected' %>
-          </span>
+          <span class="status-badge" style="background: #DBEAFE; color: #1E40AF;">Included</span>
         </summary>
         <div class="integration-body">
-          <% if (contactout.status === 'connected') { %>
-            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
-              Your agent can search for people by name, look up contact info, find decision makers at companies, and verify email addresses.
-            </p>
-            <form method="POST" action="/integrations/contactout/disconnect" onsubmit="return confirm('Disconnect ContactOut?')">
-              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
-            </form>
-          <% } else { %>
-            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
-              Connect ContactOut to let your agent search for people's contact information — emails, phone numbers, and professional profiles. Requires a ContactOut API token.
-            </p>
-            <% if (contactout.error_message) { %>
-              <p style="color: var(--danger); font-size: 13px; margin-bottom: 8px;"><%= contactout.error_message %></p>
-            <% } %>
-            <form method="POST" action="/integrations/contactout/connect">
-              <div class="form-group">
-                <label for="contactout_api_token">API Token</label>
-                <input type="password" id="contactout_api_token" name="api_token" placeholder="Your ContactOut API token" required>
-                <div class="hint">Get your API token from your ContactOut account settings or by contacting their sales team.</div>
-              </div>
-              <button type="submit" class="btn btn-sm">Connect</button>
-            </form>
-          <% } %>
+          <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+            Your agent can search for people by name, look up contact info, find decision makers at companies, and verify email addresses. This integration is included with your plan — no setup needed.
+          </p>
+          <p style="font-size: 13px; color: var(--text-secondary);">
+            Each email lookup counts as 1 message credit from your monthly limit.
+          </p>
         </div>
       </details>
 
@@ -947,4 +933,65 @@
   renderGmailTags();
 })();
 
+</script>
+
+<script>
+(function() {
+  // Add "Test Connection" button to all connected integrations
+  document.querySelectorAll('.integration-tile').forEach(function(tile) {
+    var badge = tile.querySelector('.status-badge');
+    if (!badge || !badge.classList.contains('status-connected')) return;
+
+    // Determine integration type from the disconnect form action
+    var disconnectForm = tile.querySelector('form[action*="/disconnect"]');
+    if (!disconnectForm) return;
+    var action = disconnectForm.getAttribute('action');
+    var match = action.match(/\/integrations\/([^/]+)\/disconnect/);
+    if (!match) return;
+    var type = match[1];
+
+    // Insert health check button before the disconnect form
+    var wrapper = document.createElement('div');
+    wrapper.style.cssText = 'margin-bottom: 12px; display: flex; align-items: center; gap: 8px;';
+    wrapper.innerHTML = '<button type="button" class="btn btn-sm" style="background: transparent; border: 1px solid var(--border); color: var(--fg);">Test Connection</button>'
+      + '<span class="health-result" style="font-size: 12px;"></span>';
+
+    var hr = disconnectForm.previousElementSibling;
+    if (hr && hr.tagName === 'HR') {
+      hr.parentNode.insertBefore(wrapper, hr);
+    } else {
+      disconnectForm.parentNode.insertBefore(wrapper, disconnectForm);
+    }
+
+    var btn = wrapper.querySelector('button');
+    var resultEl = wrapper.querySelector('.health-result');
+
+    btn.addEventListener('click', function() {
+      btn.disabled = true;
+      btn.textContent = 'Testing...';
+      resultEl.textContent = '';
+      resultEl.style.color = '';
+
+      fetch('/integrations/' + encodeURIComponent(type) + '/health-check', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          btn.disabled = false;
+          btn.textContent = 'Test Connection';
+          if (d.success) {
+            resultEl.style.color = '#16A34A';
+            resultEl.textContent = 'Connected (' + d.response_ms + 'ms)' + (d.detail ? ' — ' + d.detail : '');
+          } else {
+            resultEl.style.color = '#DC2626';
+            resultEl.textContent = 'Failed: ' + (d.error || 'Unknown error');
+          }
+        })
+        .catch(function() {
+          btn.disabled = false;
+          btn.textContent = 'Test Connection';
+          resultEl.style.color = '#DC2626';
+          resultEl.textContent = 'Request failed';
+        });
+    });
+  });
+})();
 </script>

@@ -14,6 +14,18 @@ export function startContactOut(config: ContactOutConfig): void {
   console.log("ContactOut connected");
 }
 
+/**
+ * Auto-start from platform env var (shared key, no user setup needed).
+ * Called on boot — falls back silently if not configured.
+ */
+export function autoStartContactOut(): void {
+  const token = process.env.CONTACTOUT_API_TOKEN;
+  if (token && !contactoutConfig) {
+    contactoutConfig = { api_token: token };
+    console.log("ContactOut auto-started (platform key)");
+  }
+}
+
 export function stopContactOut(): void {
   contactoutConfig = null;
   console.log("ContactOut disconnected");

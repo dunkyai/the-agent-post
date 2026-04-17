@@ -1,0 +1,144 @@
+<%- include('partials/head', { title: 'Logs' }) %>
+<div class="app">
+  <%- include('partials/nav', { active: 'logs' }) %>
+  <div class="main">
+    <h2>Logs</h2>
+
+    <div style="display: flex; gap: 8px; margin-bottom: 16px; align-items: center;">
+      <button class="btn btn-sm log-filter active" data-type="all">All</button>
+      <button class="btn btn-sm log-filter" data-type="error">Errors</button>
+      <button class="btn btn-sm log-filter" data-type="tool">Tools</button>
+      <button class="btn btn-sm log-filter" data-type="integration">Integrations</button>
+      <button class="btn btn-sm log-filter" data-type="task">Tasks</button>
+      <span id="logCount" style="margin-left: auto; font-size: 12px; color: var(--text-secondary);"><%= logs.length %> entries</span>
+    </div>
+
+    <div id="logList" style="max-height: 700px; overflow-y: auto; border: 1px solid var(--border, #e0e0e0); border-radius: 8px;">
+      <% if (logs.length === 0) { %>
+        <div style="padding: 40px; text-align: center; color: var(--text-secondary);">No activity logged yet.</div>
+      <% } %>
+      <% logs.forEach(function(log) { %>
+        <div class="log-entry" data-type="<%= log.type %>" data-id="<%= log.id %>" style="padding: 10px 14px; border-bottom: 1px solid var(--border, #e0e0e0); font-size: 13px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="log-badge log-badge-<%= log.level %>"><%= log.type %></span>
+            <span style="color: var(--text-secondary); font-size: 11px; white-space: nowrap;"><%= new Date(log.created_at + 'Z').toLocaleString() %></span>
+            <span style="color: var(--text-secondary); font-size: 11px;">·</span>
+            <span style="color: var(--text-secondary); font-size: 11px;"><%= log.source %></span>
+            <% if (log.task_id) { %>
+              <a href="/tasks/<%= log.task_id %>" style="color: var(--accent); font-size: 11px; text-decoration: none; margin-left: auto;"><%= log.task_id.slice(0, 12) %></a>
+            <% } %>
+          </div>
+          <div style="margin-top: 4px; line-height: 1.5;"><%= log.summary %></div>
+          <% if (log.detail) { %>
+            <details style="margin-top: 6px;">
+              <summary style="cursor: pointer; font-size: 11px; color: var(--accent); text-decoration: underline; list-style: none;">Details</summary>
+              <pre style="margin: 6px 0 0; padding: 8px; background: var(--bg-secondary, #f5f5f5); border-radius: 4px; font-size: 11px; white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow-y: auto;"><%= log.detail %></pre>
+            </details>
+          <% } %>
+        </div>
+      <% }); %>
+    </div>
+  </div>
+</div>
+
+<style>
+.log-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.log-badge-info { background: var(--bg-secondary, #f0f0f0); color: var(--text-secondary); }
+.log-badge-warn { background: #FEF3C7; color: #92400E; }
+.log-badge-error { background: #FEE2E2; color: #991B1B; }
+.log-filter { opacity: 0.5; }
+.log-filter.active { opacity: 1; }
+</style>
+
+<script>
+(function() {
+  var currentType = 'all';
+  var lastId = 0;
+  var logList = document.getElementById('logList');
+  var logCount = document.getElementById('logCount');
+
+  // Track highest ID for incremental fetch
+  var entries = logList.querySelectorAll('.log-entry');
+  if (entries.length > 0) {
+    lastId = parseInt(entries[0].getAttribute('data-id'), 10) || 0;
+  }
+
+  // Filter buttons
+  document.querySelectorAll('.log-filter').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.log-filter').forEach(function(b) { b.classList.remove('active'); });
+      this.classList.add('active');
+      currentType = this.dataset.type;
+      refreshLogs();
+    });
+  });
+
+  function refreshLogs() {
+    fetch('/logs/api?type=' + currentType + '&limit=200')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        renderLogs(data.logs);
+      })
+      .catch(function() {});
+  }
+
+  function renderLogs(logs) {
+    if (logs.length === 0) {
+      logList.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">No activity logged yet.</div>';
+      logCount.textContent = '0 entries';
+      return;
+    }
+
+    logCount.textContent = logs.length + ' entries';
+    lastId = logs[0].id;
+
+    logList.innerHTML = logs.map(function(log) {
+      var taskLink = log.task_id
+        ? '<a href="/tasks/' + log.task_id + '" style="color: var(--accent); font-size: 11px; text-decoration: none; margin-left: auto;">' + log.task_id.slice(0, 12) + '</a>'
+        : '';
+      var detail = log.detail
+        ? '<details style="margin-top: 6px;"><summary style="cursor: pointer; font-size: 11px; color: var(--accent); text-decoration: underline; list-style: none;">Details</summary><pre style="margin: 6px 0 0; padding: 8px; background: var(--bg-secondary, #f5f5f5); border-radius: 4px; font-size: 11px; white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow-y: auto;">' + escapeHtml(log.detail) + '</pre></details>'
+        : '';
+      return '<div class="log-entry" data-type="' + log.type + '" data-id="' + log.id + '" style="padding: 10px 14px; border-bottom: 1px solid var(--border, #e0e0e0); font-size: 13px;">'
+        + '<div style="display: flex; align-items: center; gap: 8px;">'
+        + '<span class="log-badge log-badge-' + log.level + '">' + log.type + '</span>'
+        + '<span style="color: var(--text-secondary); font-size: 11px; white-space: nowrap;">' + new Date(log.created_at + 'Z').toLocaleString() + '</span>'
+        + '<span style="color: var(--text-secondary); font-size: 11px;">·</span>'
+        + '<span style="color: var(--text-secondary); font-size: 11px;">' + log.source + '</span>'
+        + taskLink
+        + '</div>'
+        + '<div style="margin-top: 4px; line-height: 1.5;">' + escapeHtml(log.summary) + '</div>'
+        + detail
+        + '</div>';
+    }).join('');
+  }
+
+  function escapeHtml(s) {
+    if (!s) return '';
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // Auto-refresh every 5 seconds
+  setInterval(function() {
+    fetch('/logs/api?type=' + currentType + '&since=' + encodeURIComponent(lastId ? '' : '') + '&limit=200')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.logs.length > 0) {
+          renderLogs(data.logs);
+        }
+      })
+      .catch(function() {});
+  }, 5000);
+})();
+</script>
+<%- include('partials/foot') %>

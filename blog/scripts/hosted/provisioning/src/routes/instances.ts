@@ -304,6 +304,7 @@ router.post("/:id/magic-link", async (req, res) => {
           },
           body: JSON.stringify({
             from: "Dunky <noreply@dunky.ai>",
+            reply_to: "elizabeth@hustlefundvc.com",
             to: instance.email,
             subject: "Sign in to your OpenClaw dashboard",
             html: magicLinkEmailHtml(magicLink),
@@ -443,7 +444,7 @@ function magicLinkEmailHtml(link: string): string {
 
 // --- Caddy route management ---
 
-function registerCaddyRoute(subdomain: string, port: number): void {
+export function registerCaddyRoute(subdomain: string, port: number): void {
   // First, try to delete any existing route with the same ID (idempotent)
   try {
     execSync(`curl -sf -X DELETE ${CADDY_ADMIN}/id/openclaw-${subdomain}`, { timeout: 5000 });
@@ -470,13 +471,49 @@ function registerCaddyRoute(subdomain: string, port: number): void {
     terminal: true,
   });
 
+  // Save and remove the wildcard catch-all, add the new route, then re-add wildcard at end
+  let wildcardRoute: string | null = null;
+  try {
+    const routesJson = execSync(
+      `curl -sf ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes`,
+      { timeout: 5000 }
+    ).toString();
+    const routes = JSON.parse(routesJson);
+    for (let i = 0; i < routes.length; i++) {
+      const hosts = routes[i]?.match?.[0]?.host || [];
+      if (hosts.includes("*.dunky.ai")) {
+        wildcardRoute = JSON.stringify(routes[i]);
+        execSync(`curl -sf -X DELETE ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes/${i}`, { timeout: 5000 });
+        console.log(`[caddy] Removed wildcard from index ${i} for ${subdomain}`);
+        break;
+      }
+    }
+  } catch (err) {
+    console.error(`[caddy] Failed to find/remove wildcard:`, err instanceof Error ? err.message : err);
+  }
+
+  // Add the new instance route (appends to end, which is now before where wildcard will go)
   try {
     execSync(
-      `curl -sf -X POST ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes/0 -H "Content-Type: application/json" -d '${routeConfig}'`,
+      `curl -sf -X POST ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes -H "Content-Type: application/json" -d '${routeConfig}'`,
       { timeout: 5000 }
     );
+    console.log(`[caddy] Route added for ${subdomain}.dunky.ai`);
   } catch (err) {
     throw new Error(`Caddy route registration failed for ${subdomain}`);
+  }
+
+  // Re-add wildcard at the very end
+  if (wildcardRoute) {
+    try {
+      execSync(
+        `curl -sf -X POST ${CADDY_ADMIN}/config/apps/http/servers/srv0/routes -H "Content-Type: application/json" -d '${wildcardRoute}'`,
+        { timeout: 5000 }
+      );
+      console.log(`[caddy] Wildcard re-added at end`);
+    } catch (err) {
+      console.error(`[caddy] Failed to re-add wildcard:`, err instanceof Error ? err.message : err);
+    }
   }
 }
 

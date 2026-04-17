@@ -1713,7 +1713,7 @@ const CONTACTOUT_TOOLS = [
         job_title: { type: "array", items: { type: "string" }, description: "Job titles to match (supports boolean: 'VP AND Product')" },
         company: { type: "array", items: { type: "string" }, description: "Company names" },
         location: { type: "array", items: { type: "string" }, description: "Locations (city, state, country)" },
-        seniority: { type: "array", items: { type: "string" }, description: "Seniority levels (e.g. 'Director', 'VP', 'C-Suite')" },
+        seniority: { type: "array", items: { type: "string" }, description: "Seniority levels. Accepted values ONLY: 'entry', 'senior', 'manager', 'director', 'vp', 'c_suite', 'owner', 'partner'" },
         industry: { type: "array", items: { type: "string" }, description: "Industries" },
         keyword: { type: "string", description: "Keyword search across entire profile" },
         reveal_info: { type: "boolean", description: "If true, return actual contact info (emails, phones). Costs credits. Default false." },
@@ -3061,24 +3061,55 @@ export async function callAnthropic(
     if (round > 0 && round % 10 === 0) console.log(`Tool loop round ${round}/${MAX_TOOL_ROUNDS}`);
     onStatus?.(getThinkingMessage(round));
 
-    // Strip base64 screenshots from all but the last tool_result message to prevent context overflow
-    // The AI already processed those screenshots — keeping them wastes ~100K+ tokens per image
+    // Compact prior tool results to prevent context overflow:
+    // 1. Strip base64 screenshots (saves ~100K+ tokens per image)
+    // 2. Truncate verbose tool results (gmail drafts, search results, etc.)
+    // The AI already processed these — keeping full content wastes tokens
     const compactMessages = apiMessages.map((msg, msgIdx) => {
       if (msg.role !== "user" || !Array.isArray(msg.content)) return msg;
-      // Only strip from messages that aren't the last user message
+      // Only compact messages that aren't the last user message
       if (msgIdx === apiMessages.length - 1) return msg;
       return {
         ...msg,
         content: msg.content.map((block: any) => {
-          if (block.type !== "tool_result" || !Array.isArray(block.content)) return block;
-          const hasImage = block.content.some((b: any) => b.type === "image");
-          if (!hasImage) return block;
-          return {
-            ...block,
-            content: block.content.map((b: any) =>
-              b.type === "image" ? { type: "text", text: "[screenshot — image stripped from history]" } : b
-            ),
-          };
+          if (block.type !== "tool_result") return block;
+
+          // Strip screenshots from image content
+          if (Array.isArray(block.content)) {
+            const hasImage = block.content.some((b: any) => b.type === "image");
+            if (hasImage) {
+              return {
+                ...block,
+                content: block.content.map((b: any) =>
+                  b.type === "image" ? { type: "text", text: "[screenshot — image stripped from history]" } : b
+                ),
+              };
+            }
+          }
+
+          // Truncate verbose string results from prior rounds
+          if (typeof block.content === "string" && block.content.length > 500) {
+            try {
+              const parsed = JSON.parse(block.content);
+              // Gmail draft/send results — keep just the confirmation
+              if (parsed.success && (parsed.draftId || parsed.messageId || parsed.action)) {
+                const summary: any = { success: true };
+                if (parsed.action) summary.action = parsed.action;
+                if (parsed.draftId) summary.draftId = parsed.draftId;
+                if (parsed.messageId) summary.messageId = parsed.messageId;
+                if (parsed.to) summary.to = parsed.to;
+                if (parsed.subject) summary.subject = parsed.subject;
+                return { ...block, content: JSON.stringify(summary) };
+              }
+              // Search results — truncate to first 500 chars
+              return { ...block, content: block.content.slice(0, 500) + "..." };
+            } catch {
+              // Not JSON — just truncate
+              return { ...block, content: block.content.slice(0, 500) + "..." };
+            }
+          }
+
+          return block;
         }),
       };
     });

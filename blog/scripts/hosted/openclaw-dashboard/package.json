@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@types/multer": "^2.1.0",
     "better-sqlite3": "^11.7.0",
     "clamscan": "^2.4.0",
     "cookie-parser": "^1.4.7",
@@ -26,6 +25,7 @@
     "@types/better-sqlite3": "^7.6.12",
     "@types/cookie-parser": "^1.4.7",
     "@types/express": "^5.0.0",
+    "@types/multer": "^2.1.0",
     "@types/node": "^22.10.0",
     "@types/supertest": "^7.2.0",
     "@types/uuid": "^10.0.0",

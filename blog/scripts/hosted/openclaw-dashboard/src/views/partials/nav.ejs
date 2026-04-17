@@ -9,6 +9,7 @@
     <li><a href="/settings" class="<%= typeof active !== 'undefined' && active === 'settings' ? 'active' : '' %>">Settings</a></li>
     <li><a href="/shortcuts" class="<%= typeof active !== 'undefined' && active === 'shortcuts' ? 'active' : '' %>">Shortcuts</a></li>
     <li><a href="/jobs" class="<%= typeof active !== 'undefined' && (active === 'jobs' || active === 'tasks') ? 'active' : '' %>">Jobs & Tasks</a></li>
+    <li><a href="/logs" class="<%= typeof active !== 'undefined' && active === 'logs' ? 'active' : '' %>">Logs</a></li>
     <li><a href="/chat" class="<%= typeof active !== 'undefined' && active === 'chat' ? 'active' : '' %>">Chat with your AI</a></li>
   </ul>
   <div class="sidebar-footer">
@@ -17,3 +18,14 @@
     </form>
   </div>
 </nav>
+<script>
+// Instant visual feedback on nav clicks
+document.querySelectorAll('.sidebar-nav a').forEach(function(link) {
+  link.addEventListener('click', function() {
+    // Remove active from all, highlight clicked
+    document.querySelectorAll('.sidebar-nav a').forEach(function(a) { a.classList.remove('active'); });
+    this.classList.add('active');
+    this.style.opacity = '0.7';
+  });
+});
+</script>

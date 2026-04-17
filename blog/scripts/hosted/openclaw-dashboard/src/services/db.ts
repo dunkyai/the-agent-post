@@ -200,6 +200,19 @@ function initSchema(): void {
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (shortcut_id) REFERENCES shortcuts(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      level TEXT NOT NULL DEFAULT 'info',
+      source TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      detail TEXT,
+      task_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_activity_log_type ON activity_log(type, created_at);
+    CREATE INDEX IF NOT EXISTS idx_activity_log_created ON activity_log(created_at);
   `);
 
   // Migrations: add columns to existing tables
@@ -207,6 +220,8 @@ function initSchema(): void {
   try { db.exec("ALTER TABLE email_thread_state ADD COLUMN reply_mode TEXT NOT NULL DEFAULT 'draft'"); } catch {}
   try { db.exec("ALTER TABLE shortcuts ADD COLUMN continuation_prompt TEXT"); } catch {}
   try { db.exec("ALTER TABLE shortcuts ADD COLUMN workflow_steps TEXT"); } catch {}
+  try { db.exec("ALTER TABLE integrations ADD COLUMN last_health_check TEXT"); } catch {}
+  try { db.exec("ALTER TABLE integrations ADD COLUMN last_health_result TEXT"); } catch {}
 }
 
 const DEFAULT_SHORTCUTS = [
@@ -243,7 +258,8 @@ INSTRUCTIONS:
 1. Try contactout_search_people first. If ContactOut errors, switch to web_search immediately.
 2. For each prospect find: first_name, last_name, title, company, email (blank if not found)
 3. Use web_search to find company team pages, LinkedIn profiles, conference speakers
-4. Return findings as JSON array: [{"first_name":"...","last_name":"...","title":"...","company":"...","email":"...","notes":"..."}, ...]
+4. IMPORTANT: Each prospect must be from a DIFFERENT company. Do NOT include multiple people from the same company. 10 prospects = 10 unique companies.
+5. Return findings as JSON array: [{"first_name":"...","last_name":"...","title":"...","company":"...","email":"...","notes":"..."}, ...]
 
 You MUST call contactout_search_people or web_search. Do NOT generate prospects from memory. Every name must come from a tool call.`,
         label: "Researching prospects",
@@ -310,6 +326,8 @@ If the request is clear enough to research (has a topic, and optionally location
 
 Pick columns appropriate for the topic (e.g. hotels: Name, Location, Price, Rating, URL; companies: Name, Industry, Size, Website; restaurants: Name, Cuisine, Price Range, Rating, Address, URL).
 
+IMPORTANT: Do NOT include Email, Phone, or Contact columns. Web search cannot reliably find contact info — that requires a separate tool. Stick to publicly available data: names, titles, companies, websites, ratings, prices, locations, URLs.
+
 If the request is too vague, respond with ONLY:
 {"ready": false, "question": "<one clarifying question>"}`,
         label: "Understanding request",
@@ -329,7 +347,8 @@ INSTRUCTIONS:
 4. Return your findings as a JSON array: [{"name": "...", "col2": "...", ...}, ...]
 
 You MUST call web_search. Do NOT generate results from memory. Every data point must come from a tool call.
-Only include actual found data in the results. Leave fields blank rather than writing "not found", "not available", "no job posting", or similar placeholder text.`,
+Only include actual found data in the results. Leave fields blank rather than writing "not found", "not available", "no job posting", or similar placeholder text.
+Do NOT try to find email addresses, phone numbers, or personal contact info — web search is not reliable for that. Focus on publicly available data: names, titles, companies, websites, descriptions.`,
         label: "Researching",
         tools: true,
       },
@@ -659,6 +678,19 @@ export function upsertIntegration(
        ON CONFLICT(type) DO UPDATE SET config = ?, status = ?, error_message = ?`
     )
     .run(type, config, status, errorMessage ?? null, config, status, errorMessage ?? null);
+
+  // Log integration status changes
+  const displayType = type.startsWith("google:") ? `Google (${type.split(":")[1]})` : type;
+  if (status === "connected") {
+    logActivity({ type: "integration", source: type, summary: `${displayType} connected` });
+  } else if (status === "disconnected") {
+    logActivity({
+      type: "integration",
+      level: errorMessage ? "error" : "info",
+      source: type,
+      summary: `${displayType} disconnected${errorMessage ? ": " + errorMessage : ""}`,
+    });
+  }
 }
 
 export function getAllIntegrations() {
@@ -789,10 +821,22 @@ export function getScheduledJob(id: number): ScheduledJob | undefined {
 export function getMonthlyTaskCount(): number {
   const now = new Date();
   const startOfMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01 00:00:00`;
-  const row = getDb().prepare(
+  const taskCount = (getDb().prepare(
     "SELECT COUNT(*) as count FROM tasks WHERE status = 'completed' AND created_at >= ?"
-  ).get(startOfMonth) as { count: number };
-  return row.count;
+  ).get(startOfMonth) as { count: number }).count;
+
+  // ContactOut email lookups count as additional credits (1 per email found)
+  const contactoutCredits = (getDb().prepare(
+    `SELECT COALESCE(SUM(
+      CASE WHEN output LIKE '%"email"%' OR output LIKE '%work_email%' OR output LIKE '%personal_email%'
+      THEN 1 ELSE 0 END
+    ), 0) as count FROM task_execution_log
+    WHERE tool IN ('contactout_enrich_person', 'contactout_search_people')
+    AND output NOT LIKE '%"error"%'
+    AND created_at >= ?`
+  ).get(startOfMonth) as { count: number }).count;
+
+  return taskCount + contactoutCredits;
 }
 
 export function getAllScheduledJobs(): ScheduledJob[] {
@@ -1034,6 +1078,56 @@ export function deleteSession(token: string): void {
 export function cleanExpiredSessions(): number {
   const result = getDb()
     .prepare("DELETE FROM sessions WHERE expires_at < datetime('now')")
+    .run();
+  return result.changes;
+}
+
+// --- Activity Log ---
+
+export function logActivity(opts: {
+  type: "task" | "tool" | "integration" | "error";
+  level?: "info" | "warn" | "error";
+  source: string;
+  summary: string;
+  detail?: string;
+  task_id?: string;
+}): void {
+  getDb()
+    .prepare("INSERT INTO activity_log (type, level, source, summary, detail, task_id) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(opts.type, opts.level || "info", opts.source, opts.summary, opts.detail || null, opts.task_id || null);
+}
+
+export function getActivityLogs(opts?: {
+  type?: string;
+  since?: string;
+  limit?: number;
+}): Array<{ id: number; type: string; level: string; source: string; summary: string; detail: string | null; task_id: string | null; created_at: string }> {
+  let sql = "SELECT * FROM activity_log";
+  const conditions: string[] = [];
+  const params: any[] = [];
+
+  if (opts?.type && opts.type !== "all") {
+    conditions.push("type = ?");
+    params.push(opts.type);
+  }
+  if (opts?.since) {
+    conditions.push("created_at > ?");
+    params.push(opts.since);
+  }
+
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  sql += " ORDER BY created_at DESC LIMIT ?";
+  params.push(opts?.limit || 200);
+
+  return getDb().prepare(sql).all(...params) as any[];
+}
+
+export function cleanOldActivityLogs(): number {
+  const result = getDb()
+    .prepare("DELETE FROM activity_log WHERE created_at < datetime('now', '-7 days')")
     .run();
   return result.changes;
 }
