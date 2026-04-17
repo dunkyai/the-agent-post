@@ -35,6 +35,7 @@ app.use("/slack/events", slackEventsRouter);
 app.use("/stripe/webhooks", stripeWebhooksRouter);
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
 // Public health check
 app.use(healthRouter);
