@@ -107,11 +107,11 @@ router.get("/admin/analytics", async (req, res) => {
   // Fetch analytics from each running instance in parallel
   const analyticsPromises = instances
     .filter((i) => i.status === "running")
-    .map(async (instance) => {
+    .map(async (instance): Promise<{ instance: typeof instance; analytics: any; error: string | null }> => {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(
+        const r = await fetch(
           `http://localhost:${instance.port}/internal/analytics`,
           {
             headers: { Authorization: `Bearer ${instance.gatewayToken}` },
@@ -119,8 +119,8 @@ router.get("/admin/analytics", async (req, res) => {
           }
         );
         clearTimeout(timeout);
-        if (!res.ok) return { instance, analytics: null, error: `HTTP ${res.status}` };
-        const data = await res.json();
+        if (!r.ok) return { instance, analytics: null, error: `HTTP ${r.status}` };
+        const data = await r.json();
         return { instance, analytics: data, error: null };
       } catch (err: any) {
         return { instance, analytics: null, error: err.message || "unreachable" };
@@ -203,7 +203,7 @@ router.get("/admin/analytics", async (req, res) => {
 </style>
 </head><body>
   <h1>Dunky Analytics</h1>
-  <p class="subtitle">${instances.length} total instances &middot; <a href="?key=${auth}" class="refresh">Refresh</a></p>
+  <p class="subtitle">${instances.length} total instances &middot; <a href="/admin/analytics" class="refresh">Refresh</a></p>
 
   <div class="stats">
     <div class="stat-card"><div class="stat-value">${totalActive}</div><div class="stat-label">Active this month</div></div>
