@@ -143,20 +143,21 @@ router.get("/admin/analytics", async (req, res) => {
   results.sort((a, b) => (b.analytics?.monthly_tasks || 0) - (a.analytics?.monthly_tasks || 0));
 
   // Render HTML
-  const rows = results.map((r) => {
+  const rows = results.filter(r => r.instance).map((r) => {
     const a = r.analytics;
+    const inst = r.instance;
     const lastActive = a?.last_active
       ? new Date(a.last_active + "Z").toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
       : "Never";
     const topTools = a?.top_tools?.slice(0, 3).map((t: any) => t.tool).join(", ") || "-";
     return `<tr>
-      <td>${r.instance.email || "-"}</td>
+      <td>${inst.email || "-"}</td>
       <td>${a?.user_name || "-"}</td>
       <td>${a?.agent_name || "-"}</td>
-      <td>${r.instance.id === "staging" ? "staging" : r.instance.id.slice(0, 8)}</td>
+      <td>${inst.id === "staging" ? "staging" : inst.id.slice(0, 8)}</td>
       <td>${a?.monthly_tasks ?? (r.error ? `<span style="color:#DC2626">${r.error}</span>` : "0")}</td>
-      <td>${a?.message_limit || "-"}</td>
-      <td>${a?.plan || "-"}</td>
+      <td>${a?.message_limit || inst.messageLimit || "-"}</td>
+      <td>${a?.plan || inst.plan || "-"}</td>
       <td>${lastActive}</td>
       <td style="font-size:11px">${topTools}</td>
     </tr>`;
