@@ -895,4 +895,133 @@ router.post("/integrations/gamma/disconnect", (req: Request, res: Response) => {
   res.redirect(303, "/integrations?flash=Gamma+disconnected");
 });
 
+// --- Health Checks ---
+
+router.post("/integrations/:type/health-check", async (req: Request, res: Response) => {
+  const type = req.params.type;
+  const start = Date.now();
+
+  try {
+    let result: { success: boolean; detail?: string; error?: string };
+
+    if (type === "slack") {
+      const integration = getIntegration("slack");
+      if (!integration || integration.status !== "connected") throw new Error("Not connected");
+      const config = JSON.parse(decrypt(integration.config));
+      const resp = await fetch("https://slack.com/api/auth.test", {
+        headers: { Authorization: `Bearer ${config.bot_token}` },
+      });
+      const data: any = await resp.json();
+      result = data.ok ? { success: true, detail: `Team: ${data.team}` } : { success: false, error: data.error };
+
+    } else if (type.startsWith("google:") || type === "google") {
+      // Find the Google integration
+      const googleIntegrations = getGoogleIntegrations();
+      const integration = type === "google" ? googleIntegrations[0] : googleIntegrations.find(g => g.type === type);
+      if (!integration || integration.status !== "connected") throw new Error("Not connected");
+      const config = JSON.parse(decrypt(integration.config));
+      // Test with a simple Gmail profile call
+      const resp = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+        headers: { Authorization: `Bearer ${config.access_token}` },
+      });
+      if (resp.ok) {
+        const data: any = await resp.json();
+        result = { success: true, detail: `Email: ${data.emailAddress}` };
+      } else {
+        result = { success: false, error: `Gmail API returned ${resp.status}` };
+      }
+
+    } else if (type === "supabase") {
+      const probeResult = await (await import("../services/supabase")).probeSupabaseHealth();
+      result = probeResult;
+
+    } else if (type === "buffer") {
+      const integration = getIntegration("buffer");
+      if (!integration || integration.status !== "connected") throw new Error("Not connected");
+      const config = JSON.parse(decrypt(integration.config));
+      const resp = await fetch("https://api.bufferapp.com/v1/profiles.json?access_token=" + config.access_token);
+      result = resp.ok ? { success: true, detail: "Buffer API accessible" } : { success: false, error: `Buffer API returned ${resp.status}` };
+
+    } else if (type === "luma") {
+      const integration = getIntegration("luma");
+      if (!integration || integration.status !== "connected") throw new Error("Not connected");
+      const config = JSON.parse(decrypt(integration.config));
+      const resp = await fetch("https://api.lu.ma/public/v1/event/list?limit=1", {
+        headers: { "x-luma-api-key": config.api_key },
+      });
+      result = resp.ok ? { success: true, detail: "Luma API accessible" } : { success: false, error: `Luma API returned ${resp.status}` };
+
+    } else if (type === "notion") {
+      const integration = getIntegration("notion");
+      if (!integration || integration.status !== "connected") throw new Error("Not connected");
+      const config = JSON.parse(decrypt(integration.config));
+      const resp = await fetch("https://api.notion.com/v1/search", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${config.access_token}`,
+          "Notion-Version": "2022-06-28",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ query: "", page_size: 1 }),
+      });
+      result = resp.ok ? { success: true, detail: "Notion API accessible" } : { success: false, error: `Notion API returned ${resp.status}` };
+
+    } else if (type === "airtable") {
+      const integration = getIntegration("airtable");
+      if (!integration || integration.status !== "connected") throw new Error("Not connected");
+      const config = JSON.parse(decrypt(integration.config));
+      const resp = await fetch("https://api.airtable.com/v0/meta/bases", {
+        headers: { Authorization: `Bearer ${config.access_token}` },
+      });
+      result = resp.ok ? { success: true, detail: "Airtable API accessible" } : { success: false, error: `Airtable API returned ${resp.status}` };
+
+    } else if (type === "twitter") {
+      const integration = getIntegration("twitter");
+      if (!integration || integration.status !== "connected") throw new Error("Not connected");
+      const config = JSON.parse(decrypt(integration.config));
+      const resp = await fetch("https://api.twitter.com/2/users/me", {
+        headers: { Authorization: `Bearer ${config.access_token}` },
+      });
+      result = resp.ok ? { success: true, detail: "Twitter API accessible" } : { success: false, error: `Twitter API returned ${resp.status}` };
+
+    } else if (type === "contactout") {
+      const integration = getIntegration("contactout");
+      if (!integration || integration.status !== "connected") throw new Error("Not connected");
+      const config = JSON.parse(decrypt(integration.config));
+      const resp = await fetch("https://api.contactout.com/v2/search/people?page_size=1", {
+        headers: { Authorization: `Bearer ${config.api_token}`, "Content-Type": "application/json" },
+      });
+      result = resp.ok ? { success: true, detail: "ContactOut API accessible" } : { success: false, error: `ContactOut API returned ${resp.status}` };
+
+    } else {
+      result = { success: false, error: `Health check not implemented for ${type}` };
+    }
+
+    const responseMs = Date.now() - start;
+    const healthResult = JSON.stringify({ ...result, response_ms: responseMs });
+
+    // Update integration with health check result
+    const { logActivity } = require("../services/db");
+    logActivity({
+      type: "integration",
+      level: result.success ? "info" : "error",
+      source: type,
+      summary: result.success ? `Health check passed (${responseMs}ms)` : `Health check failed: ${result.error}`,
+    });
+
+    // Store last health check result
+    try {
+      getIntegration(type); // ensure it exists
+      const db = require("../services/db").getDb();
+      db.prepare("UPDATE integrations SET last_health_check = datetime('now'), last_health_result = ? WHERE type = ?")
+        .run(healthResult, type);
+    } catch {}
+
+    res.json({ ...result, response_ms: responseMs });
+  } catch (err: any) {
+    const responseMs = Date.now() - start;
+    res.json({ success: false, error: err.message || "Health check failed", response_ms: responseMs });
+  }
+});
+
 export default router;

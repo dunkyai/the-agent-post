@@ -261,9 +261,45 @@
         errorEl.textContent = entry.result.error;
       } else if (entry.result.content) {
         addMessageWithTypewriter("assistant", entry.result.content);
+        fetchToolCalls(entry.taskId);
         maybeShowMemoryLink();
       }
     }
+  }
+
+  function fetchToolCalls(taskId) {
+    fetch("/tasks/" + encodeURIComponent(taskId) + "/api")
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.log || data.log.length === 0) return;
+        var bubbles = messages.querySelectorAll(".chat-message.assistant .bubble");
+        var lastBubble = bubbles[bubbles.length - 1];
+        if (!lastBubble) return;
+
+        var toolSection = document.createElement("details");
+        toolSection.className = "tool-calls-section";
+        var toolCount = data.log.length;
+        toolSection.innerHTML = '<summary>Used ' + toolCount + ' tool' + (toolCount !== 1 ? 's' : '') + '</summary>'
+          + '<div class="tool-calls-list">'
+          + data.log.map(function(tc) {
+            var isError = (tc.output || '').indexOf('"error"') !== -1;
+            return '<div class="tool-call-item">'
+              + '<span class="tool-name">' + escapeHtml(tc.tool) + '</span>'
+              + '<span class="tool-duration">' + tc.duration_ms + 'ms</span>'
+              + '<span class="tool-status ' + (isError ? 'tool-error' : 'tool-ok') + '">' + (isError ? 'error' : 'ok') + '</span>'
+              + '</div>';
+          }).join('')
+          + '</div>';
+        lastBubble.appendChild(toolSection);
+      })
+      .catch(function() {});
+  }
+
+  function escapeHtml(s) {
+    if (!s) return '';
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
   }
 
   function addMessageWithTypewriter(role, content) {

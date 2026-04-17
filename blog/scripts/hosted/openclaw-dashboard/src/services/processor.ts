@@ -4,6 +4,7 @@ import {
   updateTaskStatus,
   appendExecutionLog,
 } from "./task";
+import { logActivity } from "./db";
 import {
   buildSystemPrompt,
   getProvider,
@@ -182,6 +183,19 @@ export async function processTask(
         output,
         duration_ms: durationMs,
       });
+
+      // Log tool calls to activity log (errors only to keep volume manageable)
+      const isError = typeof output === "string" && output.includes('"error"');
+      if (isError) {
+        logActivity({
+          type: "tool",
+          level: "error",
+          source: task.input.source_channel || "unknown",
+          summary: `Tool ${toolName} failed (${durationMs}ms)`,
+          detail: typeof output === "string" ? output.slice(0, 500) : undefined,
+          task_id: taskId,
+        });
+      }
     };
 
     // Build source context (Slack thread delivery + source channel for security restrictions)
@@ -307,6 +321,14 @@ export async function processTask(
       }),
     });
     console.error(`Task ${taskId} failed:`, err.message);
+    logActivity({
+      type: "error",
+      level: "error",
+      source: task.input.source_channel || "unknown",
+      summary: `Task failed: ${err.message || "Unknown error"}`,
+      detail: err.stack || err.message,
+      task_id: taskId,
+    });
     return getTaskById(taskId)!;
   }
 }

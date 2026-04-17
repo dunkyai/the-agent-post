@@ -608,6 +608,34 @@
       .main { padding: 20px 16px; }
       .integration-grid { grid-template-columns: 1fr; }
     }
+
+    /* Tool call visibility in chat */
+    .tool-calls-section {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--rule-light, #e0e0e0);
+      font-size: 12px;
+    }
+    .tool-calls-section summary {
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 12px;
+      list-style: none;
+    }
+    .tool-calls-section summary:hover { color: var(--fg); }
+    .tool-calls-list { padding: 4px 0; }
+    .tool-call-item {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 2px 0;
+      font-family: monospace;
+      font-size: 11px;
+    }
+    .tool-name { font-weight: 600; color: var(--fg); }
+    .tool-duration { color: var(--text-secondary); }
+    .tool-ok { color: #16A34A; }
+    .tool-error { color: #DC2626; }
   </style>
 </head>
 <body>

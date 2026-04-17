@@ -948,3 +948,64 @@
 })();
 
 </script>
+
+<script>
+(function() {
+  // Add "Test Connection" button to all connected integrations
+  document.querySelectorAll('.integration-tile').forEach(function(tile) {
+    var badge = tile.querySelector('.status-badge');
+    if (!badge || !badge.classList.contains('status-connected')) return;
+
+    // Determine integration type from the disconnect form action
+    var disconnectForm = tile.querySelector('form[action*="/disconnect"]');
+    if (!disconnectForm) return;
+    var action = disconnectForm.getAttribute('action');
+    var match = action.match(/\/integrations\/([^/]+)\/disconnect/);
+    if (!match) return;
+    var type = match[1];
+
+    // Insert health check button before the disconnect form
+    var wrapper = document.createElement('div');
+    wrapper.style.cssText = 'margin-bottom: 12px; display: flex; align-items: center; gap: 8px;';
+    wrapper.innerHTML = '<button type="button" class="btn btn-sm" style="background: transparent; border: 1px solid var(--border); color: var(--fg);">Test Connection</button>'
+      + '<span class="health-result" style="font-size: 12px;"></span>';
+
+    var hr = disconnectForm.previousElementSibling;
+    if (hr && hr.tagName === 'HR') {
+      hr.parentNode.insertBefore(wrapper, hr);
+    } else {
+      disconnectForm.parentNode.insertBefore(wrapper, disconnectForm);
+    }
+
+    var btn = wrapper.querySelector('button');
+    var resultEl = wrapper.querySelector('.health-result');
+
+    btn.addEventListener('click', function() {
+      btn.disabled = true;
+      btn.textContent = 'Testing...';
+      resultEl.textContent = '';
+      resultEl.style.color = '';
+
+      fetch('/integrations/' + encodeURIComponent(type) + '/health-check', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          btn.disabled = false;
+          btn.textContent = 'Test Connection';
+          if (d.success) {
+            resultEl.style.color = '#16A34A';
+            resultEl.textContent = 'Connected (' + d.response_ms + 'ms)' + (d.detail ? ' — ' + d.detail : '');
+          } else {
+            resultEl.style.color = '#DC2626';
+            resultEl.textContent = 'Failed: ' + (d.error || 'Unknown error');
+          }
+        })
+        .catch(function() {
+          btn.disabled = false;
+          btn.textContent = 'Test Connection';
+          resultEl.style.color = '#DC2626';
+          resultEl.textContent = 'Request failed';
+        });
+    });
+  });
+})();
+</script>

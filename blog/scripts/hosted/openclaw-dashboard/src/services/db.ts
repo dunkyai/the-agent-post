@@ -200,6 +200,19 @@ function initSchema(): void {
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (shortcut_id) REFERENCES shortcuts(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      level TEXT NOT NULL DEFAULT 'info',
+      source TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      detail TEXT,
+      task_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_activity_log_type ON activity_log(type, created_at);
+    CREATE INDEX IF NOT EXISTS idx_activity_log_created ON activity_log(created_at);
   `);
 
   // Migrations: add columns to existing tables
@@ -207,6 +220,8 @@ function initSchema(): void {
   try { db.exec("ALTER TABLE email_thread_state ADD COLUMN reply_mode TEXT NOT NULL DEFAULT 'draft'"); } catch {}
   try { db.exec("ALTER TABLE shortcuts ADD COLUMN continuation_prompt TEXT"); } catch {}
   try { db.exec("ALTER TABLE shortcuts ADD COLUMN workflow_steps TEXT"); } catch {}
+  try { db.exec("ALTER TABLE integrations ADD COLUMN last_health_check TEXT"); } catch {}
+  try { db.exec("ALTER TABLE integrations ADD COLUMN last_health_result TEXT"); } catch {}
 }
 
 const DEFAULT_SHORTCUTS = [
@@ -662,6 +677,19 @@ export function upsertIntegration(
        ON CONFLICT(type) DO UPDATE SET config = ?, status = ?, error_message = ?`
     )
     .run(type, config, status, errorMessage ?? null, config, status, errorMessage ?? null);
+
+  // Log integration status changes
+  const displayType = type.startsWith("google:") ? `Google (${type.split(":")[1]})` : type;
+  if (status === "connected") {
+    logActivity({ type: "integration", source: type, summary: `${displayType} connected` });
+  } else if (status === "disconnected") {
+    logActivity({
+      type: "integration",
+      level: errorMessage ? "error" : "info",
+      source: type,
+      summary: `${displayType} disconnected${errorMessage ? ": " + errorMessage : ""}`,
+    });
+  }
 }
 
 export function getAllIntegrations() {
@@ -1037,6 +1065,56 @@ export function deleteSession(token: string): void {
 export function cleanExpiredSessions(): number {
   const result = getDb()
     .prepare("DELETE FROM sessions WHERE expires_at < datetime('now')")
+    .run();
+  return result.changes;
+}
+
+// --- Activity Log ---
+
+export function logActivity(opts: {
+  type: "task" | "tool" | "integration" | "error";
+  level?: "info" | "warn" | "error";
+  source: string;
+  summary: string;
+  detail?: string;
+  task_id?: string;
+}): void {
+  getDb()
+    .prepare("INSERT INTO activity_log (type, level, source, summary, detail, task_id) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(opts.type, opts.level || "info", opts.source, opts.summary, opts.detail || null, opts.task_id || null);
+}
+
+export function getActivityLogs(opts?: {
+  type?: string;
+  since?: string;
+  limit?: number;
+}): Array<{ id: number; type: string; level: string; source: string; summary: string; detail: string | null; task_id: string | null; created_at: string }> {
+  let sql = "SELECT * FROM activity_log";
+  const conditions: string[] = [];
+  const params: any[] = [];
+
+  if (opts?.type && opts.type !== "all") {
+    conditions.push("type = ?");
+    params.push(opts.type);
+  }
+  if (opts?.since) {
+    conditions.push("created_at > ?");
+    params.push(opts.since);
+  }
+
+  if (conditions.length > 0) {
+    sql += " WHERE " + conditions.join(" AND ");
+  }
+
+  sql += " ORDER BY created_at DESC LIMIT ?";
+  params.push(opts?.limit || 200);
+
+  return getDb().prepare(sql).all(...params) as any[];
+}
+
+export function cleanOldActivityLogs(): number {
+  const result = getDb()
+    .prepare("DELETE FROM activity_log WHERE created_at < datetime('now', '-7 days')")
     .run();
   return result.changes;
 }
