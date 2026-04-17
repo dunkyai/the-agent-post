@@ -419,10 +419,14 @@
     .thinking-bubble {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 8px;
       color: var(--text-secondary);
-      font-style: italic;
-      min-width: 200px;
+      min-width: 240px;
+      animation: thinking-fade-in 0.3s ease;
+    }
+    @keyframes thinking-fade-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
     }
     .thinking-top {
       display: flex;
@@ -431,6 +435,8 @@
     }
     .thinking-text {
       transition: opacity 0.3s ease;
+      font-size: 13px;
+      font-weight: 500;
     }
     .thinking-text.fade-out { opacity: 0; }
     .thinking-dots {
@@ -439,8 +445,8 @@
       margin-left: 2px;
     }
     .thinking-dots span {
-      width: 4px;
-      height: 4px;
+      width: 5px;
+      height: 5px;
       border-radius: 50%;
       background: var(--accent);
       animation: dot-bounce 1.4s ease-in-out infinite;
@@ -451,6 +457,26 @@
       0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
       40% { opacity: 1; transform: scale(1.2); }
     }
+    .thinking-skeleton {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .thinking-skeleton-line {
+      height: 10px;
+      border-radius: 4px;
+      background: linear-gradient(90deg, var(--rule-light) 25%, var(--bg-secondary, #e8e8e8) 50%, var(--rule-light) 75%);
+      background-size: 200% 100%;
+      animation: skeleton-shimmer 1.5s ease-in-out infinite;
+    }
+    .thinking-skeleton-line:nth-child(1) { width: 85%; }
+    .thinking-skeleton-line:nth-child(2) { width: 70%; }
+    .thinking-skeleton-line:nth-child(3) { width: 55%; }
+    @keyframes skeleton-shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
     .thinking-progress {
       height: 3px;
       border-radius: 2px;
@@ -460,15 +486,38 @@
     .thinking-progress-bar {
       height: 100%;
       border-radius: 2px;
-      background: linear-gradient(90deg, var(--accent), #8B5CF6);
-      animation: progress-sweep 2.5s ease-in-out infinite;
-      width: 40%;
+      background: linear-gradient(90deg, var(--accent), #8B5CF6, var(--accent));
+      background-size: 200% 100%;
+      animation: progress-sweep 2s ease-in-out infinite;
+      width: 100%;
     }
     @keyframes progress-sweep {
-      0% { transform: translateX(-100%); }
-      100% { transform: translateX(350%); }
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
     }
     .spinner { display: none; }
+
+    /* Typewriter effect for new messages */
+    .typewriter-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1em;
+      background: var(--accent);
+      margin-left: 2px;
+      animation: cursor-blink 0.8s step-end infinite;
+      vertical-align: text-bottom;
+    }
+    @keyframes cursor-blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .message-appear {
+      animation: msg-slide-in 0.3s ease;
+    }
+    @keyframes msg-slide-in {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
 
     .chat-error {
       color: var(--danger);

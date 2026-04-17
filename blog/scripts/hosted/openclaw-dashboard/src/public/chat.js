@@ -210,7 +210,7 @@
     var thinking = document.createElement("div");
     thinking.className = "chat-message assistant thinking-indicator";
     thinking.setAttribute("data-task-id", taskId || "pending");
-    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><div class="thinking-top"><span class="thinking-dots"><span></span><span></span><span></span></span> <span class="thinking-text">Thinking...</span></div><div class="thinking-progress"><div class="thinking-progress-bar"></div></div></div>';
+    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><div class="thinking-top"><span class="thinking-dots"><span></span><span></span><span></span></span> <span class="thinking-text">Thinking...</span></div><div class="thinking-skeleton"><div class="thinking-skeleton-line"></div><div class="thinking-skeleton-line"></div><div class="thinking-skeleton-line"></div></div><div class="thinking-progress"><div class="thinking-progress-bar"></div></div></div>';
     messages.appendChild(thinking);
     scrollToBottom();
     return thinking;
@@ -220,6 +220,39 @@
    * Flush completed tasks from the front of the queue in order.
    * If task B finishes before task A, B's result is held until A completes.
    */
+  function typewriterEffect(bubble, html, callback) {
+    var temp = document.createElement("div");
+    temp.innerHTML = html;
+    var fullText = temp.textContent || "";
+    var charIndex = 0;
+    var speed = Math.max(5, Math.min(20, 2000 / fullText.length)); // adaptive speed
+
+    // Show cursor
+    var cursor = document.createElement("span");
+    cursor.className = "typewriter-cursor";
+    bubble.innerHTML = "";
+    bubble.appendChild(cursor);
+
+    function type() {
+      if (charIndex < fullText.length) {
+        // Add characters in chunks for longer texts
+        var chunk = Math.ceil(fullText.length / 100);
+        var end = Math.min(charIndex + chunk, fullText.length);
+        bubble.innerHTML = renderMarkdown(fullText.slice(0, end));
+        bubble.appendChild(cursor);
+        charIndex = end;
+        scrollToBottom();
+        setTimeout(type, speed);
+      } else {
+        // Done — show full rendered HTML and remove cursor
+        bubble.innerHTML = html;
+        if (callback) callback();
+        scrollToBottom();
+      }
+    }
+    type();
+  }
+
   function flushTaskQueue() {
     while (taskQueue.length > 0 && taskQueue[0].result !== null) {
       var entry = taskQueue.shift();
@@ -227,10 +260,43 @@
       if (entry.result.error) {
         errorEl.textContent = entry.result.error;
       } else if (entry.result.content) {
-        addMessage("assistant", entry.result.content);
+        addMessageWithTypewriter("assistant", entry.result.content);
         maybeShowMemoryLink();
       }
     }
+  }
+
+  function addMessageWithTypewriter(role, content) {
+    var emptyMsg = messages.querySelector(":scope > p");
+    if (emptyMsg) emptyMsg.remove();
+
+    var div = document.createElement("div");
+    div.className = "chat-message " + role + " message-appear";
+
+    var avatar = document.createElement("div");
+    avatar.className = "avatar agent-avatar";
+    avatar.title = agentName;
+    var img = document.createElement("img");
+    img.src = "/mascot.webp";
+    img.alt = agentName;
+    avatar.appendChild(img);
+
+    var bubble = document.createElement("div");
+    bubble.className = "bubble";
+
+    div.appendChild(avatar);
+    div.appendChild(bubble);
+    messages.appendChild(div);
+    scrollToBottom();
+
+    var html = renderMarkdown(content);
+    typewriterEffect(bubble, html, function() {
+      // Re-enable input after typewriter finishes
+      input.disabled = false;
+      sendBtn.disabled = false;
+      sendBtn.textContent = "Send";
+      input.focus();
+    });
   }
 
   /**
