@@ -194,7 +194,10 @@ async function reconnectIntegrations() {
       const config = JSON.parse(decrypt(contactout.config));
       const { startContactOut } = require("./services/contactout");
       startContactOut(config);
-      console.log("ContactOut reconnected");
+      console.log("ContactOut reconnected (user key)");
+    } else {
+      const { autoStartContactOut } = require("./services/contactout");
+      autoStartContactOut();
     }
   } catch (err: unknown) {
     console.error("Failed to reconnect ContactOut:", err instanceof Error ? err.message : err);

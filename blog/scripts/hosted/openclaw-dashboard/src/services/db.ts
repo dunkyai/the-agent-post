@@ -821,10 +821,22 @@ export function getScheduledJob(id: number): ScheduledJob | undefined {
 export function getMonthlyTaskCount(): number {
   const now = new Date();
   const startOfMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01 00:00:00`;
-  const row = getDb().prepare(
+  const taskCount = (getDb().prepare(
     "SELECT COUNT(*) as count FROM tasks WHERE status = 'completed' AND created_at >= ?"
-  ).get(startOfMonth) as { count: number };
-  return row.count;
+  ).get(startOfMonth) as { count: number }).count;
+
+  // ContactOut email lookups count as additional credits (1 per email found)
+  const contactoutCredits = (getDb().prepare(
+    `SELECT COALESCE(SUM(
+      CASE WHEN output LIKE '%"email"%' OR output LIKE '%work_email%' OR output LIKE '%personal_email%'
+      THEN 1 ELSE 0 END
+    ), 0) as count FROM task_execution_log
+    WHERE tool IN ('contactout_enrich_person', 'contactout_search_people')
+    AND output NOT LIKE '%"error"%'
+    AND created_at >= ?`
+  ).get(startOfMonth) as { count: number }).count;
+
+  return taskCount + contactoutCredits;
 }
 
 export function getAllScheduledJobs(): ScheduledJob[] {
