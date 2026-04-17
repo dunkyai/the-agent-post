@@ -154,6 +154,7 @@ async function handleStripeEvent(event: StripeWebhookEvent): Promise<void> {
             },
             body: JSON.stringify({
               from: "Dunky <noreply@dunky.ai>",
+              reply_to: "elizabeth@hustlefundvc.com",
               to: email,
               subject: "Your AI agent is ready — Dunky",
               html: welcomeEmailHtml(dashboardUrl),

@@ -304,6 +304,7 @@ router.post("/:id/magic-link", async (req, res) => {
           },
           body: JSON.stringify({
             from: "Dunky <noreply@dunky.ai>",
+            reply_to: "elizabeth@hustlefundvc.com",
             to: instance.email,
             subject: "Sign in to your OpenClaw dashboard",
             html: magicLinkEmailHtml(magicLink),
