@@ -120,8 +120,13 @@ router.get("/admin/analytics", async (req, res) => {
         );
         clearTimeout(timeout);
         if (!r.ok) return { instance, analytics: null, error: `HTTP ${r.status}` };
-        const data = await r.json();
-        return { instance, analytics: data, error: null };
+        const text = await r.text();
+        try {
+          const data = JSON.parse(text);
+          return { instance, analytics: data, error: null };
+        } catch {
+          return { instance, analytics: null, error: "needs redeploy" };
+        }
       } catch (err: any) {
         return { instance, analytics: null, error: err.message || "unreachable" };
       }
