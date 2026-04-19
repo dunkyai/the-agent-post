@@ -113,4 +113,23 @@ router.post("/getting-started/research", async (req: Request, res: Response) => 
   }
 });
 
+// GET /getting-started/billing — proxy to provisioning for billing info
+router.get("/getting-started/billing", async (req: Request, res: Response) => {
+  const instanceId = process.env.INSTANCE_ID;
+  const provUrl = process.env.PROVISIONING_URL;
+  if (!instanceId || !provUrl) {
+    res.json({ error: "Billing not available" });
+    return;
+  }
+  try {
+    const r = await fetch(`${provUrl}/instances/${instanceId}/billing`, {
+      headers: { Authorization: `Bearer ${process.env.GATEWAY_TOKEN}` },
+    });
+    const data = await r.json();
+    res.json(data);
+  } catch (err: any) {
+    res.json({ error: err.message || "Failed to load billing" });
+  }
+});
+
 export default router;
