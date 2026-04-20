@@ -529,10 +529,18 @@ function deregisterCaddyRoute(subdomain: string): void {
 }
 
 // GET /instances/:id/billing — billing info for the dashboard billing tab
+// Self-authenticated: verifies the instance's own gateway token
 router.get("/:id/billing", async (req, res) => {
   const instance = store.getInstance(req.params.id);
   if (!instance) {
     res.status(404).json({ error: "Instance not found" });
+    return;
+  }
+
+  // Verify gateway token
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (token !== instance.gatewayToken) {
+    res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
