@@ -17,9 +17,9 @@ RUN apk add --no-cache python3 make g++ && \
     npm cache clean --force && \
     apk del python3 make g++ && \
     rm -rf /var/cache/apk/*
-RUN apk add --no-cache ffmpeg curl && \
+RUN apk add --no-cache ffmpeg curl gnupg && \
     curl -sLf https://cli.doppler.com/install.sh | sh && \
-    apk del curl
+    apk del curl gnupg
 COPY --from=builder /app/dist/ ./dist/
 COPY src/views/ ./dist/views/
 COPY src/public/ ./dist/public/
