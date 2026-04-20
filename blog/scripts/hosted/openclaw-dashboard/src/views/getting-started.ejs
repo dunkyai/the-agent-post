@@ -89,7 +89,7 @@
         </div>
       </div>
 
-      <div class="gs-actions">
+      <div class="gs-actions" id="gsFormActions">
         <button type="submit" class="btn">Save Changes</button>
       </div>
     </form>
@@ -230,6 +230,9 @@
       panels.forEach(function (p) { p.classList.remove("active"); });
       tab.classList.add("active");
       document.querySelector('[data-panel="' + target + '"]').classList.add("active");
+      // Hide Save button on billing tab
+      var formActions = document.getElementById("gsFormActions");
+      if (formActions) formActions.style.display = target === "billing" ? "none" : "";
       // Lazy-load billing data when tab is first clicked
       if (target === "billing" && !window.__billingLoaded) {
         window.__billingLoaded = true;
@@ -285,7 +288,11 @@
           html += '<div style="display: flex; gap: 10px; flex-wrap: wrap;">';
           html += '<a href="' + data.portal_url + '" class="btn" style="text-decoration: none;">Manage Subscription</a>';
           html += '</div>';
-          html += '<p style="font-size: 12px; color: var(--text-secondary);">You can upgrade, downgrade, update payment method, or cancel from the Stripe billing portal.</p>';
+          html += '<p style="font-size: 12px; color: var(--text-secondary);">Upgrade, downgrade, update payment method, or cancel from the Stripe billing portal.</p>';
+        } else {
+          html += '<div style="padding: 16px; background: var(--bg); border-radius: 10px;">';
+          html += '<p style="font-size: 13px; color: var(--text-secondary); margin: 0;">To manage your subscription or cancel, email <a href="mailto:dunkythehippocorn@gmail.com" style="color: var(--accent);">dunkythehippocorn@gmail.com</a></p>';
+          html += '</div>';
         }
 
         html += '</div>';
