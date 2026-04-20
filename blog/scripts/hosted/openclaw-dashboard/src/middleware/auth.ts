@@ -30,7 +30,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 
   // Skip auth for public routes
   const publicPaths = ["/login", "/login/magic-link", "/login/callback", "/health", "/privacy", "/terms"];
-  if (publicPaths.includes(req.path) || req.path.startsWith("/webhook/")) {
+  if (publicPaths.includes(req.path) || req.path.startsWith("/webhook/") || req.path.startsWith("/internal/")) {
     return next();
   }
 
