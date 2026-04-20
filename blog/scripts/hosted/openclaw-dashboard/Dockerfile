@@ -17,11 +17,9 @@ RUN apk add --no-cache python3 make g++ && \
     npm cache clean --force && \
     apk del python3 make g++ && \
     rm -rf /var/cache/apk/*
-RUN apk add --no-cache ffmpeg curl gnupg && \
-    curl -sLf --retry 3 --tlsv1.2 --proto "=https" "https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.key" | gpg --import && \
-    curl -sLf --retry 3 --tlsv1.2 --proto "=https" "https://packages.doppler.com/public/cli/config.alpine.txt" >> /etc/apk/repositories && \
-    apk add --no-cache doppler && \
-    apk del curl gnupg
+RUN apk add --no-cache ffmpeg curl && \
+    curl -sLf https://cli.doppler.com/install.sh | sh && \
+    apk del curl
 COPY --from=builder /app/dist/ ./dist/
 COPY src/views/ ./dist/views/
 COPY src/public/ ./dist/public/
