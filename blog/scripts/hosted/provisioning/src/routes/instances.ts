@@ -552,7 +552,7 @@ router.get("/:id/billing", async (req, res) => {
       const client = new stripe(secretKey);
 
       // Get subscription for next charge date
-      const sub = await client.subscriptions.retrieve(instance.stripeSubscriptionId);
+      const sub = await client.subscriptions.retrieve(instance.stripeSubscriptionId) as any;
       if (sub.current_period_end) {
         result.next_charge = new Date(sub.current_period_end * 1000).toISOString();
       }
