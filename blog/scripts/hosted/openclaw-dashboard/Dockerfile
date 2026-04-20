@@ -24,7 +24,7 @@ COPY --from=builder /app/dist/ ./dist/
 COPY src/views/ ./dist/views/
 COPY src/public/ ./dist/public/
 RUN mkdir -p /data && chown openclaw:openclaw /data
-ENV NODE_ENV=production PORT=3000 DB_PATH=/data/openclaw.db
+ENV NODE_ENV=production PORT=3000 DB_PATH=/data/openclaw.db DOPPLER_HOME=/tmp/.doppler
 USER openclaw
 EXPOSE 3000
 ENTRYPOINT ["doppler", "run", "--"]
