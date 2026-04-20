@@ -66,6 +66,7 @@ export async function createContainer(opts: {
       Tmpfs: {
         "/tmp": "rw,noexec,nosuid,size=67108864",
         "/run": "rw,noexec,nosuid,size=8388608",
+        "/home/openclaw/.doppler": "rw,noexec,nosuid,size=1048576",
       },
       Ulimits: [
         { Name: "nofile", Soft: 4096, Hard: 8192 },

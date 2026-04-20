@@ -110,6 +110,7 @@ deploy_instance() {
       -p "$PORT:3000" \\
       -v "openclaw-data-$ID:/data" \\
       -v "openclaw-sandbox-$ID:/sandbox" \\
+      --tmpfs /home/openclaw/.doppler:rw,noexec,nosuid,size=1048576 \\
       -e DOPPLER_TOKEN="$DOPPLER_TOKEN" \\
       -e GATEWAY_TOKEN="$TOKEN" \\
       -e INSTANCE_ID="$ID" \\
