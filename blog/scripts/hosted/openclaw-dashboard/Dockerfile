@@ -17,7 +17,11 @@ RUN apk add --no-cache python3 make g++ && \
     npm cache clean --force && \
     apk del python3 make g++ && \
     rm -rf /var/cache/apk/*
-RUN apk add --no-cache ffmpeg
+RUN apk add --no-cache ffmpeg curl && \
+    curl -sLf --retry 3 --tlsv1.2 --proto "=https" "https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.key" | gpg --import && \
+    curl -sLf --retry 3 --tlsv1.2 --proto "=https" "https://packages.doppler.com/public/cli/config.alpine.txt" >> /etc/apk/repositories && \
+    apk add --no-cache doppler && \
+    apk del curl
 COPY --from=builder /app/dist/ ./dist/
 COPY src/views/ ./dist/views/
 COPY src/public/ ./dist/public/
@@ -25,4 +29,5 @@ RUN mkdir -p /data && chown openclaw:openclaw /data
 ENV NODE_ENV=production PORT=3000 DB_PATH=/data/openclaw.db
 USER openclaw
 EXPOSE 3000
+ENTRYPOINT ["doppler", "run", "--"]
 CMD ["node", "dist/index.js"]
