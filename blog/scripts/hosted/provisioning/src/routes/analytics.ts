@@ -155,6 +155,11 @@ router.get("/admin/analytics", async (req, res) => {
       ? new Date(a.last_active + "Z").toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
       : "Never";
     const topTools = a?.top_tools?.slice(0, 3).map((t: any) => t.tool).join(", ") || "-";
+    const issues = a?.issues;
+    const issueCount = (issues?.failed_tasks || 0) + (issues?.hallucinations || 0) + (issues?.limit_hits || 0);
+    const issueHtml = issueCount > 0
+      ? `<span style="color:#DC2626;font-weight:500;" title="${issues?.failed_tasks || 0} failed, ${issues?.hallucinations || 0} blocked, ${issues?.limit_hits || 0} limit hits">${issueCount} issue${issueCount > 1 ? 's' : ''}</span>`
+      : '<span style="color:#065F46;">None</span>';
     return `<tr>
       <td>${inst.email || "-"}</td>
       <td>${a?.user_name || "-"}</td>
@@ -162,11 +167,47 @@ router.get("/admin/analytics", async (req, res) => {
       <td>${inst.id === "staging" ? "staging" : inst.id.slice(0, 8)}</td>
       <td>${a?.monthly_tasks ?? (r.error ? `<span style="color:#DC2626">${r.error}</span>` : "0")}</td>
       <td>${a?.message_limit || inst.messageLimit || "-"}</td>
-      <td>${a?.plan || inst.plan || "-"}</td>
       <td>${lastActive}</td>
+      <td>${issueHtml}</td>
       <td style="font-size:11px">${topTools}</td>
     </tr>`;
   }).join("\n");
+
+  // Build recent issues section
+  const allIssues: { email: string; input: string; output: string; created_at: string }[] = [];
+  for (const r of results) {
+    if (!r.analytics?.issues) continue;
+    const email = r.instance?.email || "?";
+    for (const neg of (r.analytics.issues.negative_responses || [])) {
+      try {
+        const inp = JSON.parse(neg.input);
+        const out = JSON.parse(neg.output);
+        allIssues.push({ email, input: inp.raw_input || "", output: out.result || "", created_at: neg.created_at });
+      } catch {}
+    }
+    for (const err of (r.analytics.issues.recent_errors || [])) {
+      try {
+        const inp = JSON.parse(err.input);
+        const out = JSON.parse(err.output);
+        allIssues.push({ email, input: inp.raw_input || "", output: out.error || out.result || "Task failed", created_at: err.created_at });
+      } catch {}
+    }
+  }
+  allIssues.sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+  const totalIssues = results.reduce((sum, r) => sum + ((r.analytics?.issues?.failed_tasks || 0) + (r.analytics?.issues?.hallucinations || 0)), 0);
+
+  let issuesHtml = "";
+  if (allIssues.length > 0) {
+    const issueRows = allIssues.slice(0, 20).map(i => {
+      const time = new Date(i.created_at + "Z").toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      const esc = (s: string) => s.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const inputPreview = esc((i.input || "").slice(0, 80)) + (i.input.length > 80 ? "..." : "");
+      const outputPreview = esc((i.output || "").slice(0, 120)) + (i.output.length > 120 ? "..." : "");
+      return `<tr><td style="white-space:nowrap">${time}</td><td>${esc(i.email)}</td><td style="font-size:12px">${inputPreview}</td><td style="font-size:12px;color:#DC2626">${outputPreview}</td></tr>`;
+    }).join("");
+    issuesHtml = `<h2 style="font-size:20px;font-weight:600;margin:32px 0 16px;">Recent Issues (last 7 days)</h2><table><thead><tr><th>Time</th><th>User</th><th>Request</th><th>Problem</th></tr></thead><tbody>${issueRows}</tbody></table>`;
+  }
 
   // Build hourly chart bars
   const maxHourly = Math.max(...hourlyTotals, 1);
@@ -216,6 +257,7 @@ router.get("/admin/analytics", async (req, res) => {
     <div class="stat-card"><div class="stat-value">${totalTasks}</div><div class="stat-label">Tasks this month</div></div>
     <div class="stat-card"><div class="stat-value">${instances.length}</div><div class="stat-label">Total instances</div></div>
     <div class="stat-card"><div class="stat-value">${instances.filter(i => i.subscriptionStatus === "active").length}</div><div class="stat-label">Paying customers</div></div>
+    <div class="stat-card"><div class="stat-value" style="color:${totalIssues > 0 ? '#DC2626' : '#065F46'}">${totalIssues}</div><div class="stat-label">Issues (7 days)</div></div>
   </div>
 
   <div class="chart-container">
@@ -225,10 +267,13 @@ router.get("/admin/analytics", async (req, res) => {
 
   <table>
     <thead><tr>
-      <th>Email</th><th>User</th><th>Agent</th><th>Instance</th><th>Tasks (month)</th><th>Limit</th><th>Plan</th><th>Last Active</th><th>Top Tools</th>
+      <th>Email</th><th>User</th><th>Agent</th><th>Instance</th><th>Tasks (month)</th><th>Limit</th><th>Last Active</th><th>Issues (7d)</th><th>Top Tools</th>
     </tr></thead>
     <tbody>${rows}</tbody>
   </table>
+
+  ${issuesHtml}
+
 </body></html>`);
 });
 

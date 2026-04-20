@@ -61,6 +61,41 @@ router.get("/internal/analytics", (req: Request, res: Response) => {
   const agentName = getSetting("agent_name") || "";
   const userName = getSetting("user_name") || "";
 
+  // Recent issues (last 7 days)
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace("T", " ");
+
+  // Failed tasks
+  const failedTasks = (db.prepare(
+    "SELECT COUNT(*) as count FROM tasks WHERE status = 'failed' AND created_at >= ?"
+  ).get(sevenDaysAgo) as any)?.count || 0;
+
+  // Hallucination guard rejections (tasks with "I wasn't able to complete" in output)
+  const hallucinations = (db.prepare(
+    `SELECT COUNT(*) as count FROM tasks WHERE status = 'completed' AND created_at >= ?
+     AND output LIKE '%wasn''t able to complete%'`
+  ).get(sevenDaysAgo) as any)?.count || 0;
+
+  // Message limit hits
+  const limitHits = (db.prepare(
+    `SELECT COUNT(*) as count FROM tasks WHERE status = 'failed' AND created_at >= ?
+     AND output LIKE '%MESSAGE_LIMIT%'`
+  ).get(sevenDaysAgo) as any)?.count || 0;
+
+  // Recent error samples (last 5 failures with user input)
+  const recentErrors = db.prepare(
+    `SELECT task_id, substr(input, 1, 300) as input, substr(output, 1, 300) as output, created_at
+     FROM tasks WHERE status = 'failed' AND created_at >= ?
+     ORDER BY created_at DESC LIMIT 5`
+  ).all(sevenDaysAgo) as any[];
+
+  // Recent negative responses (couldn't complete, unable to, not able to)
+  const negativeResponses = db.prepare(
+    `SELECT task_id, substr(input, 1, 300) as input, substr(output, 1, 300) as output, created_at
+     FROM tasks WHERE status = 'completed' AND created_at >= ?
+     AND (output LIKE '%wasn''t able to%' OR output LIKE '%unable to%' OR output LIKE '%cannot complete%' OR output LIKE '%don''t have access%' OR output LIKE '%not connected%')
+     ORDER BY created_at DESC LIMIT 5`
+  ).all(sevenDaysAgo) as any[];
+
   res.json({
     instance_id: process.env.INSTANCE_ID,
     agent_name: agentName,
@@ -72,6 +107,13 @@ router.get("/internal/analytics", (req: Request, res: Response) => {
     hourly_activity: hourlyActivity,
     daily_activity: dailyActivity,
     top_tools: topTools,
+    issues: {
+      failed_tasks: failedTasks,
+      hallucinations: hallucinations,
+      limit_hits: limitHits,
+      recent_errors: recentErrors,
+      negative_responses: negativeResponses,
+    },
   });
 });
 
