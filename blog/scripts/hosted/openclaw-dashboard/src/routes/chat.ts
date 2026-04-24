@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import multer from "multer";
-import { getOrCreateConversation, getMessages, deleteConversation, getSetting } from "../services/db";
+import { getOrCreateConversation, getMessages, deleteConversation, getSetting, getChatThreads, createChatThread, renameChatThread } from "../services/db";
 import { submitChatMessage, pollChatStatus, pollChatTasks, clearSessionState } from "../adapters/chat";
 import { transcribeAudio } from "../services/transcription";
 import { scanBuffer } from "../services/antivirus";
@@ -14,22 +14,43 @@ const TEXT_TYPES = new Set(["text/plain", "text/csv", "text/markdown", "text/htm
 
 const router = Router();
 
-const CHAT_EXTERNAL_ID = "dashboard";
-
 router.get("/chat", (req: Request, res: Response) => {
-  const conversationId = getOrCreateConversation("dashboard", CHAT_EXTERNAL_ID);
-  const messages = getMessages(conversationId);
+  const threads = getChatThreads();
+  let threadId = req.query.thread as string | undefined;
+
+  // If no thread specified, use most recent or create one
+  if (!threadId && threads.length > 0) {
+    threadId = threads[0].external_id.replace("chat:", "");
+  }
+
+  let messages: any[] = [];
+  let conversationId: string | null = null;
+  if (threadId) {
+    conversationId = getOrCreateConversation("dashboard", `chat:${threadId}`);
+    messages = getMessages(conversationId);
+  }
+
+  // Also include legacy "dashboard" conversation in thread list if it has messages
+  const legacyConvId = getOrCreateConversation("dashboard", "dashboard");
+  const legacyMessages = getMessages(legacyConvId);
+  if (legacyMessages.length > 0 && !threads.some(t => t.external_id === "dashboard")) {
+    // Migrate: show legacy conversation but don't create a thread for it
+    if (!threadId) {
+      messages = legacyMessages;
+      conversationId = legacyConvId;
+    }
+  }
 
   const agentName = getSetting("agent_name") || "Agent";
   const userName = getSetting("user_name") || "You";
 
-  res.render("chat", { messages, agentName, userName });
+  res.render("chat", { messages, agentName, userName, threads, activeThread: threadId || null });
 });
 
 // POST: submit a message — creates a task, returns immediately
 router.post("/chat/message", (req: Request, res: Response) => {
   try {
-    const { message } = req.body;
+    const { message, threadId } = req.body;
     if (!message || !message.trim()) {
       res.status(400).json({ error: "Message is required" });
       return;
@@ -38,7 +59,7 @@ router.post("/chat/message", (req: Request, res: Response) => {
     const sessionId = req.cookies?.openclaw_session || "anon";
     console.log(`[chat] POST from session: ${sessionId.slice(0, 8)}...`);
 
-    const { taskId } = submitChatMessage(sessionId, message.trim());
+    const { taskId } = submitChatMessage(sessionId, message.trim(), undefined, threadId);
     console.log(`[chat] Task ${taskId} created for session ${sessionId.slice(0, 8)}...`);
 
     res.json({ ok: true, taskId });
@@ -86,7 +107,8 @@ router.post("/chat/audio", upload.single("audio"), async (req: Request, res: Res
     const sessionId = req.cookies?.openclaw_session || "anon";
     console.log(`[chat] Audio transcribed (${transcript.length} chars) for session ${sessionId.slice(0, 8)}...`);
 
-    const { taskId } = submitChatMessage(sessionId, transcript.trim());
+    const threadId = req.body?.threadId as string | undefined;
+    const { taskId } = submitChatMessage(sessionId, transcript.trim(), undefined, threadId);
     res.json({ ok: true, taskId, transcript: transcript.trim() });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Transcription failed";
@@ -184,7 +206,8 @@ router.post("/chat/upload", upload.array("files", 10), async (req: Request, res:
     // Pass image attachments as metadata for Claude vision
     const imageAttachments = attachments.filter(a => a.type === "image");
 
-    const { taskId } = submitChatMessage(sessionId, fullMessage, imageAttachments.length > 0 ? imageAttachments : undefined);
+    const threadId = req.body?.threadId as string | undefined;
+    const { taskId } = submitChatMessage(sessionId, fullMessage, imageAttachments.length > 0 ? imageAttachments : undefined, threadId);
     console.log(`[chat] Upload: ${files?.length || 0} files, ${imageAttachments.length} images, message=${message.length} chars`);
 
     res.json({ ok: true, taskId, fileCount: files?.length || 0 });
@@ -217,10 +240,42 @@ router.get("/chat/pending", (req: Request, res: Response) => {
 
 router.post("/chat/reset", (req: Request, res: Response) => {
   const sessionId = req.cookies?.openclaw_session || "anon";
+  const { threadId } = req.body;
   clearSessionState(sessionId);
-  const conversationId = getOrCreateConversation("dashboard", CHAT_EXTERNAL_ID);
-  deleteConversation(conversationId);
+  if (threadId) {
+    const conversationId = getOrCreateConversation("dashboard", `chat:${threadId}`);
+    deleteConversation(conversationId);
+  } else {
+    const conversationId = getOrCreateConversation("dashboard", "dashboard");
+    deleteConversation(conversationId);
+  }
   res.redirect(303, "/chat");
+});
+
+// --- Thread CRUD ---
+
+router.post("/chat/threads", (req: Request, res: Response) => {
+  const threadId = createChatThread();
+  res.redirect(303, `/chat?thread=${threadId}`);
+});
+
+router.get("/chat/threads/api", (req: Request, res: Response) => {
+  res.json({ threads: getChatThreads() });
+});
+
+router.patch("/chat/threads/:id", (req: Request, res: Response) => {
+  const { title } = req.body;
+  const threadId = req.params.id as string;
+  const conversationId = getOrCreateConversation("dashboard", `chat:${threadId}`);
+  renameChatThread(conversationId, title);
+  res.json({ ok: true });
+});
+
+router.delete("/chat/threads/:id", (req: Request, res: Response) => {
+  const threadId = req.params.id as string;
+  const conversationId = getOrCreateConversation("dashboard", `chat:${threadId}`);
+  deleteConversation(conversationId);
+  res.json({ ok: true });
 });
 
 export default router;

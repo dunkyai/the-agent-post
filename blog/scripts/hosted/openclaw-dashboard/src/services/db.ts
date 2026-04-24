@@ -222,6 +222,7 @@ function initSchema(): void {
   try { db.exec("ALTER TABLE shortcuts ADD COLUMN workflow_steps TEXT"); } catch {}
   try { db.exec("ALTER TABLE integrations ADD COLUMN last_health_check TEXT"); } catch {}
   try { db.exec("ALTER TABLE integrations ADD COLUMN last_health_result TEXT"); } catch {}
+  try { db.exec("ALTER TABLE conversations ADD COLUMN title TEXT"); } catch {}
 }
 
 const DEFAULT_SHORTCUTS = [
@@ -762,6 +763,54 @@ export function getConversationsByType(integrationType: string) {
       "SELECT id, external_id, updated_at FROM conversations WHERE integration_type = ? ORDER BY updated_at DESC"
     )
     .all(integrationType) as { id: string; external_id: string; updated_at: string }[];
+}
+
+// --- Chat Threads ---
+
+export interface ChatThread {
+  id: string;
+  external_id: string;
+  title: string | null;
+  updated_at: string;
+  preview: string | null;
+}
+
+export function getChatThreads(): ChatThread[] {
+  return getDb()
+    .prepare(`
+      SELECT c.id, c.external_id, c.title, c.updated_at,
+        (SELECT content FROM messages WHERE conversation_id = c.id AND role = 'user' ORDER BY created_at ASC LIMIT 1) as preview
+      FROM conversations c
+      WHERE c.integration_type = 'dashboard' AND c.external_id LIKE 'chat:%'
+      ORDER BY c.updated_at DESC
+    `)
+    .all() as ChatThread[];
+}
+
+export function createChatThread(): string {
+  const { v4: uuidv4 } = require("uuid");
+  const threadId = uuidv4().slice(0, 8);
+  const conversationId = getOrCreateConversation("dashboard", `chat:${threadId}`);
+  return threadId;
+}
+
+export function renameChatThread(conversationId: string, title: string): void {
+  getDb()
+    .prepare("UPDATE conversations SET title = ? WHERE id = ?")
+    .run(title, conversationId);
+}
+
+export function autoTitleThread(conversationId: string): void {
+  const firstMsg = getDb()
+    .prepare("SELECT content FROM messages WHERE conversation_id = ? AND role = 'user' ORDER BY created_at ASC LIMIT 1")
+    .get(conversationId) as { content: string } | undefined;
+  if (firstMsg) {
+    let title = firstMsg.content.replace(/[#*_`\[\]]/g, "").trim();
+    if (title.length > 50) {
+      title = title.slice(0, 47).replace(/\s+\S*$/, "") + "...";
+    }
+    renameChatThread(conversationId, title);
+  }
 }
 
 // --- Scheduled Jobs ---

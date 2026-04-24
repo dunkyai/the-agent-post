@@ -134,7 +134,7 @@
       fetch("/chat/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: "Please review our conversation and save the important details, decisions, and preferences to your memory so you remember them in the future." }),
+        body: JSON.stringify({ message: "Please review our conversation and save the important details, decisions, and preferences to your memory so you remember them in the future.", threadId: window.__chatConfig?.threadId || "" }),
       })
         .then(function (res) { return res.json(); })
         .then(function (data) {
@@ -437,7 +437,7 @@
     fetch("/chat/message", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text }),
+      body: JSON.stringify({ message: text, threadId: window.__chatConfig?.threadId || "" }),
     })
       .then(function (res) {
         console.log("[post] status:", res.status, "redirected:", res.redirected);

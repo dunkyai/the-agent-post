@@ -1,6 +1,6 @@
 import type { Task } from "../types/task";
 import { createTask } from "../services/task";
-import { getOrCreateConversation, getSetting, addMessage, getDb, expandShortcut, getPendingContinuation, setPendingContinuation, deletePendingContinuation, getShortcut, getWorkflowState } from "../services/db";
+import { getOrCreateConversation, getSetting, addMessage, getDb, expandShortcut, getPendingContinuation, setPendingContinuation, deletePendingContinuation, getShortcut, getWorkflowState, autoTitleThread } from "../services/db";
 
 // --- In-memory pending state (supports multiple concurrent tasks per session) ---
 
@@ -23,10 +23,11 @@ const sessionContinuationShortcuts = new Map<string, number>();
 const sessionWorkflowIds = new Map<string, string>();
 
 /**
- * Get or create a chat conversation. No auto-reset — user manually resets via the reset button.
+ * Get or create a chat conversation for a specific thread.
  */
-function getChatConversation(): string {
-  return getOrCreateConversation("dashboard", "dashboard");
+function getChatConversation(threadId?: string): string {
+  const externalId = threadId ? `chat:${threadId}` : "dashboard";
+  return getOrCreateConversation("dashboard", externalId);
 }
 
 // Track onboarding state per session (resets on reboot)
@@ -66,8 +67,8 @@ function getSessionTasks(sessionId: string): Map<string, PendingState> {
  * been asked yet this session, intercept with a canned prompt before
  * the message reaches the AI pipeline.
  */
-export function submitChatMessage(sessionId: string, message: string, imageAttachments?: { name: string; content: string; mimeType: string }[]): { taskId: string } {
-  const conversationId = getChatConversation();
+export function submitChatMessage(sessionId: string, message: string, imageAttachments?: { name: string; content: string; mimeType: string }[], threadId?: string): { taskId: string } {
+  const conversationId = getChatConversation(threadId);
 
   // --- Onboarding gate ---
   if (isContextSparse() && !onboardingSkipped.has(sessionId)) {
@@ -202,6 +203,11 @@ export function submitChatMessage(sessionId: string, message: string, imageAttac
     },
     conversation_id: taskConversationId,
   });
+
+  // Auto-title thread after first message
+  if (threadId && taskConversationId) {
+    try { autoTitleThread(taskConversationId); } catch {}
+  }
 
   // Track workflow thread ID for resume
   if (shortcutMatch?.shortcut.workflow_steps) {
