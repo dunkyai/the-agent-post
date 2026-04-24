@@ -229,6 +229,19 @@ async function reconnectIntegrations() {
     console.error("Failed to reconnect Gamma:", err instanceof Error ? err.message : err);
   }
 
+  // WordPress
+  try {
+    const wordpress = getIntegration("wordpress");
+    if (wordpress && wordpress.status === "connected") {
+      const config = JSON.parse(decrypt(wordpress.config));
+      const { startWordPress } = require("./services/wordpress");
+      startWordPress(config);
+      console.log(`WordPress reconnected (${config.site_name})`);
+    }
+  } catch (err: unknown) {
+    console.error("Failed to reconnect WordPress:", err instanceof Error ? err.message : err);
+  }
+
   try {
     const googleRows = getGoogleIntegrations();
     for (const row of googleRows) {

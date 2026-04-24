@@ -807,6 +807,56 @@
         </div>
       </details>
 
+      <!-- WordPress -->
+      <details class="integration-tile">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #0073aa;"><img src="/logos/wordpress.svg" alt="WordPress" width="24" height="24"></span>
+          <div class="integration-tile-info">
+            <h3>WordPress</h3>
+            <p>Create &amp; manage blog posts</p>
+          </div>
+          <span class="status-badge status-<%= wordpress.status %>"><%= wordpress.status %></span>
+        </summary>
+        <div class="integration-tile-body">
+          <% if (wordpress.error_message) { %>
+            <p style="color: var(--danger); font-size: 13px; margin-bottom: 12px;"><%= wordpress.error_message %></p>
+          <% } %>
+
+          <% if (wordpress.status === 'connected') { %>
+            <div style="margin-bottom: 12px;">
+              <label style="font-size: 13px; color: var(--text-secondary);">Connected Site</label>
+              <div style="margin-top: 4px;">
+                <code style="font-size: 14px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px;"><%= wordpress.site_name || 'Connected' %></code>
+              </div>
+            </div>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+              Your agent can create, update, and manage WordPress posts with featured images.
+            </p>
+            <form method="POST" action="/integrations/wordpress/disconnect">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+            </form>
+          <% } else { %>
+            <form method="POST" action="/integrations/wordpress/connect">
+              <p style="font-size: 14px; margin-bottom: 12px;">Connect your WordPress site so your agent can create and manage blog posts. Works with self-hosted WordPress (5.6+) using Application Passwords.</p>
+              <div class="form-group">
+                <label for="wordpress_site_url">Site URL</label>
+                <input type="url" id="wordpress_site_url" name="site_url" placeholder="https://yoursite.com" required>
+              </div>
+              <div class="form-group">
+                <label for="wordpress_username">WordPress Username</label>
+                <input type="text" id="wordpress_username" name="username" placeholder="your-username" required>
+              </div>
+              <div class="form-group">
+                <label for="wordpress_app_password">Application Password</label>
+                <input type="password" id="wordpress_app_password" name="application_password" placeholder="xxxx xxxx xxxx xxxx xxxx xxxx" required>
+                <div class="hint">Generate one in WordPress admin: Users → Profile → Application Passwords. Not your regular login password.</div>
+              </div>
+              <button type="submit" class="btn btn-sm">Connect</button>
+            </form>
+          <% } %>
+        </div>
+      </details>
+
     </div><!-- /integration-grid -->
   </div>
 </div>

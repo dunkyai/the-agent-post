@@ -3,6 +3,8 @@ import {
   getConversationsByType, createScheduledJob, getAllScheduledJobs, getScheduledJob,
   deleteScheduledJob, addMemory, getAllMemories, deleteMemory, getMemory, findDuplicateMemory, getMonthlyTaskCount,
 } from "./db";
+import { validateToolInput, checkActionClaims } from "./tool-schemas";
+import { postProcessResponse } from "./post-process";
 import { decrypt } from "./encryption";
 import { getNextRun, isValidCron, describeCron } from "./cron";
 import {
@@ -68,6 +70,11 @@ import {
   isGammaRunning,
   gammaCreatePresentation, gammaGetGeneration, gammaListThemes, gammaListFolders,
 } from "./gamma";
+import {
+  isWordPressRunning, getWordPressSiteName,
+  wordPressCreatePost, wordPressListPosts, wordPressUpdatePost,
+  wordPressListCategories, wordPressListTags, wordPressUploadMedia,
+} from "./wordpress";
 
 interface AIResponse {
   role: string;
@@ -2014,6 +2021,103 @@ async function executeGammaTool(toolName: string, input: any): Promise<string> {
 
 export { executeGammaTool };
 
+// --- WordPress Tools ---
+
+const WORDPRESS_TOOLS = [
+  {
+    name: "wordpress_create_post",
+    description: "Create a blog post in WordPress. Content should be HTML. Always default to 'draft' status unless the user explicitly asks to publish.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string", description: "Post title" },
+        content: { type: "string", description: "Post content as HTML" },
+        status: { type: "string", enum: ["draft", "publish"], description: "Post status (default: draft)" },
+        categories: { type: "array", items: { type: "number" }, description: "Category IDs" },
+        tags: { type: "array", items: { type: "number" }, description: "Tag IDs" },
+        featured_media: { type: "number", description: "Featured image media ID (from wordpress_upload_image)" },
+      },
+      required: ["title", "content"],
+    },
+  },
+  {
+    name: "wordpress_list_posts",
+    description: "List posts from WordPress with optional status filter.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        status: { type: "string", description: "Filter by status: draft, publish, pending, private" },
+        limit: { type: "number", description: "Number of posts to return (max 100)" },
+        search: { type: "string", description: "Search posts by keyword" },
+      },
+    },
+  },
+  {
+    name: "wordpress_update_post",
+    description: "Update an existing WordPress post.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        id: { type: "number", description: "Post ID to update" },
+        title: { type: "string", description: "New title" },
+        content: { type: "string", description: "New content as HTML" },
+        status: { type: "string", enum: ["draft", "publish", "pending", "private"], description: "New status" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "wordpress_list_categories",
+    description: "List available post categories in WordPress.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "wordpress_list_tags",
+    description: "List available tags in WordPress.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "wordpress_upload_image",
+    description: "Upload an image to WordPress media library from a URL. Returns a media ID that can be used as featured_media when creating a post.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        image_url: { type: "string", description: "URL of the image to upload" },
+        filename: { type: "string", description: "Filename for the uploaded image" },
+        alt_text: { type: "string", description: "Alt text for the image" },
+      },
+      required: ["image_url"],
+    },
+  },
+];
+
+const wordpressToolNames = WORDPRESS_TOOLS.map(t => t.name);
+
+async function executeWordPressTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "wordpress_create_post":
+        return await wordPressCreatePost(input);
+      case "wordpress_list_posts":
+        return await wordPressListPosts(input);
+      case "wordpress_update_post":
+        return await wordPressUpdatePost(input);
+      case "wordpress_list_categories":
+        return await wordPressListCategories();
+      case "wordpress_list_tags":
+        return await wordPressListTags();
+      case "wordpress_upload_image":
+        return await wordPressUploadMedia(input);
+      default:
+        return JSON.stringify({ error: `Unknown WordPress tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "WordPress operation failed" });
+  }
+}
+
+export { executeWordPressTool };
+
 // --- Public Google Doc Tool (no OAuth needed) ---
 
 const PUBLIC_GDOC_TOOLS = [
@@ -2964,6 +3068,12 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   gamma_get_generation: "Checking generation status...",
   gamma_list_themes: "Listing Gamma themes...",
   gamma_list_folders: "Listing Gamma folders...",
+  wordpress_create_post: "Creating WordPress post...",
+  wordpress_list_posts: "Listing WordPress posts...",
+  wordpress_update_post: "Updating WordPress post...",
+  wordpress_list_categories: "Fetching WordPress categories...",
+  wordpress_list_tags: "Fetching WordPress tags...",
+  wordpress_upload_image: "Uploading image to WordPress...",
 };
 
 // --- Anthropic API with tool use loop ---
@@ -3023,6 +3133,7 @@ export async function callAnthropic(
   if (isContactOutRunning()) tools.push(...CONTACTOUT_TOOLS);
   if (isAgreeRunning()) tools.push(...AGREE_TOOLS);
   if (isGammaRunning()) tools.push(...GAMMA_TOOLS);
+  if (isWordPressRunning()) tools.push(...WORDPRESS_TOOLS);
 
   // Conditionally add Google tools based on connected services
   const googleServices = getConnectedServices();
@@ -3053,6 +3164,7 @@ export async function callAnthropic(
 
   const MAX_TOOL_ROUNDS = 50;
   const toolCallLog: string[] = []; // track tool+input fingerprints for loop detection
+  const toolNamesCalled: string[] = []; // track tool names for hallucination check
   const MAX_REPEAT_CALLS = 2; // allow same tool+input at most twice
   let lastScreenshot: string | null = null; // track the most recent screenshot base64
   let lastTwitterResult: string | null = null; // track last twitter tool result for fallback
@@ -3202,6 +3314,18 @@ export async function callAnthropic(
           continue;
         }
 
+        // Validate tool input with Zod schemas before execution
+        const validationError = validateToolInput(toolBlock.name, toolBlock.input);
+        if (validationError) {
+          console.log(`Tool validation failed: ${toolBlock.name} — ${validationError}`);
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: toolBlock.id,
+            content: JSON.stringify({ error: validationError }),
+          });
+          continue;
+        }
+
         const toolStartTime = Date.now();
         let result: string | any[];
         if (memoryTools.includes(toolBlock.name)) {
@@ -3242,6 +3366,8 @@ export async function callAnthropic(
           result = await executeAgreeTool(toolBlock.name, toolBlock.input);
         } else if (gammaToolNames.includes(toolBlock.name)) {
           result = await executeGammaTool(toolBlock.name, toolBlock.input);
+        } else if (wordpressToolNames.includes(toolBlock.name)) {
+          result = await executeWordPressTool(toolBlock.name, toolBlock.input);
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input, sourceContext);
         }
@@ -3249,6 +3375,7 @@ export async function callAnthropic(
         console.log(`Tool result: ${toolBlock.name}`, typeof result === "string" ? result.slice(0, 300) : "[multipart content]");
         const toolOutputStr = typeof result === "string" ? result : JSON.stringify(result);
         onToolCall?.(toolBlock.name, toolBlock.input, toolOutputStr.slice(0, 2000), toolDurationMs);
+        toolNamesCalled.push(toolBlock.name);
 
         // Save the latest screenshot so we can include it in the final response
         if (toolBlock.name === "browser_screenshot" && Array.isArray(result)) {
@@ -3333,7 +3460,17 @@ export async function callAnthropic(
       } catch { /* not valid JSON, ignore */ }
     }
 
-    return { role: "assistant", content: text.trim() || "Sorry, I wasn't able to generate a response. Could you try again?" };
+    // Check for hallucinated action claims
+    const finalText = text.trim();
+    if (finalText && toolNamesCalled.length > 0) {
+      const hallucinationWarning = checkActionClaims(finalText, toolNamesCalled);
+      if (hallucinationWarning) {
+        console.warn(`[hallucination-check] ${hallucinationWarning}`);
+        // Don't block — log for now. Could add retry logic later.
+      }
+    }
+
+    return { role: "assistant", content: postProcessResponse(finalText) || "Sorry, I wasn't able to generate a response. Could you try again?" };
   }
 
   return { role: "assistant", content: "Hmmm...this was pretty complex and I hit a tool limit. Could you break this into smaller steps or ask again in a simpler way? For example, instead of asking me to do everything at once, try one piece at a time." };
@@ -3381,6 +3518,7 @@ export async function callOpenAI(
   if (isContactOutRunning()) customTools.push(...CONTACTOUT_TOOLS);
   if (isAgreeRunning()) customTools.push(...AGREE_TOOLS);
   if (isGammaRunning()) customTools.push(...GAMMA_TOOLS);
+  if (isWordPressRunning()) customTools.push(...WORDPRESS_TOOLS);
   const googleServices = getConnectedServices();
   if (googleServices) {
     if (googleServices.includes("gmail")) {
@@ -3558,6 +3696,8 @@ export async function callOpenAI(
           result = await executeAgreeTool(toolName, toolInput);
         } else if (gammaToolNames.includes(toolName)) {
           result = await executeGammaTool(toolName, toolInput);
+        } else if (wordpressToolNames.includes(toolName)) {
+          result = await executeWordPressTool(toolName, toolInput);
         } else {
           result = executeSchedulingTool(toolName, toolInput, sourceContext);
         }
@@ -3607,7 +3747,7 @@ export async function callOpenAI(
       } catch { /* not valid JSON, ignore */ }
     }
 
-    return { role: "assistant", content: text || "Sorry, I wasn't able to generate a response. Could you try again?" };
+    return { role: "assistant", content: postProcessResponse(text) || "Sorry, I wasn't able to generate a response. Could you try again?" };
   }
 
   return { role: "assistant", content: "Hmmm...this was pretty complex and I hit a tool limit. Could you break this into smaller steps or ask again in a simpler way? For example, instead of asking me to do everything at once, try one piece at a time." };
@@ -3832,7 +3972,7 @@ export function buildSystemPrompt(extraContext?: string, options?: { skipMemorie
       if (allSvcs.has("calendar")) googleContext += " You can view, create, update, and delete Google Calendar events.";
       if (allSvcs.has("drive")) googleContext += " You can search and read Google Drive files including Google Docs, Sheets, and Slides. You can also upload images to Google Drive using drive_upload_image — use this when the user attaches an image and wants it in a Google Doc. Workflow: (1) tell the user you'll upload to their Google Drive, (2) call drive_upload_image to get a public URL, (3) use docs_insert_image with that URL. If Google Drive is not connected, tell the user they need to connect Google Drive on the integrations page.";
       if (allSvcs.has("contacts")) googleContext += " You can search Google Contacts.";
-      if (allSvcs.has("docs")) googleContext += " You can create, read, and edit Google Docs using the docs_* tools. Use docs_create to make new documents, docs_read to read content (including all tabs), and docs_append or docs_insert to add text. Use docs_format_text to change text formatting (bold, italic, underline, strikethrough, font size, font family, text color, and hyperlinks). Use docs_paragraph_style to change paragraph-level formatting (headings, alignment, line spacing). Use docs_list to convert text into bullet or numbered lists. Use docs_insert_image to add images from URLs. IMPORTANT — EDITING EXISTING TEXT: When the user asks you to edit, revise, rewrite, or update existing text in a Google Doc, ALWAYS use docs_suggest_edit. This marks the original text in red strikethrough and inserts the replacement in blue, so the user can review the change. NEVER use docs_replace_text to edit content — that does a destructive overwrite with no way to review. Only use docs_replace_text for mechanical bulk operations (like removing all emojis or fixing a repeated typo). For docs with multiple tabs: docs_read returns all tabs with their tabId and title. To write to a specific tab, pass the tab_id parameter. If the user refers to a tab by name or content, use docs_read first to find the matching tab, then use its tabId. IMPORTANT: When docs_append returns success, the text IS at the end of the document — do NOT re-read to verify and do NOT retry with docs_insert.";
+      if (allSvcs.has("docs")) googleContext += " You can create, read, and edit Google Docs using the docs_* tools. IMPORTANT: When the user asks you to write long-form content (blog posts, articles, reports, proposals, job descriptions, newsletters), ALWAYS create a Google Doc using docs_create and share the link. Do NOT just write the content in the chat — put it in a Doc so they can edit and share it. If you claim you created a document, you MUST have called docs_create — if you did not call the tool, you did not create it. Use docs_create to make new documents, docs_read to read content (including all tabs), and docs_append or docs_insert to add text. Use docs_format_text to change text formatting (bold, italic, underline, strikethrough, font size, font family, text color, and hyperlinks). Use docs_paragraph_style to change paragraph-level formatting (headings, alignment, line spacing). Use docs_list to convert text into bullet or numbered lists. Use docs_insert_image to add images from URLs. IMPORTANT — EDITING EXISTING TEXT: When the user asks you to edit, revise, rewrite, or update existing text in a Google Doc, ALWAYS use docs_suggest_edit. This marks the original text in red strikethrough and inserts the replacement in blue, so the user can review the change. NEVER use docs_replace_text to edit content — that does a destructive overwrite with no way to review. Only use docs_replace_text for mechanical bulk operations (like removing all emojis or fixing a repeated typo). For docs with multiple tabs: docs_read returns all tabs with their tabId and title. To write to a specific tab, pass the tab_id parameter. If the user refers to a tab by name or content, use docs_read first to find the matching tab, then use its tabId. IMPORTANT: When docs_append returns success, the text IS at the end of the document — do NOT re-read to verify and do NOT retry with docs_insert.";
       if (allSvcs.has("sheets")) googleContext += " You can create, read, and write Google Sheets using the sheets_* tools. Use sheets_list_sheets to see tabs, sheets_read to read cell ranges, sheets_write to update cells, and sheets_append to add rows.";
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${googleContext}` : googleContext;
     }
@@ -4034,6 +4174,29 @@ Available tools:
 
 IMPORTANT: Generation takes 30-120 seconds. The tool handles polling automatically and returns the URL when done. Always share the resulting URL with the user.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${gammaContext}` : gammaContext;
+  }
+
+  // Inject WordPress context
+  if (isWordPressRunning()) {
+    const siteName = getWordPressSiteName();
+    const wpContext = `You are connected to WordPress${siteName ? ` (site: ${siteName})` : ""} for blog post management.
+
+Available tools:
+- wordpress_create_post — create a post (title, HTML content, status). Default to "draft" unless user explicitly says "publish".
+- wordpress_list_posts — list existing posts, optionally filter by status or search.
+- wordpress_update_post — update an existing post by ID.
+- wordpress_list_categories — list available categories.
+- wordpress_list_tags — list available tags.
+- wordpress_upload_image — upload an image from a URL to the WordPress media library. Returns a media ID to use as featured_media.
+
+Workflow for creating a post:
+1. Write the content as clean HTML (headings, paragraphs, lists, links).
+2. If the user wants a featured image, use find_image to find one, then wordpress_upload_image to upload it.
+3. Create the post as a draft with wordpress_create_post, including the featured_media ID if an image was uploaded.
+4. Share the edit link with the user so they can review before publishing.
+
+IMPORTANT: Always create as draft first unless the user explicitly asks to publish immediately.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${wpContext}` : wpContext;
   }
 
   // Inject long-term memories (skip for scheduled jobs to prevent memory contamination)

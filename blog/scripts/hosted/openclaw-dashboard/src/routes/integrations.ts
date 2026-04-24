@@ -15,6 +15,7 @@ import { buildGranolaOAuthUrl, stopGranola, isGranolaRunning } from "../services
 import { startContactOut, stopContactOut, isContactOutRunning, testContactOutConnection } from "../services/contactout";
 import { startAgree, stopAgree, testAgreeConnection } from "../services/agree";
 import { startGamma, stopGamma, testGammaConnection } from "../services/gamma";
+import { startWordPress, stopWordPress, testWordPressConnection, getWordPressSiteName } from "../services/wordpress";
 
 const router = Router();
 
@@ -207,6 +208,14 @@ router.get("/integrations", async (req: Request, res: Response) => {
     contactout: integrationMap["contactout"] || { status: "disconnected", error_message: null },
     agree: integrationMap["agree"] || { status: "disconnected", error_message: null },
     gamma: integrationMap["gamma"] || { status: "disconnected", error_message: null },
+    wordpress: (() => {
+      const wi = integrationMap["wordpress"];
+      const base = { ...(wi || { status: "disconnected", error_message: null }), site_name: null as string | null };
+      if (wi && wi.status === "connected") {
+        try { base.site_name = JSON.parse(decrypt(wi.config)).site_name || null; } catch {}
+      }
+      return base;
+    })(),
     memories: getAllMemories(),
     flash: req.query.flash || null,
   });
@@ -893,6 +902,39 @@ router.post("/integrations/gamma/disconnect", (req: Request, res: Response) => {
   stopGamma();
   upsertIntegration("gamma", "{}", "disconnected");
   res.redirect(303, "/integrations?flash=Gamma+disconnected");
+});
+
+// --- WordPress ---
+
+router.post("/integrations/wordpress/connect", async (req: Request, res: Response) => {
+  try {
+    const siteUrl = (req.body.site_url || "").trim();
+    const username = (req.body.username || "").trim();
+    const appPassword = (req.body.application_password || "").trim();
+
+    if (!siteUrl || !username || !appPassword) {
+      res.redirect(303, "/integrations?flash=All+fields+are+required");
+      return;
+    }
+
+    const { site_name } = await testWordPressConnection(siteUrl, username, appPassword);
+
+    const configData = { site_url: siteUrl, username, application_password: appPassword, site_name };
+    const config = encrypt(JSON.stringify(configData));
+    upsertIntegration("wordpress", config, "connected");
+    startWordPress(configData);
+    res.redirect(303, "/integrations?flash=WordPress+connected+to+" + encodeURIComponent(site_name));
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Connection failed";
+    upsertIntegration("wordpress", "{}", "disconnected", message);
+    res.redirect(303, "/integrations?flash=" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/wordpress/disconnect", (req: Request, res: Response) => {
+  stopWordPress();
+  upsertIntegration("wordpress", "{}", "disconnected");
+  res.redirect(303, "/integrations?flash=WordPress+disconnected");
 });
 
 // --- Health Checks ---
