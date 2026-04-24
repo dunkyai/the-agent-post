@@ -455,26 +455,32 @@ Return the full text content (not JSON).`,
     trigger: "amplify",
     name: "Amplify Content",
     description: "Turn a voice note or written content into social posts, save to Google Docs, and publish via Buffer/Twitter.",
-    prompt: `You are a social media content specialist. The user wants to turn their ideas into polished social media content.
+    prompt: `If the user provided content (text, URL, or audio), summarize the topic. If not, ask what they want to amplify.`,
+    continuation_prompt: `The user reviewed the social content draft. Based on their reply, either update the Google Doc with edits, or publish to the channels they specified. For LinkedIn use buffer_create_post, for Twitter use twitter_post_thread. Publish exactly what was written in the Doc.`,
+    workflow_steps: JSON.stringify([
+      {
+        type: "ai",
+        id: "clarify",
+        prompt: `The user wants to create social media content. Their input: "{{input}}"
 
-{{input}}
+If they provided content (text, a URL, or audio transcription), respond with ONLY JSON:
+{"ready": true, "topic": "<brief topic label>", "source": "<the full source content or URL>"}
 
-**If the user has NOT provided any content yet** (no text, no audio attachment, {{input}} is empty or just whitespace), ask them:
+If they provided a URL, call browse_webpage to read it first, then include the page content in "source".
 
-"What content would you like me to amplify? You can:
-1. **Record a voice note** — hit the mic button and share your thoughts
-2. **Paste your content** — copy and paste text, a blog post, notes, etc.
-3. **Share a URL** — I'll read the page and work from that
+If no content was provided, respond with ONLY:
+{"ready": false, "question": "What content would you like me to amplify? You can paste text, share a URL, or record a voice note."}`,
+        label: "Understanding content",
+        tools: true,
+      },
+      {
+        type: "ai",
+        id: "write_social",
+        prompt: `Write social media content based on this source material:
 
-What would you like to do?"
+{{step.clarify.result.source}}
 
-Do NOT proceed until the user provides content. Wait for their reply.
-
-**If the user HAS provided content** (text after the trigger, an audio attachment, or a URL), proceed immediately:
-
-1. If audio is attached, the transcription is already included above — use it as the source content.
-2. If a URL is provided, use browse_webpage to read the page content.
-3. Create the following in a Google Doc titled "Social Content — [brief topic] — [today's date]":
+Create BOTH of the following:
 
 **LinkedIn Post**
 - Professional but conversational tone
@@ -488,26 +494,23 @@ Do NOT proceed until the user provides content. Wait for their reply.
 - First tweet is the hook
 - Last tweet is a CTA or takeaway
 
-4. Share the Google Doc link and ask:
-"Here's your content draft — please review it. When you're ready, tell me:
-1. Which channels to post to (LinkedIn, Twitter/X, or both)
-2. When to post (now, or a specific date/time)
-3. Any edits you'd like first"`,
-    continuation_prompt: `The user has reviewed the content and wants to proceed.
-
-Based on their reply:
-
-**If they want edits:** Update the Google Doc with their changes using docs_read then docs_replace_text. Share the updated link and ask again about publishing.
-
-**If they want to publish:**
-1. Use buffer_list_channels to see available channels
-2. For LinkedIn: use buffer_create_post with the LinkedIn channel ID and the LinkedIn post content. If scheduling, use the due_at parameter.
-3. For Twitter/X: use twitter_post_thread with the thread content. Post immediately (no scheduling).
-4. If a channel is not connected, tell the user which integration they need to set up in Settings → Integrations.
-
-Publish exactly what was written in the Google Doc. Do NOT modify the content.
-
-After publishing, confirm what was posted and where.`,
+Return the full text with both sections clearly labeled.`,
+        label: "Writing social content",
+      },
+      {
+        type: "system",
+        id: "create_doc",
+        tool: "docs_create",
+        input: { title: "Social Content — {{step.clarify.result.topic}} — {{date}}", content: "{{step.write_social.result}}" },
+        label: "Creating Google Doc",
+      },
+      {
+        type: "pause",
+        id: "review",
+        message: "Here's your social content draft: {{step.create_doc.result.documentUrl}}\n\nReview it and let me know:\n1. Which channels to post to (LinkedIn, Twitter/X, or both)\n2. When to post (now or scheduled)\n3. Any edits you'd like first",
+        label: "Ready for review",
+      },
+    ]),
   },
 ];
 
