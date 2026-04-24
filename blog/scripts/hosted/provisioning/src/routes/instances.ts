@@ -528,4 +528,58 @@ function deregisterCaddyRoute(subdomain: string): void {
   }
 }
 
+// GET /instances/:id/billing — billing info for the dashboard billing tab
+// Self-authenticated: verifies the instance's own gateway token
+router.get("/:id/billing", async (req, res) => {
+  const instance = store.getInstance(req.params.id);
+  if (!instance) {
+    res.status(404).json({ error: "Instance not found" });
+    return;
+  }
+
+  // Verify gateway token
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (token !== instance.gatewayToken) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const result: any = {
+    plan: instance.plan,
+    message_limit: instance.messageLimit,
+    subscription_status: instance.subscriptionStatus,
+    next_charge: null,
+    portal_url: null,
+  };
+
+  // Get next charge date and portal URL from Stripe
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (secretKey && instance.stripeSubscriptionId) {
+    try {
+      const stripe = (await import("stripe")).default;
+      const client = new stripe(secretKey);
+
+      // Get subscription for next charge date
+      const sub = await client.subscriptions.retrieve(instance.stripeSubscriptionId) as any;
+      if (sub.current_period_end) {
+        result.next_charge = new Date(sub.current_period_end * 1000).toISOString();
+      }
+      result.cancel_at_period_end = sub.cancel_at_period_end;
+
+      // Create billing portal session
+      if (instance.stripeCustomerId) {
+        const session = await client.billingPortal.sessions.create({
+          customer: instance.stripeCustomerId,
+          return_url: `https://${instance.subdomain}.dunky.ai/getting-started`,
+        });
+        result.portal_url = session.url;
+      }
+    } catch (err: any) {
+      console.error(`[billing] Failed to get Stripe info for ${instance.id}:`, err.message);
+    }
+  }
+
+  res.json(result);
+});
+
 export default router;

@@ -12,7 +12,7 @@ set -euo pipefail
 #   ./deploy.sh --restart    # Skip build/transfer, just restart all containers
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "$SCRIPT_DIR/containers.env"
+DOPPLER_TOKEN="${DOPPLER_TOKEN:?Set DOPPLER_TOKEN env var or export it before running deploy.sh}"
 
 IMAGE="openclaw-dashboard"
 TARGET="${1:-all}"
@@ -110,31 +110,15 @@ deploy_instance() {
       -p "$PORT:3000" \\
       -v "openclaw-data-$ID:/data" \\
       -v "openclaw-sandbox-$ID:/sandbox" \\
+      --tmpfs /home/openclaw/.doppler:rw,noexec,nosuid,size=1048576 \\
+      -e DOPPLER_TOKEN="$DOPPLER_TOKEN" \\
       -e GATEWAY_TOKEN="$TOKEN" \\
       -e INSTANCE_ID="$ID" \\
-      -e PROVISIONING_URL="http://172.17.0.1:3500" \\
-      -e GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \\
-      -e GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET" \\
-      -e SLACK_CLIENT_ID="$SLACK_CLIENT_ID" \\
-      -e SLACK_CLIENT_SECRET="$SLACK_CLIENT_SECRET" \\
-      -e SLACK_SIGNING_SECRET="$SLACK_SIGNING_SECRET" \\
-      -e AIRTABLE_CLIENT_ID="$AIRTABLE_CLIENT_ID" \\
-      -e AIRTABLE_CLIENT_SECRET="$AIRTABLE_CLIENT_SECRET" \\
-      -e NOTION_CLIENT_ID="$NOTION_CLIENT_ID" \\
-      -e NOTION_CLIENT_SECRET="$NOTION_CLIENT_SECRET" \\
-      -e RESEND_API_KEY="$RESEND_API_KEY" \\
-      -e BROWSER_SERVICE_URL="http://openclaw-browser:3600" \\
-      -e BROWSER_SERVICE_SECRET="$BROWSER_SERVICE_SECRET" \\
-      -e TWITTER_CLIENT_ID="$TWITTER_CLIENT_ID" \\
-      -e TWITTER_CLIENT_SECRET="$TWITTER_CLIENT_SECRET" \\
-      -e GROQ_API_KEY="$GROQ_API_KEY" \\
-      -e PIXABAY_API_KEY="$PIXABAY_API_KEY" \\
-      -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \\
+      -e PROVISIONING_URL="http://host.docker.internal:3500" \\
       -e MESSAGE_LIMIT="$INST_MLIMIT" \\
       -e PLAN="$INST_PLAN" \\
       -e CLAMD_HOST="host.docker.internal" \\
       -e CLAMD_PORT="3310" \\
-      -e CONTACTOUT_API_TOKEN="${CONTACTOUT_API_TOKEN:-}" \\
       $([ "$ID" = "cb1d6d97" ] && echo '-e SKIP_AUTH=true') \\
       $IMAGE
 EOF

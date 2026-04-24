@@ -17,12 +17,15 @@ RUN apk add --no-cache python3 make g++ && \
     npm cache clean --force && \
     apk del python3 make g++ && \
     rm -rf /var/cache/apk/*
-RUN apk add --no-cache ffmpeg
+RUN apk add --no-cache ffmpeg curl gnupg && \
+    curl -sLf https://cli.doppler.com/install.sh | sh && \
+    apk del curl gnupg
 COPY --from=builder /app/dist/ ./dist/
 COPY src/views/ ./dist/views/
 COPY src/public/ ./dist/public/
 RUN mkdir -p /data && chown openclaw:openclaw /data
-ENV NODE_ENV=production PORT=3000 DB_PATH=/data/openclaw.db
+ENV NODE_ENV=production PORT=3000 DB_PATH=/data/openclaw.db DOPPLER_HOME=/tmp/.doppler
 USER openclaw
 EXPOSE 3000
+ENTRYPOINT ["doppler", "run", "--"]
 CMD ["node", "dist/index.js"]
