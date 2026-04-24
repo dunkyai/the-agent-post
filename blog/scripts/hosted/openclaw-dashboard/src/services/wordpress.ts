@@ -143,7 +143,7 @@ export async function wordPressListPosts(input?: {
       return JSON.stringify({ error: err.message || `List posts failed (${res.status})` });
     }
 
-    const posts: any[] = await res.json();
+    const posts = (await res.json()) as any[];
     return JSON.stringify({
       posts: posts.map((p) => ({
         id: p.id,
@@ -212,7 +212,7 @@ export async function wordPressListCategories(): Promise<string> {
       headers: { Authorization: authHeader() },
     });
     if (!res.ok) return JSON.stringify({ error: `List categories failed (${res.status})` });
-    const cats: any[] = await res.json();
+    const cats = (await res.json()) as any[];
     return JSON.stringify({
       categories: cats.map((c) => ({ id: c.id, name: c.name, count: c.count })),
     });
@@ -228,7 +228,7 @@ export async function wordPressListTags(): Promise<string> {
       headers: { Authorization: authHeader() },
     });
     if (!res.ok) return JSON.stringify({ error: `List tags failed (${res.status})` });
-    const tags: any[] = await res.json();
+    const tags = (await res.json()) as any[];
     return JSON.stringify({
       tags: tags.map((t) => ({ id: t.id, name: t.name, count: t.count })),
     });
