@@ -510,6 +510,25 @@ Return the full text with both sections clearly labeled.`,
         message: "Here's your social content draft: {{step.create_doc.result.documentUrl}}\n\nReview it and let me know:\n1. Which channels to post to (LinkedIn, Twitter/X, or both)\n2. When to post (now or scheduled)\n3. Any edits you'd like first",
         label: "Ready for review",
       },
+      {
+        type: "ai",
+        id: "publish",
+        prompt: `The user wants to publish social content. Their reply: "{{user_reply}}".
+
+IMPORTANT: First use docs_read to read the EXACT content from the Google Doc (ID: {{step.create_doc.result.documentId}}). Do NOT rely on memory — the user may have edited the doc directly.
+
+Extract the LinkedIn post and Twitter thread from the doc.
+
+Then check available channels with buffer_list_channels.
+- For LinkedIn: use buffer_create_post with the EXACT LinkedIn post text from the doc. Copy it character-for-character.
+- For Twitter/X: use twitter_post_thread with the EXACT thread text from the doc.
+- If scheduling: use the due_at parameter in buffer_create_post.
+- If a channel is not connected, tell the user which integration they need to set up.
+
+CRITICAL: Publish EXACTLY what is in the doc. Do NOT paraphrase or rewrite.`,
+        label: "Publishing content",
+        tools: true,
+      },
     ]),
   },
 ];
