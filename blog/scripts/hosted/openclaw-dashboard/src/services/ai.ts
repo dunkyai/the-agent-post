@@ -4,6 +4,7 @@ import {
   deleteScheduledJob, addMemory, getAllMemories, deleteMemory, getMemory, findDuplicateMemory, getMonthlyTaskCount,
 } from "./db";
 import { validateToolInput, checkActionClaims } from "./tool-schemas";
+import { postProcessResponse } from "./post-process";
 import { decrypt } from "./encryption";
 import { getNextRun, isValidCron, describeCron } from "./cron";
 import {
@@ -3469,7 +3470,7 @@ export async function callAnthropic(
       }
     }
 
-    return { role: "assistant", content: finalText || "Sorry, I wasn't able to generate a response. Could you try again?" };
+    return { role: "assistant", content: postProcessResponse(finalText) || "Sorry, I wasn't able to generate a response. Could you try again?" };
   }
 
   return { role: "assistant", content: "Hmmm...this was pretty complex and I hit a tool limit. Could you break this into smaller steps or ask again in a simpler way? For example, instead of asking me to do everything at once, try one piece at a time." };
@@ -3746,7 +3747,7 @@ export async function callOpenAI(
       } catch { /* not valid JSON, ignore */ }
     }
 
-    return { role: "assistant", content: text || "Sorry, I wasn't able to generate a response. Could you try again?" };
+    return { role: "assistant", content: postProcessResponse(text) || "Sorry, I wasn't able to generate a response. Could you try again?" };
   }
 
   return { role: "assistant", content: "Hmmm...this was pretty complex and I hit a tool limit. Could you break this into smaller steps or ask again in a simpler way? For example, instead of asking me to do everything at once, try one piece at a time." };
