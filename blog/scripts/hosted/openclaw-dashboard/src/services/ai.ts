@@ -68,6 +68,11 @@ import {
   isGammaRunning,
   gammaCreatePresentation, gammaGetGeneration, gammaListThemes, gammaListFolders,
 } from "./gamma";
+import {
+  isWordPressRunning, getWordPressSiteName,
+  wordPressCreatePost, wordPressListPosts, wordPressUpdatePost,
+  wordPressListCategories, wordPressListTags, wordPressUploadMedia,
+} from "./wordpress";
 
 interface AIResponse {
   role: string;
@@ -2014,6 +2019,103 @@ async function executeGammaTool(toolName: string, input: any): Promise<string> {
 
 export { executeGammaTool };
 
+// --- WordPress Tools ---
+
+const WORDPRESS_TOOLS = [
+  {
+    name: "wordpress_create_post",
+    description: "Create a blog post in WordPress. Content should be HTML. Always default to 'draft' status unless the user explicitly asks to publish.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string", description: "Post title" },
+        content: { type: "string", description: "Post content as HTML" },
+        status: { type: "string", enum: ["draft", "publish"], description: "Post status (default: draft)" },
+        categories: { type: "array", items: { type: "number" }, description: "Category IDs" },
+        tags: { type: "array", items: { type: "number" }, description: "Tag IDs" },
+        featured_media: { type: "number", description: "Featured image media ID (from wordpress_upload_image)" },
+      },
+      required: ["title", "content"],
+    },
+  },
+  {
+    name: "wordpress_list_posts",
+    description: "List posts from WordPress with optional status filter.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        status: { type: "string", description: "Filter by status: draft, publish, pending, private" },
+        limit: { type: "number", description: "Number of posts to return (max 100)" },
+        search: { type: "string", description: "Search posts by keyword" },
+      },
+    },
+  },
+  {
+    name: "wordpress_update_post",
+    description: "Update an existing WordPress post.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        id: { type: "number", description: "Post ID to update" },
+        title: { type: "string", description: "New title" },
+        content: { type: "string", description: "New content as HTML" },
+        status: { type: "string", enum: ["draft", "publish", "pending", "private"], description: "New status" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "wordpress_list_categories",
+    description: "List available post categories in WordPress.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "wordpress_list_tags",
+    description: "List available tags in WordPress.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "wordpress_upload_image",
+    description: "Upload an image to WordPress media library from a URL. Returns a media ID that can be used as featured_media when creating a post.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        image_url: { type: "string", description: "URL of the image to upload" },
+        filename: { type: "string", description: "Filename for the uploaded image" },
+        alt_text: { type: "string", description: "Alt text for the image" },
+      },
+      required: ["image_url"],
+    },
+  },
+];
+
+const wordpressToolNames = WORDPRESS_TOOLS.map(t => t.name);
+
+async function executeWordPressTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "wordpress_create_post":
+        return await wordPressCreatePost(input);
+      case "wordpress_list_posts":
+        return await wordPressListPosts(input);
+      case "wordpress_update_post":
+        return await wordPressUpdatePost(input);
+      case "wordpress_list_categories":
+        return await wordPressListCategories();
+      case "wordpress_list_tags":
+        return await wordPressListTags();
+      case "wordpress_upload_image":
+        return await wordPressUploadMedia(input);
+      default:
+        return JSON.stringify({ error: `Unknown WordPress tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "WordPress operation failed" });
+  }
+}
+
+export { executeWordPressTool };
+
 // --- Public Google Doc Tool (no OAuth needed) ---
 
 const PUBLIC_GDOC_TOOLS = [
@@ -2964,6 +3066,12 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   gamma_get_generation: "Checking generation status...",
   gamma_list_themes: "Listing Gamma themes...",
   gamma_list_folders: "Listing Gamma folders...",
+  wordpress_create_post: "Creating WordPress post...",
+  wordpress_list_posts: "Listing WordPress posts...",
+  wordpress_update_post: "Updating WordPress post...",
+  wordpress_list_categories: "Fetching WordPress categories...",
+  wordpress_list_tags: "Fetching WordPress tags...",
+  wordpress_upload_image: "Uploading image to WordPress...",
 };
 
 // --- Anthropic API with tool use loop ---
@@ -3023,6 +3131,7 @@ export async function callAnthropic(
   if (isContactOutRunning()) tools.push(...CONTACTOUT_TOOLS);
   if (isAgreeRunning()) tools.push(...AGREE_TOOLS);
   if (isGammaRunning()) tools.push(...GAMMA_TOOLS);
+  if (isWordPressRunning()) tools.push(...WORDPRESS_TOOLS);
 
   // Conditionally add Google tools based on connected services
   const googleServices = getConnectedServices();
@@ -3242,6 +3351,8 @@ export async function callAnthropic(
           result = await executeAgreeTool(toolBlock.name, toolBlock.input);
         } else if (gammaToolNames.includes(toolBlock.name)) {
           result = await executeGammaTool(toolBlock.name, toolBlock.input);
+        } else if (wordpressToolNames.includes(toolBlock.name)) {
+          result = await executeWordPressTool(toolBlock.name, toolBlock.input);
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input, sourceContext);
         }
@@ -3381,6 +3492,7 @@ export async function callOpenAI(
   if (isContactOutRunning()) customTools.push(...CONTACTOUT_TOOLS);
   if (isAgreeRunning()) customTools.push(...AGREE_TOOLS);
   if (isGammaRunning()) customTools.push(...GAMMA_TOOLS);
+  if (isWordPressRunning()) customTools.push(...WORDPRESS_TOOLS);
   const googleServices = getConnectedServices();
   if (googleServices) {
     if (googleServices.includes("gmail")) {
@@ -3558,6 +3670,8 @@ export async function callOpenAI(
           result = await executeAgreeTool(toolName, toolInput);
         } else if (gammaToolNames.includes(toolName)) {
           result = await executeGammaTool(toolName, toolInput);
+        } else if (wordpressToolNames.includes(toolName)) {
+          result = await executeWordPressTool(toolName, toolInput);
         } else {
           result = executeSchedulingTool(toolName, toolInput, sourceContext);
         }
@@ -4034,6 +4148,29 @@ Available tools:
 
 IMPORTANT: Generation takes 30-120 seconds. The tool handles polling automatically and returns the URL when done. Always share the resulting URL with the user.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${gammaContext}` : gammaContext;
+  }
+
+  // Inject WordPress context
+  if (isWordPressRunning()) {
+    const siteName = getWordPressSiteName();
+    const wpContext = `You are connected to WordPress${siteName ? ` (site: ${siteName})` : ""} for blog post management.
+
+Available tools:
+- wordpress_create_post — create a post (title, HTML content, status). Default to "draft" unless user explicitly says "publish".
+- wordpress_list_posts — list existing posts, optionally filter by status or search.
+- wordpress_update_post — update an existing post by ID.
+- wordpress_list_categories — list available categories.
+- wordpress_list_tags — list available tags.
+- wordpress_upload_image — upload an image from a URL to the WordPress media library. Returns a media ID to use as featured_media.
+
+Workflow for creating a post:
+1. Write the content as clean HTML (headings, paragraphs, lists, links).
+2. If the user wants a featured image, use find_image to find one, then wordpress_upload_image to upload it.
+3. Create the post as a draft with wordpress_create_post, including the featured_media ID if an image was uploaded.
+4. Share the edit link with the user so they can review before publishing.
+
+IMPORTANT: Always create as draft first unless the user explicitly asks to publish immediately.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${wpContext}` : wpContext;
   }
 
   // Inject long-term memories (skip for scheduled jobs to prevent memory contamination)

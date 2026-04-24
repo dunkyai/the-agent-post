@@ -17,6 +17,7 @@ import {
   executeLumaTool,
   executeGammaTool,
   executeAgreeTool,
+  executeWordPressTool,
 } from "./ai";
 
 // Tool name → category mapping
@@ -70,6 +71,9 @@ const TOOL_CATEGORIES: Record<string, string> = {
   agree_list_templates: "agree", agree_get_template: "agree", agree_create_agreement: "agree",
   agree_create_and_send: "agree", agree_send_agreement: "agree", agree_list_agreements: "agree",
   agree_get_agreement: "agree", agree_list_contacts: "agree", agree_create_contact: "agree",
+  // WordPress
+  wordpress_create_post: "wordpress", wordpress_list_posts: "wordpress", wordpress_update_post: "wordpress",
+  wordpress_list_categories: "wordpress", wordpress_list_tags: "wordpress", wordpress_upload_image: "wordpress",
 };
 
 /**
@@ -123,6 +127,9 @@ export async function executeTool(toolName: string, input: Record<string, any>):
         break;
       case "agree":
         result = await executeAgreeTool(toolName, input);
+        break;
+      case "wordpress":
+        result = await executeWordPressTool(toolName, input);
         break;
       default:
         return JSON.stringify({ error: `Unsupported tool category: ${category}` });
