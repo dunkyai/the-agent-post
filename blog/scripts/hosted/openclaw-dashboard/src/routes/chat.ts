@@ -59,10 +59,17 @@ router.post("/chat/message", (req: Request, res: Response) => {
     const sessionId = req.cookies?.openclaw_session || "anon";
     console.log(`[chat] POST from session: ${sessionId.slice(0, 8)}...`);
 
-    const { taskId } = submitChatMessage(sessionId, message.trim(), undefined, threadId);
+    // Auto-create a thread if none specified
+    let activeThreadId = threadId;
+    if (!activeThreadId) {
+      activeThreadId = createChatThread();
+      console.log(`[chat] Auto-created thread ${activeThreadId}`);
+    }
+
+    const { taskId } = submitChatMessage(sessionId, message.trim(), undefined, activeThreadId);
     console.log(`[chat] Task ${taskId} created for session ${sessionId.slice(0, 8)}...`);
 
-    res.json({ ok: true, taskId });
+    res.json({ ok: true, taskId, threadId: activeThreadId });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("Chat error:", msg);
