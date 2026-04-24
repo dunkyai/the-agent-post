@@ -3275,8 +3275,14 @@ export async function callAnthropic(
     // No more custom tool calls — extract final text (and inline images)
     onStatus?.("Writing response...");
 
-    // Log empty responses for debugging
+    // Handle empty responses — retry once with a nudge to respond with text
     const contentTypes = (data.content || []).map((b: any) => b.type);
+    if (!contentTypes.includes("text") && round > 0) {
+      console.log(`Empty response — stop_reason: ${data.stop_reason}, content types: [${contentTypes.join(", ")}], round: ${round}, messages: ${apiMessages.length}. Retrying with nudge.`);
+      apiMessages.push({ role: "assistant", content: data.content || [] });
+      apiMessages.push({ role: "user", content: [{ type: "text", text: "Please respond to the user with a text message summarizing what you did." }] } as any);
+      continue; // retry the loop
+    }
     if (!contentTypes.includes("text")) {
       console.log(`Empty response — stop_reason: ${data.stop_reason}, content types: [${contentTypes.join(", ")}], round: ${round}, messages: ${apiMessages.length}`);
     }
