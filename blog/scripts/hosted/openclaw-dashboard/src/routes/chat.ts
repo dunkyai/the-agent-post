@@ -15,7 +15,7 @@ const TEXT_TYPES = new Set(["text/plain", "text/csv", "text/markdown", "text/htm
 const router = Router();
 
 router.get("/chat", (req: Request, res: Response) => {
-  const threads = getChatThreads();
+  let threads = getChatThreads();
   let threadId = req.query.thread as string | undefined;
 
   // If no thread specified, use most recent or create one
@@ -30,14 +30,30 @@ router.get("/chat", (req: Request, res: Response) => {
     messages = getMessages(conversationId);
   }
 
-  // Also include legacy "dashboard" conversation in thread list if it has messages
+  // Migrate legacy "dashboard" conversation into a proper thread
   const legacyConvId = getOrCreateConversation("dashboard", "dashboard");
   const legacyMessages = getMessages(legacyConvId);
-  if (legacyMessages.length > 0 && !threads.some(t => t.external_id === "dashboard")) {
-    // Migrate: show legacy conversation but don't create a thread for it
+  if (legacyMessages.length > 0) {
+    // Convert legacy conversation to a thread by updating its external_id
+    const legacyThreadId = createChatThread();
+    const db = require("../services/db").getDb();
+    // Move messages to the new thread's conversation
+    const newConvId = getOrCreateConversation("dashboard", `chat:${legacyThreadId}`);
+    db.prepare("UPDATE messages SET conversation_id = ? WHERE conversation_id = ?").run(newConvId, legacyConvId);
+    // Title from first user message
+    const firstMsg = legacyMessages.find((m: any) => m.role === "user");
+    if (firstMsg) {
+      const title = firstMsg.content.slice(0, 50) + (firstMsg.content.length > 50 ? "..." : "");
+      db.prepare("UPDATE conversations SET title = ? WHERE id = ?").run(title, newConvId);
+    }
+    // Delete the empty legacy conversation
+    deleteConversation(legacyConvId);
+    // Redirect to the migrated thread
     if (!threadId) {
-      messages = legacyMessages;
-      conversationId = legacyConvId;
+      threadId = legacyThreadId;
+      conversationId = newConvId;
+      messages = getMessages(newConvId);
+      threads = getChatThreads(); // refresh thread list
     }
   }
 
@@ -64,6 +80,14 @@ router.post("/chat/message", (req: Request, res: Response) => {
     if (!activeThreadId) {
       activeThreadId = createChatThread();
       console.log(`[chat] Auto-created thread ${activeThreadId}`);
+    }
+
+    // Auto-title the thread from the first message if untitled
+    const threadConvId = getOrCreateConversation("dashboard", `chat:${activeThreadId}`);
+    const existingMessages = getMessages(threadConvId);
+    if (existingMessages.length === 0) {
+      const title = message.trim().slice(0, 50) + (message.trim().length > 50 ? "..." : "");
+      renameChatThread(threadConvId, title);
     }
 
     const { taskId } = submitChatMessage(sessionId, message.trim(), undefined, activeThreadId);
