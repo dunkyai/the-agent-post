@@ -3,6 +3,7 @@ import {
   getConversationsByType, createScheduledJob, getAllScheduledJobs, getScheduledJob,
   deleteScheduledJob, addMemory, getAllMemories, deleteMemory, getMemory, findDuplicateMemory, getMonthlyTaskCount,
 } from "./db";
+import { validateToolInput, checkActionClaims } from "./tool-schemas";
 import { decrypt } from "./encryption";
 import { getNextRun, isValidCron, describeCron } from "./cron";
 import {
@@ -3162,6 +3163,7 @@ export async function callAnthropic(
 
   const MAX_TOOL_ROUNDS = 50;
   const toolCallLog: string[] = []; // track tool+input fingerprints for loop detection
+  const toolNamesCalled: string[] = []; // track tool names for hallucination check
   const MAX_REPEAT_CALLS = 2; // allow same tool+input at most twice
   let lastScreenshot: string | null = null; // track the most recent screenshot base64
   let lastTwitterResult: string | null = null; // track last twitter tool result for fallback
@@ -3311,6 +3313,18 @@ export async function callAnthropic(
           continue;
         }
 
+        // Validate tool input with Zod schemas before execution
+        const validationError = validateToolInput(toolBlock.name, toolBlock.input);
+        if (validationError) {
+          console.log(`Tool validation failed: ${toolBlock.name} — ${validationError}`);
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: toolBlock.id,
+            content: JSON.stringify({ error: validationError }),
+          });
+          continue;
+        }
+
         const toolStartTime = Date.now();
         let result: string | any[];
         if (memoryTools.includes(toolBlock.name)) {
@@ -3360,6 +3374,7 @@ export async function callAnthropic(
         console.log(`Tool result: ${toolBlock.name}`, typeof result === "string" ? result.slice(0, 300) : "[multipart content]");
         const toolOutputStr = typeof result === "string" ? result : JSON.stringify(result);
         onToolCall?.(toolBlock.name, toolBlock.input, toolOutputStr.slice(0, 2000), toolDurationMs);
+        toolNamesCalled.push(toolBlock.name);
 
         // Save the latest screenshot so we can include it in the final response
         if (toolBlock.name === "browser_screenshot" && Array.isArray(result)) {
@@ -3444,7 +3459,17 @@ export async function callAnthropic(
       } catch { /* not valid JSON, ignore */ }
     }
 
-    return { role: "assistant", content: text.trim() || "Sorry, I wasn't able to generate a response. Could you try again?" };
+    // Check for hallucinated action claims
+    const finalText = text.trim();
+    if (finalText && toolNamesCalled.length > 0) {
+      const hallucinationWarning = checkActionClaims(finalText, toolNamesCalled);
+      if (hallucinationWarning) {
+        console.warn(`[hallucination-check] ${hallucinationWarning}`);
+        // Don't block — log for now. Could add retry logic later.
+      }
+    }
+
+    return { role: "assistant", content: finalText || "Sorry, I wasn't able to generate a response. Could you try again?" };
   }
 
   return { role: "assistant", content: "Hmmm...this was pretty complex and I hit a tool limit. Could you break this into smaller steps or ask again in a simpler way? For example, instead of asking me to do everything at once, try one piece at a time." };

@@ -3,6 +3,7 @@
  * Calls the same execute* functions that the AI tool loop uses.
  */
 
+import { validateToolInput } from "./tool-schemas";
 import {
   executeBrowserTool,
   executeMessagingTool,
@@ -84,6 +85,12 @@ export async function executeTool(toolName: string, input: Record<string, any>):
   const category = TOOL_CATEGORIES[toolName];
   if (!category) {
     return JSON.stringify({ error: `Unknown tool: ${toolName}` });
+  }
+
+  // Validate input before execution
+  const validationError = validateToolInput(toolName, input);
+  if (validationError) {
+    return JSON.stringify({ error: validationError });
   }
 
   try {
