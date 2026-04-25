@@ -1006,6 +1006,64 @@ export function getAllMemories(): Memory[] {
     .all() as Memory[];
 }
 
+/**
+ * Get memories relevant to the current user input.
+ * Always includes preference/rule memories. Ranks others by keyword overlap.
+ * Caps total at maxCount to prevent context overflow.
+ */
+export function getRelevantMemories(userInput: string, maxCount = 15): Memory[] {
+  const memories = getAllMemories();
+  if (memories.length <= maxCount) return memories; // No filtering needed
+
+  const PREFERENCE_PATTERN = /\b(prefer|always|never|avoid|rule|format|important|must|don't|do not|no bold|no hashtag|concise|brief)\b/i;
+
+  // Split input into meaningful keywords
+  const inputWords = new Set(
+    userInput.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(w => w.length > 3)
+  );
+
+  // Score and classify each memory
+  const scored = memories.map(mem => {
+    const isPreference = PREFERENCE_PATTERN.test(mem.content);
+    let score = 0;
+    if (inputWords.size > 0) {
+      const memWords = new Set(
+        mem.content.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(w => w.length > 3)
+      );
+      for (const w of inputWords) {
+        if (memWords.has(w)) score++;
+      }
+      score = score / inputWords.size; // Normalize to 0-1
+    }
+    return { memory: mem, isPreference, score };
+  });
+
+  // Always include preferences, then fill with top-scored contextual
+  const preferences = scored.filter(s => s.isPreference).map(s => s.memory);
+  const contextual = scored
+    .filter(s => !s.isPreference && s.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map(s => s.memory);
+
+  const result = [...preferences];
+  for (const mem of contextual) {
+    if (result.length >= maxCount) break;
+    if (!result.some(r => r.id === mem.id)) {
+      result.push(mem);
+    }
+  }
+
+  // If still under maxCount, add remaining by recency
+  if (result.length < maxCount) {
+    const remaining = memories
+      .filter(m => !result.some(r => r.id === m.id))
+      .slice(-( maxCount - result.length));
+    result.push(...remaining);
+  }
+
+  return result;
+}
+
 export function deleteMemory(id: number): void {
   getDb().prepare("DELETE FROM memories WHERE id = ?").run(id);
 }

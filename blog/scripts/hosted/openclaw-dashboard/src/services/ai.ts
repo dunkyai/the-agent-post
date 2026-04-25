@@ -1,7 +1,7 @@
 import {
   getSetting, setSetting, getIntegration, getOrCreateConversation, addMessage, getMessages,
   getConversationsByType, createScheduledJob, getAllScheduledJobs, getScheduledJob,
-  deleteScheduledJob, addMemory, getAllMemories, deleteMemory, getMemory, findDuplicateMemory, getMonthlyTaskCount,
+  deleteScheduledJob, addMemory, getAllMemories, getRelevantMemories, deleteMemory, getMemory, findDuplicateMemory, getMonthlyTaskCount,
 } from "./db";
 import { validateToolInput, checkActionClaims } from "./tool-schemas";
 import { postProcessResponse } from "./post-process";
@@ -3856,7 +3856,7 @@ function cleanEmailDraft(text: string): string {
   return cleaned.trim();
 }
 
-export function buildSystemPrompt(extraContext?: string, options?: { skipMemories?: boolean }): string {
+export function buildSystemPrompt(extraContext?: string, options?: { skipMemories?: boolean; userInput?: string }): string {
   let systemPrompt = getSetting("system_prompt") || "";
 
   // Inject agent name
@@ -4202,10 +4202,13 @@ IMPORTANT: Always create as draft first unless the user explicitly asks to publi
   // Inject long-term memories (skip for scheduled jobs to prevent memory contamination)
   if (!options?.skipMemories) {
     try {
-      const memories = getAllMemories();
+      const memories = options?.userInput
+        ? getRelevantMemories(options.userInput, 15)
+        : getAllMemories();
       if (memories.length > 0) {
+        const totalMemories = getAllMemories().length;
         const memoryList = memories.map((m) => `- ${m.content}`).join("\n");
-        const memContext = `Your long-term memories (things you've been asked to remember or proactively saved):\n${memoryList}\n\nUse the save_memory tool to remember new important facts. Use delete_memory to remove outdated ones.`;
+        const memContext = `Your long-term memories (${memories.length} most relevant of ${totalMemories} total):\n${memoryList}\n\nUse the save_memory tool to remember new important facts. Use delete_memory to remove outdated ones.`;
         systemPrompt = systemPrompt ? `${systemPrompt}\n\n${memContext}` : memContext;
       } else {
         const memContext = "You have a long-term memory system. Use the save_memory tool to remember important facts, user preferences, and key information across conversations. Be proactive about saving things worth remembering.";
