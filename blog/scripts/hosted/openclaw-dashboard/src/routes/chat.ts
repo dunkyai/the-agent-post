@@ -6,6 +6,44 @@ import { transcribeAudio } from "../services/transcription";
 import { scanBuffer } from "../services/antivirus";
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
+// Generate a better thread title using AI after enough messages
+async function generateThreadTitle(conversationId: string, messages: { role: string; content: string }[]): Promise<void> {
+  try {
+    const summary = messages
+      .filter(m => m.role === "user")
+      .map(m => m.content.slice(0, 100))
+      .join(" | ");
+
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": process.env.ANTHROPIC_API_KEY || "",
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 30,
+        messages: [{
+          role: "user",
+          content: `Generate a short title (max 6 words) for this conversation. Return ONLY the title, no quotes or explanation.\n\nMessages:\n${summary}`,
+        }],
+      }),
+    });
+
+    if (res.ok) {
+      const data: any = await res.json();
+      const title = (data.content?.[0]?.text || "").trim().replace(/^["']|["']$/g, "").slice(0, 50);
+      if (title) {
+        renameChatThread(conversationId, title);
+        console.log(`[chat] Thread auto-titled: "${title}"`);
+      }
+    }
+  } catch (err) {
+    // Non-critical — silently fail
+  }
+}
+
 // Supported file types for chat uploads
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 const AUDIO_TYPES = new Set(["audio/webm", "audio/mp4", "audio/mpeg", "audio/ogg", "audio/wav", "audio/x-m4a"]);
@@ -15,7 +53,7 @@ const TEXT_TYPES = new Set(["text/plain", "text/csv", "text/markdown", "text/htm
 const router = Router();
 
 router.get("/chat", (req: Request, res: Response) => {
-  const threads = getChatThreads();
+  let threads = getChatThreads();
   let threadId = req.query.thread as string | undefined;
 
   // If no thread specified, use most recent or create one
@@ -30,14 +68,30 @@ router.get("/chat", (req: Request, res: Response) => {
     messages = getMessages(conversationId);
   }
 
-  // Also include legacy "dashboard" conversation in thread list if it has messages
+  // Migrate legacy "dashboard" conversation into a proper thread
   const legacyConvId = getOrCreateConversation("dashboard", "dashboard");
   const legacyMessages = getMessages(legacyConvId);
-  if (legacyMessages.length > 0 && !threads.some(t => t.external_id === "dashboard")) {
-    // Migrate: show legacy conversation but don't create a thread for it
+  if (legacyMessages.length > 0) {
+    // Convert legacy conversation to a thread by updating its external_id
+    const legacyThreadId = createChatThread();
+    const db = require("../services/db").getDb();
+    // Move messages to the new thread's conversation
+    const newConvId = getOrCreateConversation("dashboard", `chat:${legacyThreadId}`);
+    db.prepare("UPDATE messages SET conversation_id = ? WHERE conversation_id = ?").run(newConvId, legacyConvId);
+    // Title from first user message
+    const firstMsg = legacyMessages.find((m: any) => m.role === "user");
+    if (firstMsg) {
+      const title = firstMsg.content.slice(0, 50) + (firstMsg.content.length > 50 ? "..." : "");
+      db.prepare("UPDATE conversations SET title = ? WHERE id = ?").run(title, newConvId);
+    }
+    // Delete the empty legacy conversation
+    deleteConversation(legacyConvId);
+    // Redirect to the migrated thread
     if (!threadId) {
-      messages = legacyMessages;
-      conversationId = legacyConvId;
+      threadId = legacyThreadId;
+      conversationId = newConvId;
+      messages = getMessages(newConvId);
+      threads = getChatThreads(); // refresh thread list
     }
   }
 
@@ -59,10 +113,30 @@ router.post("/chat/message", (req: Request, res: Response) => {
     const sessionId = req.cookies?.openclaw_session || "anon";
     console.log(`[chat] POST from session: ${sessionId.slice(0, 8)}...`);
 
-    const { taskId } = submitChatMessage(sessionId, message.trim(), undefined, threadId);
+    // Auto-create a thread if none specified
+    let activeThreadId = threadId;
+    if (!activeThreadId) {
+      activeThreadId = createChatThread();
+      console.log(`[chat] Auto-created thread ${activeThreadId}`);
+    }
+
+    // Auto-title the thread from the first message if untitled
+    const threadConvId = getOrCreateConversation("dashboard", `chat:${activeThreadId}`);
+    const existingMessages = getMessages(threadConvId);
+    if (existingMessages.length === 0) {
+      const title = message.trim().slice(0, 50) + (message.trim().length > 50 ? "..." : "");
+      renameChatThread(threadConvId, title);
+    }
+
+    // After 5 messages, generate a better title using AI
+    if (existingMessages.length === 4) {
+      generateThreadTitle(threadConvId, existingMessages.concat([{ role: "user", content: message } as any]));
+    }
+
+    const { taskId } = submitChatMessage(sessionId, message.trim(), undefined, activeThreadId);
     console.log(`[chat] Task ${taskId} created for session ${sessionId.slice(0, 8)}...`);
 
-    res.json({ ok: true, taskId });
+    res.json({ ok: true, taskId, threadId: activeThreadId });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("Chat error:", msg);

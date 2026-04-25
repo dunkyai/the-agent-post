@@ -1035,6 +1035,16 @@ router.post("/integrations/:type/health-check", async (req: Request, res: Respon
       });
       result = resp.ok ? { success: true, detail: "ContactOut API accessible" } : { success: false, error: `ContactOut API returned ${resp.status}` };
 
+    } else if (type === "wordpress") {
+      const integration = getIntegration("wordpress");
+      if (!integration || integration.status !== "connected") throw new Error("Not connected");
+      const config = JSON.parse(decrypt(integration.config));
+      const auth = "Basic " + Buffer.from(`${config.username}:${config.application_password}`).toString("base64");
+      const resp = await fetch(`${config.site_url.replace(/\/$/, "")}/wp-json/wp/v2/users/me`, {
+        headers: { Authorization: auth },
+      });
+      result = resp.ok ? { success: true, detail: `Connected to ${config.site_name}` } : { success: false, error: `WordPress API returned ${resp.status}` };
+
     } else {
       result = { success: false, error: `Health check not implemented for ${type}` };
     }

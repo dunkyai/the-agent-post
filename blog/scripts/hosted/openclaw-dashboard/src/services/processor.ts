@@ -90,7 +90,7 @@ export async function processTask(
       extraContext = extraContext ? extraContext + threadInfo : threadInfo;
     }
 
-    const systemPrompt = buildSystemPrompt(extraContext);
+    const systemPrompt = buildSystemPrompt(extraContext, { userInput: task.input.raw_input });
 
     const provider = getProvider(model);
     const apiKey = getApiKey(provider);
@@ -148,11 +148,50 @@ export async function processTask(
 
     // Get conversation history
     const MAX_HISTORY = 20;
+    const KEEP_RECENT = 6; // Keep last N messages raw, summarize the rest
     let history = getMessages(conversationId).filter(
       (m) => m.content && m.content.trim()
     );
     if (history.length > MAX_HISTORY) {
       history = history.slice(-MAX_HISTORY);
+      while (history.length > 0 && history[0].role !== "user") {
+        history.shift();
+      }
+    }
+
+    // Summarize older messages to save context window
+    if (history.length > KEEP_RECENT) {
+      const oldMessages = history.slice(0, -KEEP_RECENT);
+      const recentMessages = history.slice(-KEEP_RECENT);
+
+      // Build a compressed summary of older messages
+      const summaryParts: string[] = [];
+      for (const msg of oldMessages) {
+        if (msg.role === "user") {
+          // Keep first 80 chars of user messages
+          const preview = msg.content.slice(0, 80).replace(/\n/g, " ").trim();
+          summaryParts.push(`User: ${preview}${msg.content.length > 80 ? "..." : ""}`);
+        } else {
+          // For assistant: extract key actions (tool calls, URLs, short summary)
+          const urlMatch = msg.content.match(/https?:\/\/[^\s)]+/);
+          const actionMatch = msg.content.match(/I('ve|'ve| have) (sent|created|drafted|posted|saved|searched|found|scheduled|updated|deleted)[^.]*\./i);
+          if (actionMatch) {
+            summaryParts.push(`Assistant: ${actionMatch[0]}`);
+          } else if (urlMatch) {
+            summaryParts.push(`Assistant: [shared ${urlMatch[0]}]`);
+          } else {
+            const preview = msg.content.slice(0, 60).replace(/\n/g, " ").trim();
+            summaryParts.push(`Assistant: ${preview}...`);
+          }
+        }
+      }
+
+      const summary = summaryParts.join("\n").slice(0, 600);
+      history = [
+        { role: "user" as const, content: `[Earlier in this conversation:\n${summary}\n]`, created_at: oldMessages[0].created_at },
+        ...recentMessages,
+      ];
+      // Ensure starts with user message
       while (history.length > 0 && history[0].role !== "user") {
         history.shift();
       }

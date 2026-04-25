@@ -450,6 +450,24 @@
           errorEl.textContent = data.error;
           return;
         }
+        // If a new thread was auto-created, update the URL and sidebar
+        if (data.threadId && (!window.__chatConfig?.threadId || window.__chatConfig.threadId !== data.threadId)) {
+          window.__chatConfig = window.__chatConfig || {};
+          window.__chatConfig.threadId = data.threadId;
+          history.replaceState(null, "", "/chat?thread=" + data.threadId);
+          // Refresh sidebar
+          fetch("/chat/threads/api").then(function(r) { return r.json(); }).then(function(d) {
+            var sidebar = document.getElementById("threadList");
+            if (sidebar && d.threads) {
+              sidebar.innerHTML = d.threads.map(function(t) {
+                var tid = t.external_id.replace("chat:", "");
+                var active = tid === data.threadId ? " active" : "";
+                var date = new Date(t.updated_at + "Z").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                return '<a href="/chat?thread=' + tid + '" class="thread-item' + active + '"><div class="thread-title">' + (t.title || t.preview?.slice(0, 40) || "New conversation") + '</div><div class="thread-meta">' + date + '</div></a>';
+              }).join("");
+            }
+          }).catch(function() {});
+        }
         // Tag the thinking indicator with the real task ID
         thinking.setAttribute("data-task-id", data.taskId);
         // Add to ordered queue
