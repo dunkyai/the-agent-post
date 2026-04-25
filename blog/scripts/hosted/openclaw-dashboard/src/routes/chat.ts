@@ -6,6 +6,44 @@ import { transcribeAudio } from "../services/transcription";
 import { scanBuffer } from "../services/antivirus";
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
+// Generate a better thread title using AI after enough messages
+async function generateThreadTitle(conversationId: string, messages: { role: string; content: string }[]): Promise<void> {
+  try {
+    const summary = messages
+      .filter(m => m.role === "user")
+      .map(m => m.content.slice(0, 100))
+      .join(" | ");
+
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": process.env.ANTHROPIC_API_KEY || "",
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 30,
+        messages: [{
+          role: "user",
+          content: `Generate a short title (max 6 words) for this conversation. Return ONLY the title, no quotes or explanation.\n\nMessages:\n${summary}`,
+        }],
+      }),
+    });
+
+    if (res.ok) {
+      const data: any = await res.json();
+      const title = (data.content?.[0]?.text || "").trim().replace(/^["']|["']$/g, "").slice(0, 50);
+      if (title) {
+        renameChatThread(conversationId, title);
+        console.log(`[chat] Thread auto-titled: "${title}"`);
+      }
+    }
+  } catch (err) {
+    // Non-critical — silently fail
+  }
+}
+
 // Supported file types for chat uploads
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 const AUDIO_TYPES = new Set(["audio/webm", "audio/mp4", "audio/mpeg", "audio/ogg", "audio/wav", "audio/x-m4a"]);
@@ -88,6 +126,11 @@ router.post("/chat/message", (req: Request, res: Response) => {
     if (existingMessages.length === 0) {
       const title = message.trim().slice(0, 50) + (message.trim().length > 50 ? "..." : "");
       renameChatThread(threadConvId, title);
+    }
+
+    // After 5 messages, generate a better title using AI
+    if (existingMessages.length === 4) {
+      generateThreadTitle(threadConvId, existingMessages.concat([{ role: "user", content: message } as any]));
     }
 
     const { taskId } = submitChatMessage(sessionId, message.trim(), undefined, activeThreadId);
