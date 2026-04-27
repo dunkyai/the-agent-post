@@ -147,15 +147,45 @@ export async function processTask(
     const imageAttachments = task.input.metadata?.images as { name: string; content: string; mimeType: string }[] | undefined;
 
     // Get conversation history
-    const MAX_HISTORY = 20;
+    const MAX_HISTORY = 30;
     let history = getMessages(conversationId).filter(
       (m) => m.content && m.content.trim()
     );
+
+    // Extract sticky context from full history before truncating
+    // (doc URLs, image uploads, and other artifacts the AI should always remember)
+    const stickyItems: string[] = [];
+    for (const msg of history) {
+      if (msg.role !== "assistant") continue;
+      const content = msg.content || "";
+      // Google Docs URLs
+      const docMatches = content.match(/https:\/\/docs\.google\.com\/document\/d\/[a-zA-Z0-9_-]+\/edit/g);
+      if (docMatches) docMatches.forEach(url => stickyItems.push(`Google Doc: ${url}`));
+      // Google Sheets URLs
+      const sheetMatches = content.match(/https:\/\/docs\.google\.com\/spreadsheets\/d\/[a-zA-Z0-9_-]+\/edit/g);
+      if (sheetMatches) sheetMatches.forEach(url => stickyItems.push(`Google Sheet: ${url}`));
+      // Luma event URLs
+      const lumaMatches = content.match(/https:\/\/lu\.ma\/[a-zA-Z0-9_-]+/g);
+      if (lumaMatches) lumaMatches.forEach(url => stickyItems.push(`Luma event: ${url}`));
+    }
+
     if (history.length > MAX_HISTORY) {
       history = history.slice(-MAX_HISTORY);
       while (history.length > 0 && history[0].role !== "user") {
         history.shift();
       }
+    }
+
+    // Inject sticky context into system prompt so the AI always has it
+    if (stickyItems.length > 0) {
+      const stickyContext = `\n\n[SESSION CONTEXT — Documents and artifacts created in this conversation]\n${[...new Set(stickyItems)].join("\n")}\n[End of session context]`;
+      extraContext = extraContext ? extraContext + stickyContext : stickyContext;
+    }
+
+    // If images were uploaded in a previous message, note their presence
+    if (imageAttachments?.length) {
+      const imgNote = `\n\n[UPLOADED IMAGES — ${imageAttachments.length} image(s) attached to this message: ${imageAttachments.map(i => i.name).join(", ")}. You can see them via Claude vision and upload them to Google Drive (drive_upload_image) or Mailchimp (mailchimp_upload_image).]`;
+      extraContext = extraContext ? extraContext + imgNote : imgNote;
     }
 
     // Channel routing: detect ambiguous action requests and ask user to clarify.
