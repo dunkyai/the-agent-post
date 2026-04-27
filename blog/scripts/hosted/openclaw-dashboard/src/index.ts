@@ -216,6 +216,19 @@ async function reconnectIntegrations() {
     console.error("Failed to reconnect Agree.com:", err instanceof Error ? err.message : err);
   }
 
+  // Mailchimp
+  try {
+    const mailchimp = getIntegration("mailchimp");
+    if (mailchimp && mailchimp.status === "connected") {
+      const config = JSON.parse(decrypt(mailchimp.config));
+      const { startMailchimp } = require("./services/mailchimp");
+      startMailchimp(config);
+      console.log(`Mailchimp reconnected (${config.account_name || config.server})`);
+    }
+  } catch (err: unknown) {
+    console.error("Failed to reconnect Mailchimp:", err instanceof Error ? err.message : err);
+  }
+
   // Gamma
   try {
     const gamma = getIntegration("gamma");
