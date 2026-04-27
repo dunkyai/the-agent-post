@@ -729,6 +729,45 @@
         </div>
       </details>
 
+      <!-- Mailchimp -->
+      <details class="integration-tile">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #FFE01B;"><span style="font-size: 18px;">&#128028;</span></span>
+          <div class="integration-tile-info">
+            <h3>Mailchimp</h3>
+            <p>Email marketing — create campaigns, manage subscribers, view reports</p>
+          </div>
+          <span class="status-badge status-<%= mailchimp.status === 'connected' ? 'connected' : 'disconnected' %>">
+            <%= mailchimp.status === 'connected' ? 'Connected' : 'Not connected' %>
+          </span>
+        </summary>
+        <div class="integration-body">
+          <% if (mailchimp.status === 'connected') { %>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+              Your agent can create and send email campaigns, manage subscribers, and view campaign performance reports.
+            </p>
+            <form method="POST" action="/integrations/mailchimp/disconnect" onsubmit="return confirm('Disconnect Mailchimp?')">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+            </form>
+          <% } else { %>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+              Connect Mailchimp to let your agent create email campaigns, manage subscribers, and view reports.
+            </p>
+            <% if (mailchimp.error_message) { %>
+              <p style="color: var(--danger); font-size: 13px; margin-bottom: 8px;"><%= mailchimp.error_message %></p>
+            <% } %>
+            <form method="POST" action="/integrations/mailchimp/connect">
+              <div class="form-group">
+                <label for="mailchimp_api_key">API Key</label>
+                <input type="password" id="mailchimp_api_key" name="api_key" placeholder="Your Mailchimp API key (ends with -us1, -us6, etc.)" required>
+                <div class="hint">Find your API key at Mailchimp > Account > Extras > API Keys</div>
+              </div>
+              <button type="submit" class="btn btn-sm">Connect</button>
+            </form>
+          <% } %>
+        </div>
+      </details>
+
       <!-- Agree.com -->
       <details class="integration-tile">
         <summary class="integration-tile-summary">

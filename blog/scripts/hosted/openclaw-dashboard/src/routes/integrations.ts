@@ -15,6 +15,7 @@ import { buildGranolaOAuthUrl, stopGranola, isGranolaRunning } from "../services
 import { startContactOut, stopContactOut, isContactOutRunning, testContactOutConnection } from "../services/contactout";
 import { startAgree, stopAgree, testAgreeConnection } from "../services/agree";
 import { startGamma, stopGamma, testGammaConnection } from "../services/gamma";
+import { startMailchimp, stopMailchimp, testMailchimpConnection } from "../services/mailchimp";
 import { startWordPress, stopWordPress, testWordPressConnection, getWordPressSiteName } from "../services/wordpress";
 
 const router = Router();
@@ -205,6 +206,7 @@ router.get("/integrations", async (req: Request, res: Response) => {
       return base;
     })(),
     granola: integrationMap["granola"] || { status: "disconnected", error_message: null },
+    mailchimp: integrationMap["mailchimp"] || { status: "disconnected", error_message: null },
     contactout: integrationMap["contactout"] || { status: "disconnected", error_message: null },
     agree: integrationMap["agree"] || { status: "disconnected", error_message: null },
     gamma: integrationMap["gamma"] || { status: "disconnected", error_message: null },
@@ -1064,6 +1066,33 @@ router.post("/integrations/:type/health-check", async (req: Request, res: Respon
     const responseMs = Date.now() - start;
     res.json({ success: false, error: err.message || "Health check failed", response_ms: responseMs });
   }
+});
+
+// --- Mailchimp ---
+
+router.post("/integrations/mailchimp/connect", async (req: Request, res: Response) => {
+  const { api_key } = req.body;
+  if (!api_key?.trim()) {
+    res.redirect(303, "/integrations?flash=Mailchimp+API+key+is+required");
+    return;
+  }
+  try {
+    const { server, account_name } = await testMailchimpConnection(api_key.trim());
+    const config = encrypt(JSON.stringify({ api_key: api_key.trim(), server, account_name }));
+    upsertIntegration("mailchimp", config, "connected");
+    startMailchimp({ api_key: api_key.trim(), server });
+    res.redirect(303, "/integrations?flash=Mailchimp+connected+(" + encodeURIComponent(account_name) + ")");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Connection failed";
+    upsertIntegration("mailchimp", "{}", "error", message);
+    res.redirect(303, "/integrations?flash=Mailchimp+error:+" + encodeURIComponent(message));
+  }
+});
+
+router.post("/integrations/mailchimp/disconnect", (req: Request, res: Response) => {
+  stopMailchimp();
+  upsertIntegration("mailchimp", "{}", "disconnected");
+  res.redirect(303, "/integrations?flash=Mailchimp+disconnected");
 });
 
 export default router;

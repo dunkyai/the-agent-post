@@ -61,6 +61,11 @@ import {
   contactoutSearchCompany, contactoutGetDecisionMakers, contactoutVerifyEmail,
 } from "./contactout";
 import {
+  isMailchimpRunning,
+  mailchimpListAudiences, mailchimpListCampaigns, mailchimpCreateCampaign,
+  mailchimpSendCampaign, mailchimpGetCampaignReport, mailchimpAddSubscriber, mailchimpListTemplates,
+} from "./mailchimp";
+import {
   isAgreeRunning,
   agreeListTemplates, agreeGetTemplate, agreeCreateAgreement, agreeCreateAndSend,
   agreeSendAgreement, agreeListAgreements, agreeGetAgreement,
@@ -1808,6 +1813,103 @@ async function executeContactOutTool(toolName: string, input: any): Promise<stri
   }
 }
 
+// --- Mailchimp Tools ---
+
+const MAILCHIMP_TOOLS = [
+  {
+    name: "mailchimp_list_audiences",
+    description: "List all Mailchimp audiences (lists) with subscriber counts.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "mailchimp_list_campaigns",
+    description: "List Mailchimp campaigns with status and stats. Filter by status: save, paused, schedule, sending, sent.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        status: { type: "string", description: "Filter by status: save, paused, schedule, sending, sent" },
+        count: { type: "number", description: "Number of campaigns to return (default 20)" },
+      },
+    },
+  },
+  {
+    name: "mailchimp_create_campaign",
+    description: "Create a new email campaign in Mailchimp. Creates the campaign as a draft — call mailchimp_send_campaign to send it. ALWAYS confirm with the user before sending.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        list_id: { type: "string", description: "Audience/list ID to send to (from mailchimp_list_audiences)" },
+        subject: { type: "string", description: "Email subject line" },
+        preview_text: { type: "string", description: "Preview text shown in email clients" },
+        title: { type: "string", description: "Internal campaign title" },
+        from_name: { type: "string", description: "Sender name" },
+        reply_to: { type: "string", description: "Reply-to email address" },
+        body_html: { type: "string", description: "Email body as HTML" },
+      },
+      required: ["list_id", "subject", "body_html"],
+    },
+  },
+  {
+    name: "mailchimp_send_campaign",
+    description: "Send a draft campaign. ONLY call this after the user explicitly confirms they want to send. This sends to all subscribers in the audience.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        campaign_id: { type: "string", description: "Campaign ID to send" },
+      },
+      required: ["campaign_id"],
+    },
+  },
+  {
+    name: "mailchimp_campaign_report",
+    description: "Get performance report for a sent campaign: opens, clicks, bounces, unsubscribes.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        campaign_id: { type: "string", description: "Campaign ID" },
+      },
+      required: ["campaign_id"],
+    },
+  },
+  {
+    name: "mailchimp_add_subscriber",
+    description: "Add a subscriber to a Mailchimp audience. If already subscribed, returns success.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        list_id: { type: "string", description: "Audience/list ID" },
+        email: { type: "string", description: "Email address" },
+        first_name: { type: "string", description: "First name" },
+        last_name: { type: "string", description: "Last name" },
+        tags: { type: "array", items: { type: "string" }, description: "Tags to apply" },
+      },
+      required: ["list_id", "email"],
+    },
+  },
+  {
+    name: "mailchimp_list_templates",
+    description: "List available Mailchimp email templates.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+];
+
+export async function executeMailchimpTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "mailchimp_list_audiences": return await mailchimpListAudiences();
+      case "mailchimp_list_campaigns": return await mailchimpListCampaigns(input);
+      case "mailchimp_create_campaign": return await mailchimpCreateCampaign(input);
+      case "mailchimp_send_campaign": return await mailchimpSendCampaign(input.campaign_id);
+      case "mailchimp_campaign_report": return await mailchimpGetCampaignReport(input.campaign_id);
+      case "mailchimp_add_subscriber": return await mailchimpAddSubscriber(input.list_id, input.email, input.first_name, input.last_name, input.tags);
+      case "mailchimp_list_templates": return await mailchimpListTemplates();
+      default: return JSON.stringify({ error: `Unknown Mailchimp tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Mailchimp operation failed" });
+  }
+}
+
 // --- Agree.com Tools ---
 
 const AGREE_TOOLS = [
@@ -3055,6 +3157,13 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   contactout_search_company: "Searching companies...",
   contactout_decision_makers: "Finding decision makers...",
   contactout_verify_email: "Verifying email...",
+  mailchimp_list_audiences: "Listing Mailchimp audiences...",
+  mailchimp_list_campaigns: "Checking Mailchimp campaigns...",
+  mailchimp_create_campaign: "Creating Mailchimp campaign...",
+  mailchimp_send_campaign: "Sending campaign...",
+  mailchimp_campaign_report: "Getting campaign report...",
+  mailchimp_add_subscriber: "Adding subscriber...",
+  mailchimp_list_templates: "Listing email templates...",
   agree_list_templates: "Listing contract templates...",
   agree_get_template: "Getting template details...",
   agree_create_agreement: "Creating agreement...",
@@ -3131,6 +3240,7 @@ export async function callAnthropic(
   if (isBeehiivRunning() && !isExternalEmailTask) tools.push(...BEEHIIV_TOOLS);
   if (isGranolaRunning()) tools.push(...GRANOLA_TOOLS);
   if (isContactOutRunning()) tools.push(...CONTACTOUT_TOOLS);
+  if (isMailchimpRunning()) tools.push(...MAILCHIMP_TOOLS);
   if (isAgreeRunning()) tools.push(...AGREE_TOOLS);
   if (isGammaRunning()) tools.push(...GAMMA_TOOLS);
   if (isWordPressRunning()) tools.push(...WORDPRESS_TOOLS);
@@ -3289,6 +3399,7 @@ export async function callAnthropic(
       const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
       const granolaToolNames = ["granola_list_meetings", "granola_search_meetings", "granola_get_transcript", "granola_query", "granola_list_folders"];
       const contactoutToolNames = ["contactout_search_people", "contactout_enrich_person", "contactout_search_company", "contactout_decision_makers", "contactout_verify_email"];
+      const mailchimpToolNames = ["mailchimp_list_audiences", "mailchimp_list_campaigns", "mailchimp_create_campaign", "mailchimp_send_campaign", "mailchimp_campaign_report", "mailchimp_add_subscriber", "mailchimp_list_templates"];
       const agreeToolNames = ["agree_list_templates", "agree_get_template", "agree_create_agreement", "agree_create_and_send", "agree_send_agreement", "agree_list_agreements", "agree_get_agreement", "agree_list_contacts", "agree_create_contact"];
       const gammaToolNames = ["gamma_create_presentation", "gamma_get_generation", "gamma_list_themes", "gamma_list_folders"];
       for (const toolBlock of customToolUseBlocks) {
@@ -3362,6 +3473,8 @@ export async function callAnthropic(
           result = await executeGranolaTool(toolBlock.name, toolBlock.input);
         } else if (contactoutToolNames.includes(toolBlock.name)) {
           result = await executeContactOutTool(toolBlock.name, toolBlock.input);
+        } else if (mailchimpToolNames.includes(toolBlock.name)) {
+          result = await executeMailchimpTool(toolBlock.name, toolBlock.input);
         } else if (agreeToolNames.includes(toolBlock.name)) {
           result = await executeAgreeTool(toolBlock.name, toolBlock.input);
         } else if (gammaToolNames.includes(toolBlock.name)) {
@@ -3516,6 +3629,7 @@ export async function callOpenAI(
   if (isBeehiivRunning() && !isExternalEmailTask) customTools.push(...BEEHIIV_TOOLS);
   if (isGranolaRunning()) customTools.push(...GRANOLA_TOOLS);
   if (isContactOutRunning()) customTools.push(...CONTACTOUT_TOOLS);
+  if (isMailchimpRunning()) customTools.push(...MAILCHIMP_TOOLS);
   if (isAgreeRunning()) customTools.push(...AGREE_TOOLS);
   if (isGammaRunning()) customTools.push(...GAMMA_TOOLS);
   if (isWordPressRunning()) customTools.push(...WORDPRESS_TOOLS);
@@ -3579,6 +3693,7 @@ export async function callOpenAI(
   const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
   const granolaToolNames = ["granola_list_meetings", "granola_search_meetings", "granola_get_transcript", "granola_query", "granola_list_folders"];
   const contactoutToolNames = ["contactout_search_people", "contactout_enrich_person", "contactout_search_company", "contactout_decision_makers", "contactout_verify_email"];
+  const mailchimpToolNames = ["mailchimp_list_audiences", "mailchimp_list_campaigns", "mailchimp_create_campaign", "mailchimp_send_campaign", "mailchimp_campaign_report", "mailchimp_add_subscriber", "mailchimp_list_templates"];
   const agreeToolNames = ["agree_list_templates", "agree_get_template", "agree_create_agreement", "agree_create_and_send", "agree_send_agreement", "agree_list_agreements", "agree_get_agreement", "agree_list_contacts", "agree_create_contact"];
   const gammaToolNames = ["gamma_create_presentation", "gamma_get_generation", "gamma_list_themes", "gamma_list_folders"];
 
@@ -3692,6 +3807,8 @@ export async function callOpenAI(
           result = await executeGranolaTool(toolName, toolInput);
         } else if (contactoutToolNames.includes(toolName)) {
           result = await executeContactOutTool(toolName, toolInput);
+        } else if (mailchimpToolNames.includes(toolName)) {
+          result = await executeMailchimpTool(toolName, toolInput);
         } else if (agreeToolNames.includes(toolName)) {
           result = await executeAgreeTool(toolName, toolInput);
         } else if (gammaToolNames.includes(toolName)) {
@@ -4145,6 +4262,20 @@ Available tools:
 
 IMPORTANT: Be mindful of credit usage. Use reveal_info=false first to browse results, then reveal_info=true only for the specific people the user wants contact info for.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${contactoutContext}` : contactoutContext;
+  }
+
+  // Inject Mailchimp context
+  if (isMailchimpRunning()) {
+    const mailchimpContext = `You are connected to Mailchimp for email marketing. You can list audiences, create and send campaigns, add subscribers, view campaign reports, and list templates using the mailchimp_* tools.
+
+Workflow for sending a campaign:
+1. mailchimp_list_audiences — find the audience to send to
+2. mailchimp_create_campaign — create the campaign as a draft
+3. Show the user a preview and ask for confirmation
+4. mailchimp_send_campaign — ONLY after explicit user approval
+
+CRITICAL: NEVER send a campaign without the user explicitly confirming. Always create as draft first.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${mailchimpContext}` : mailchimpContext;
   }
 
   // Inject Agree.com context
