@@ -248,3 +248,30 @@ export async function mailchimpListTemplates(): Promise<string> {
     return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to list templates" });
   }
 }
+
+export async function mailchimpUploadImage(base64Data: string, filename: string): Promise<string> {
+  if (!mailchimpConfig) return JSON.stringify({ error: "Mailchimp is not connected" });
+  try {
+    const res = await fetch(`${baseUrl()}/file-manager/files`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({
+        name: filename,
+        file_data: base64Data,
+      }),
+    });
+
+    if (!res.ok) return JSON.stringify({ error: `Upload failed (${res.status}): ${await res.text()}` });
+
+    const data: any = await res.json();
+    return JSON.stringify({
+      success: true,
+      id: data.id,
+      name: data.name,
+      url: data.full_size_url,
+      thumbnail: data.thumbnail_url,
+    });
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to upload image" });
+  }
+}

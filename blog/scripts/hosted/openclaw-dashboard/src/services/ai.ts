@@ -64,6 +64,7 @@ import {
   isMailchimpRunning,
   mailchimpListAudiences, mailchimpListCampaigns, mailchimpCreateCampaign,
   mailchimpSendCampaign, mailchimpGetCampaignReport, mailchimpAddSubscriber, mailchimpListTemplates,
+  mailchimpUploadImage,
 } from "./mailchimp";
 import {
   isAgreeRunning,
@@ -1891,9 +1892,20 @@ const MAILCHIMP_TOOLS = [
     description: "List available Mailchimp email templates.",
     input_schema: { type: "object" as const, properties: {} },
   },
+  {
+    name: "mailchimp_upload_image",
+    description: "Upload an image from the current chat to Mailchimp's file manager. Returns a hosted URL you can use in campaign HTML. Use this when the user attaches images for a newsletter.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        image_index: { type: "number", description: "Index of the image in the current message attachments (0 for first). Default: 0." },
+        filename: { type: "string", description: "Filename for the uploaded image" },
+      },
+    },
+  },
 ];
 
-export async function executeMailchimpTool(toolName: string, input: any): Promise<string> {
+export async function executeMailchimpTool(toolName: string, input: any, sourceContext?: SourceContext): Promise<string> {
   try {
     switch (toolName) {
       case "mailchimp_list_audiences": return await mailchimpListAudiences();
@@ -1903,6 +1915,14 @@ export async function executeMailchimpTool(toolName: string, input: any): Promis
       case "mailchimp_campaign_report": return await mailchimpGetCampaignReport(input.campaign_id);
       case "mailchimp_add_subscriber": return await mailchimpAddSubscriber(input.list_id, input.email, input.first_name, input.last_name, input.tags);
       case "mailchimp_list_templates": return await mailchimpListTemplates();
+      case "mailchimp_upload_image": {
+        const images = sourceContext?.imageAttachments;
+        if (!images?.length) return JSON.stringify({ error: "No images attached to the current message. Ask the user to upload an image first." });
+        const idx = input.image_index || 0;
+        if (idx >= images.length) return JSON.stringify({ error: `Image index ${idx} out of range. ${images.length} image(s) attached.` });
+        const img = images[idx];
+        return await mailchimpUploadImage(img.content, input.filename || img.name);
+      }
       default: return JSON.stringify({ error: `Unknown Mailchimp tool: ${toolName}` });
     }
   } catch (err) {
@@ -3164,6 +3184,7 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   mailchimp_campaign_report: "Getting campaign report...",
   mailchimp_add_subscriber: "Adding subscriber...",
   mailchimp_list_templates: "Listing email templates...",
+  mailchimp_upload_image: "Uploading image to Mailchimp...",
   agree_list_templates: "Listing contract templates...",
   agree_get_template: "Getting template details...",
   agree_create_agreement: "Creating agreement...",
@@ -3399,7 +3420,7 @@ export async function callAnthropic(
       const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
       const granolaToolNames = ["granola_list_meetings", "granola_search_meetings", "granola_get_transcript", "granola_query", "granola_list_folders"];
       const contactoutToolNames = ["contactout_search_people", "contactout_enrich_person", "contactout_search_company", "contactout_decision_makers", "contactout_verify_email"];
-      const mailchimpToolNames = ["mailchimp_list_audiences", "mailchimp_list_campaigns", "mailchimp_create_campaign", "mailchimp_send_campaign", "mailchimp_campaign_report", "mailchimp_add_subscriber", "mailchimp_list_templates"];
+      const mailchimpToolNames = ["mailchimp_list_audiences", "mailchimp_list_campaigns", "mailchimp_create_campaign", "mailchimp_send_campaign", "mailchimp_campaign_report", "mailchimp_add_subscriber", "mailchimp_list_templates", "mailchimp_upload_image"];
       const agreeToolNames = ["agree_list_templates", "agree_get_template", "agree_create_agreement", "agree_create_and_send", "agree_send_agreement", "agree_list_agreements", "agree_get_agreement", "agree_list_contacts", "agree_create_contact"];
       const gammaToolNames = ["gamma_create_presentation", "gamma_get_generation", "gamma_list_themes", "gamma_list_folders"];
       for (const toolBlock of customToolUseBlocks) {
@@ -3474,7 +3495,7 @@ export async function callAnthropic(
         } else if (contactoutToolNames.includes(toolBlock.name)) {
           result = await executeContactOutTool(toolBlock.name, toolBlock.input);
         } else if (mailchimpToolNames.includes(toolBlock.name)) {
-          result = await executeMailchimpTool(toolBlock.name, toolBlock.input);
+          result = await executeMailchimpTool(toolBlock.name, toolBlock.input, sourceContext);
         } else if (agreeToolNames.includes(toolBlock.name)) {
           result = await executeAgreeTool(toolBlock.name, toolBlock.input);
         } else if (gammaToolNames.includes(toolBlock.name)) {
@@ -3808,7 +3829,7 @@ export async function callOpenAI(
         } else if (contactoutToolNames.includes(toolName)) {
           result = await executeContactOutTool(toolName, toolInput);
         } else if (mailchimpToolNames.includes(toolName)) {
-          result = await executeMailchimpTool(toolName, toolInput);
+          result = await executeMailchimpTool(toolName, toolInput, sourceContext);
         } else if (agreeToolNames.includes(toolName)) {
           result = await executeAgreeTool(toolName, toolInput);
         } else if (gammaToolNames.includes(toolName)) {
