@@ -147,11 +147,26 @@ export async function processTask(
     const imageAttachments = task.input.metadata?.images as { name: string; content: string; mimeType: string }[] | undefined;
 
     // Get conversation history
-    const MAX_HISTORY = 20;
+    const MAX_HISTORY = 30;
     const KEEP_RECENT = 6; // Keep last N messages raw, summarize the rest
     let history = getMessages(conversationId).filter(
       (m) => m.content && m.content.trim()
     );
+
+    // Extract sticky context from full history before truncating
+    // (doc URLs, image uploads, and other artifacts the AI should always remember)
+    const stickyItems: string[] = [];
+    for (const msg of history) {
+      if (msg.role !== "assistant") continue;
+      const content = msg.content || "";
+      const docMatches = content.match(/https:\/\/docs\.google\.com\/document\/d\/[a-zA-Z0-9_-]+\/edit/g);
+      if (docMatches) docMatches.forEach(url => stickyItems.push(`Google Doc: ${url}`));
+      const sheetMatches = content.match(/https:\/\/docs\.google\.com\/spreadsheets\/d\/[a-zA-Z0-9_-]+\/edit/g);
+      if (sheetMatches) sheetMatches.forEach(url => stickyItems.push(`Google Sheet: ${url}`));
+      const lumaMatches = content.match(/https:\/\/lu\.ma\/[a-zA-Z0-9_-]+/g);
+      if (lumaMatches) lumaMatches.forEach(url => stickyItems.push(`Luma event: ${url}`));
+    }
+
     if (history.length > MAX_HISTORY) {
       history = history.slice(-MAX_HISTORY);
       while (history.length > 0 && history[0].role !== "user") {
@@ -164,15 +179,12 @@ export async function processTask(
       const oldMessages = history.slice(0, -KEEP_RECENT);
       const recentMessages = history.slice(-KEEP_RECENT);
 
-      // Build a compressed summary of older messages
       const summaryParts: string[] = [];
       for (const msg of oldMessages) {
         if (msg.role === "user") {
-          // Keep first 80 chars of user messages
           const preview = msg.content.slice(0, 80).replace(/\n/g, " ").trim();
           summaryParts.push(`User: ${preview}${msg.content.length > 80 ? "..." : ""}`);
         } else {
-          // For assistant: extract key actions (tool calls, URLs, short summary)
           const urlMatch = msg.content.match(/https?:\/\/[^\s)]+/);
           const actionMatch = msg.content.match(/I('ve|'ve| have) (sent|created|drafted|posted|saved|searched|found|scheduled|updated|deleted)[^.]*\./i);
           if (actionMatch) {
@@ -191,10 +203,21 @@ export async function processTask(
         { role: "user" as const, content: `[Earlier in this conversation:\n${summary}\n]`, created_at: oldMessages[0].created_at },
         ...recentMessages,
       ];
-      // Ensure starts with user message
       while (history.length > 0 && history[0].role !== "user") {
         history.shift();
       }
+    }
+
+    // Inject sticky context into system prompt so the AI always has it
+    if (stickyItems.length > 0) {
+      const stickyContext = `\n\n[SESSION CONTEXT — Documents and artifacts created in this conversation]\n${[...new Set(stickyItems)].join("\n")}\n[End of session context]`;
+      extraContext = extraContext ? extraContext + stickyContext : stickyContext;
+    }
+
+    // If images were uploaded, note their presence
+    if (imageAttachments?.length) {
+      const imgNote = `\n\n[UPLOADED IMAGES — ${imageAttachments.length} image(s) attached to this message: ${imageAttachments.map(i => i.name).join(", ")}. You can see them via Claude vision and upload them to Google Drive (drive_upload_image) or Mailchimp (mailchimp_upload_image).]`;
+      extraContext = extraContext ? extraContext + imgNote : imgNote;
     }
 
     // Channel routing: detect ambiguous action requests and ask user to clarify.
