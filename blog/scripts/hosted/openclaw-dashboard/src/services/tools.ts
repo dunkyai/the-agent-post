@@ -79,7 +79,7 @@ const TOOL_CATEGORIES: Record<string, string> = {
   // Mailchimp
   mailchimp_list_audiences: "mailchimp", mailchimp_list_campaigns: "mailchimp", mailchimp_create_campaign: "mailchimp",
   mailchimp_send_campaign: "mailchimp", mailchimp_campaign_report: "mailchimp", mailchimp_add_subscriber: "mailchimp",
-  mailchimp_list_templates: "mailchimp",
+  mailchimp_list_templates: "mailchimp", mailchimp_upload_image: "mailchimp",
 };
 
 /**
