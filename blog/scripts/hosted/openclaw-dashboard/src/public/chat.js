@@ -483,6 +483,14 @@
 
   // Expose for audio recording and file upload integration
   window.addUserMessage = function(text) { addMessage("user", text); };
+  window.addSystemMessage = function(text) {
+    var div = document.createElement("div");
+    div.className = "chat-system-message message-appear";
+    div.style.cssText = "text-align:center;font-size:12px;color:var(--text-secondary);padding:8px 16px;font-style:italic;";
+    div.textContent = text;
+    messages.appendChild(div);
+    scrollToBottom();
+  };
   window.startPolling = function(taskId) {
     var thinking = createThinkingIndicator(taskId || "unknown");
     if (taskId) {
