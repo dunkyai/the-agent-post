@@ -195,7 +195,10 @@
     var bubble = document.createElement("div");
     bubble.className = "bubble";
     if (role === "user") {
-      bubble.textContent = content;
+      // Escape HTML but auto-link URLs
+      var escaped = content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      escaped = escaped.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+      bubble.innerHTML = escaped;
     } else {
       bubble.innerHTML = renderMarkdown(content);
     }
