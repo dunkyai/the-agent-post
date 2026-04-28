@@ -121,15 +121,15 @@ router.post("/chat/message", (req: Request, res: Response) => {
       console.log(`[chat] Auto-created thread ${activeThreadId}`);
     }
 
-    // Auto-title the thread from the first message if untitled
+    // Auto-title the thread from the first message
     const threadConvId = getOrCreateConversation("dashboard", `chat:${activeThreadId}`);
     const existingMessages = getMessages(threadConvId);
     if (existingMessages.length === 0) {
-      const title = message.trim().slice(0, 50) + (message.trim().length > 50 ? "..." : "");
-      renameChatThread(threadConvId, title);
+      // Generate a good title with AI immediately (async, don't block)
+      generateThreadTitle(threadConvId, [{ role: "user", content: message }]);
     }
 
-    // After 5 messages, generate a better title using AI
+    // After 5 messages, regenerate title with more context
     if (existingMessages.length === 4) {
       generateThreadTitle(threadConvId, existingMessages.concat([{ role: "user", content: message } as any]));
     }
