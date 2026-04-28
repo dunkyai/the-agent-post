@@ -143,9 +143,9 @@
           <% for (const acct of googleAccounts) { %>
             <% const missingServices = allAvailableServices.filter(s => !acct.services.includes(s)); %>
             <div style="padding: 12px 0; border-bottom: 1px solid var(--rule-light);">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                <code style="font-size: 14px; padding: 4px 8px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px;"><%= acct.email %></code>
-                <form method="POST" action="/integrations/google/disconnect" style="margin: 0;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px;">
+                <code style="font-size: 14px; padding: 4px 8px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;"><%= acct.email %></code>
+                <form method="POST" action="/integrations/google/disconnect" style="margin: 0; flex-shrink: 0;">
                   <input type="hidden" name="account" value="<%= acct.email %>">
                   <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
                 </form>
