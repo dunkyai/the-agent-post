@@ -19,12 +19,48 @@ function start() {
   reconnectIntegrations();
 
   // Start job scheduler
-  const { startScheduler } = require("./services/scheduler");
+  const { startScheduler, stopScheduler, getActiveTaskCount } = require("./services/scheduler");
   startScheduler();
 
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`OpenClaw dashboard running on port ${PORT}`);
   });
+
+  // Graceful shutdown — finish active tasks before exiting
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[shutdown] ${signal} received, starting graceful shutdown...`);
+
+    // Stop accepting new connections
+    server.close(() => {
+      console.log("[shutdown] HTTP server closed");
+    });
+
+    // Stop picking up new tasks
+    stopScheduler();
+    console.log("[shutdown] Scheduler stopped");
+
+    // Wait for active tasks to finish (max 30 seconds)
+    const maxWait = 30_000;
+    const start = Date.now();
+    while (getActiveTaskCount() > 0 && Date.now() - start < maxWait) {
+      console.log(`[shutdown] Waiting for ${getActiveTaskCount()} active task(s)...`);
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+
+    if (getActiveTaskCount() > 0) {
+      console.log(`[shutdown] ${getActiveTaskCount()} task(s) still running after ${maxWait / 1000}s, forcing exit`);
+    } else {
+      console.log("[shutdown] All tasks completed, exiting cleanly");
+    }
+
+    process.exit(0);
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
 async function reconnectIntegrations() {
