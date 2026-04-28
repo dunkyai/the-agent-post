@@ -61,6 +61,20 @@
 
     // Split into paragraphs by double newlines
     var blocks = html.split(/\n{2,}/);
+
+    // Merge consecutive ordered list blocks into one
+    var mergedBlocks = [];
+    for (var b = 0; b < blocks.length; b++) {
+      var blk = blocks[b].trim();
+      if (!blk) continue;
+      if (/^\d+\.\s/.test(blk) && mergedBlocks.length > 0 && /^\d+\.\s/.test(mergedBlocks[mergedBlocks.length - 1])) {
+        mergedBlocks[mergedBlocks.length - 1] += "\n" + blk;
+      } else {
+        mergedBlocks.push(blk);
+      }
+    }
+    blocks = mergedBlocks;
+
     var out = [];
     for (var i = 0; i < blocks.length; i++) {
       var block = blocks[i].trim();
