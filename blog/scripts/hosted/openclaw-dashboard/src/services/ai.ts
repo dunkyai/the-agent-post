@@ -61,6 +61,10 @@ import {
   contactoutSearchCompany, contactoutGetDecisionMakers, contactoutVerifyEmail,
 } from "./contactout";
 import {
+  isUspsRunning,
+  uspsCheckAvailability, uspsSchedulePickup, uspsGetPickup, uspsCancelPickup, uspsUpdatePickup,
+} from "./usps";
+import {
   isMailchimpRunning,
   mailchimpListAudiences, mailchimpListCampaigns, mailchimpCreateCampaign,
   mailchimpSendCampaign, mailchimpGetCampaignReport, mailchimpAddSubscriber, mailchimpListTemplates,
@@ -1930,6 +1934,95 @@ export async function executeMailchimpTool(toolName: string, input: any, sourceC
   }
 }
 
+// --- USPS Tools ---
+
+const USPS_TOOLS = [
+  {
+    name: "usps_check_availability",
+    description: "Check if USPS carrier pickup is available at an address on a given date.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        street: { type: "string", description: "Street address" },
+        city: { type: "string", description: "City" },
+        state: { type: "string", description: "2-letter state code (e.g. CA, NY)" },
+        zip: { type: "string", description: "5-digit ZIP code" },
+        pickup_date: { type: "string", description: "Date in YYYY-MM-DD format (next business day or later)" },
+      },
+      required: ["street", "city", "state", "zip"],
+    },
+  },
+  {
+    name: "usps_schedule_pickup",
+    description: "Schedule a free USPS carrier pickup. The mail carrier will pick up packages on the next delivery day. ALWAYS confirm details with the user before scheduling.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        first_name: { type: "string", description: "Contact first name" },
+        last_name: { type: "string", description: "Contact last name" },
+        street: { type: "string", description: "Street address" },
+        city: { type: "string", description: "City" },
+        state: { type: "string", description: "2-letter state code" },
+        zip: { type: "string", description: "5-digit ZIP code" },
+        phone: { type: "string", description: "Phone number" },
+        email: { type: "string", description: "Email address (optional)" },
+        pickup_date: { type: "string", description: "Pickup date in YYYY-MM-DD format" },
+        packages: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              service_type: { type: "string", description: "Service type: PRIORITY_MAIL_EXPRESS, PRIORITY_MAIL, FIRST_CLASS, GROUND_ADVANTAGE, INTERNATIONAL, RETURNS" },
+              count: { type: "number", description: "Number of packages of this type" },
+            },
+          },
+          description: "List of package types and counts",
+        },
+        estimated_weight: { type: "number", description: "Total estimated weight in pounds" },
+        pickup_location: { type: "string", description: "Where to find packages: Front Door, Back Door, Side Door, Knock on Door, Office, In Mailbox, Other" },
+        special_instructions: { type: "string", description: "Special instructions for the carrier" },
+      },
+      required: ["first_name", "last_name", "street", "city", "state", "zip", "phone", "pickup_date", "packages", "estimated_weight"],
+    },
+  },
+  {
+    name: "usps_get_pickup",
+    description: "Get details of a scheduled USPS pickup by confirmation number.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        confirmation_number: { type: "string", description: "Pickup confirmation number" },
+      },
+      required: ["confirmation_number"],
+    },
+  },
+  {
+    name: "usps_cancel_pickup",
+    description: "Cancel a scheduled USPS pickup. Confirm with the user before cancelling.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        confirmation_number: { type: "string", description: "Pickup confirmation number to cancel" },
+      },
+      required: ["confirmation_number"],
+    },
+  },
+];
+
+export async function executeUspsTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "usps_check_availability": return await uspsCheckAvailability(input);
+      case "usps_schedule_pickup": return await uspsSchedulePickup(input);
+      case "usps_get_pickup": return await uspsGetPickup(input.confirmation_number);
+      case "usps_cancel_pickup": return await uspsCancelPickup(input.confirmation_number);
+      default: return JSON.stringify({ error: `Unknown USPS tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "USPS operation failed" });
+  }
+}
+
 // --- Agree.com Tools ---
 
 const AGREE_TOOLS = [
@@ -3185,6 +3278,10 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   mailchimp_add_subscriber: "Adding subscriber...",
   mailchimp_list_templates: "Listing email templates...",
   mailchimp_upload_image: "Uploading image to Mailchimp...",
+  usps_check_availability: "Checking USPS pickup availability...",
+  usps_schedule_pickup: "Scheduling USPS pickup...",
+  usps_get_pickup: "Getting pickup details...",
+  usps_cancel_pickup: "Cancelling pickup...",
   agree_list_templates: "Listing contract templates...",
   agree_get_template: "Getting template details...",
   agree_create_agreement: "Creating agreement...",
@@ -3262,6 +3359,7 @@ export async function callAnthropic(
   if (isGranolaRunning()) tools.push(...GRANOLA_TOOLS);
   if (isContactOutRunning()) tools.push(...CONTACTOUT_TOOLS);
   if (isMailchimpRunning()) tools.push(...MAILCHIMP_TOOLS);
+  if (isUspsRunning()) tools.push(...USPS_TOOLS);
   if (isAgreeRunning()) tools.push(...AGREE_TOOLS);
   if (isGammaRunning()) tools.push(...GAMMA_TOOLS);
   if (isWordPressRunning()) tools.push(...WORDPRESS_TOOLS);
@@ -3421,6 +3519,7 @@ export async function callAnthropic(
       const granolaToolNames = ["granola_list_meetings", "granola_search_meetings", "granola_get_transcript", "granola_query", "granola_list_folders"];
       const contactoutToolNames = ["contactout_search_people", "contactout_enrich_person", "contactout_search_company", "contactout_decision_makers", "contactout_verify_email"];
       const mailchimpToolNames = ["mailchimp_list_audiences", "mailchimp_list_campaigns", "mailchimp_create_campaign", "mailchimp_send_campaign", "mailchimp_campaign_report", "mailchimp_add_subscriber", "mailchimp_list_templates", "mailchimp_upload_image"];
+      const uspsToolNames = ["usps_check_availability", "usps_schedule_pickup", "usps_get_pickup", "usps_cancel_pickup"];
       const agreeToolNames = ["agree_list_templates", "agree_get_template", "agree_create_agreement", "agree_create_and_send", "agree_send_agreement", "agree_list_agreements", "agree_get_agreement", "agree_list_contacts", "agree_create_contact"];
       const gammaToolNames = ["gamma_create_presentation", "gamma_get_generation", "gamma_list_themes", "gamma_list_folders"];
       for (const toolBlock of customToolUseBlocks) {
@@ -3496,6 +3595,8 @@ export async function callAnthropic(
           result = await executeContactOutTool(toolBlock.name, toolBlock.input);
         } else if (mailchimpToolNames.includes(toolBlock.name)) {
           result = await executeMailchimpTool(toolBlock.name, toolBlock.input, sourceContext);
+        } else if (uspsToolNames.includes(toolBlock.name)) {
+          result = await executeUspsTool(toolBlock.name, toolBlock.input);
         } else if (agreeToolNames.includes(toolBlock.name)) {
           result = await executeAgreeTool(toolBlock.name, toolBlock.input);
         } else if (gammaToolNames.includes(toolBlock.name)) {
@@ -3651,6 +3752,7 @@ export async function callOpenAI(
   if (isGranolaRunning()) customTools.push(...GRANOLA_TOOLS);
   if (isContactOutRunning()) customTools.push(...CONTACTOUT_TOOLS);
   if (isMailchimpRunning()) customTools.push(...MAILCHIMP_TOOLS);
+  if (isUspsRunning()) customTools.push(...USPS_TOOLS);
   if (isAgreeRunning()) customTools.push(...AGREE_TOOLS);
   if (isGammaRunning()) customTools.push(...GAMMA_TOOLS);
   if (isWordPressRunning()) customTools.push(...WORDPRESS_TOOLS);
@@ -3714,7 +3816,8 @@ export async function callOpenAI(
   const beehiivToolNames = ["beehiiv_list_templates", "beehiiv_create_draft", "beehiiv_list_posts", "beehiiv_get_post"];
   const granolaToolNames = ["granola_list_meetings", "granola_search_meetings", "granola_get_transcript", "granola_query", "granola_list_folders"];
   const contactoutToolNames = ["contactout_search_people", "contactout_enrich_person", "contactout_search_company", "contactout_decision_makers", "contactout_verify_email"];
-  const mailchimpToolNames = ["mailchimp_list_audiences", "mailchimp_list_campaigns", "mailchimp_create_campaign", "mailchimp_send_campaign", "mailchimp_campaign_report", "mailchimp_add_subscriber", "mailchimp_list_templates"];
+  const mailchimpToolNames = ["mailchimp_list_audiences", "mailchimp_list_campaigns", "mailchimp_create_campaign", "mailchimp_send_campaign", "mailchimp_campaign_report", "mailchimp_add_subscriber", "mailchimp_list_templates", "mailchimp_upload_image"];
+  const uspsToolNames = ["usps_check_availability", "usps_schedule_pickup", "usps_get_pickup", "usps_cancel_pickup"];
   const agreeToolNames = ["agree_list_templates", "agree_get_template", "agree_create_agreement", "agree_create_and_send", "agree_send_agreement", "agree_list_agreements", "agree_get_agreement", "agree_list_contacts", "agree_create_contact"];
   const gammaToolNames = ["gamma_create_presentation", "gamma_get_generation", "gamma_list_themes", "gamma_list_folders"];
 
@@ -3830,6 +3933,8 @@ export async function callOpenAI(
           result = await executeContactOutTool(toolName, toolInput);
         } else if (mailchimpToolNames.includes(toolName)) {
           result = await executeMailchimpTool(toolName, toolInput, sourceContext);
+        } else if (uspsToolNames.includes(toolName)) {
+          result = await executeUspsTool(toolName, toolInput);
         } else if (agreeToolNames.includes(toolName)) {
           result = await executeAgreeTool(toolName, toolInput);
         } else if (gammaToolNames.includes(toolName)) {
@@ -4283,6 +4388,18 @@ Available tools:
 
 IMPORTANT: Be mindful of credit usage. Use reveal_info=false first to browse results, then reveal_info=true only for the specific people the user wants contact info for.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${contactoutContext}` : contactoutContext;
+  }
+
+  // Inject USPS context
+  if (isUspsRunning()) {
+    const uspsContext = `You are connected to USPS for scheduling package pickups. You can check availability, schedule, view, and cancel carrier pickups using the usps_* tools.
+
+Workflow: (1) Ask for the pickup address, package details, and preferred date. (2) Call usps_check_availability to confirm. (3) Summarize and confirm with user. (4) Call usps_schedule_pickup ONLY after explicit confirmation. (5) Share the confirmation number.
+
+Service types: PRIORITY_MAIL_EXPRESS, PRIORITY_MAIL, FIRST_CLASS, GROUND_ADVANTAGE, INTERNATIONAL, RETURNS.
+Pickup locations: Front Door, Back Door, Side Door, Knock on Door, Office, In Mailbox, Other.
+Pickups are free and available Mon-Sat (excluding holidays), next business day or later.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${uspsContext}` : uspsContext;
   }
 
   // Inject Mailchimp context

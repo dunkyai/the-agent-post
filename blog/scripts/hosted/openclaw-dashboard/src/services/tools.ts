@@ -20,6 +20,7 @@ import {
   executeAgreeTool,
   executeWordPressTool,
   executeMailchimpTool,
+  executeUspsTool,
 } from "./ai";
 
 // Tool name → category mapping
@@ -80,6 +81,8 @@ const TOOL_CATEGORIES: Record<string, string> = {
   mailchimp_list_audiences: "mailchimp", mailchimp_list_campaigns: "mailchimp", mailchimp_create_campaign: "mailchimp",
   mailchimp_send_campaign: "mailchimp", mailchimp_campaign_report: "mailchimp", mailchimp_add_subscriber: "mailchimp",
   mailchimp_list_templates: "mailchimp", mailchimp_upload_image: "mailchimp",
+  // USPS
+  usps_check_availability: "usps", usps_schedule_pickup: "usps", usps_get_pickup: "usps", usps_cancel_pickup: "usps",
 };
 
 /**
@@ -145,6 +148,9 @@ export async function executeTool(toolName: string, input: Record<string, any>):
         break;
       case "mailchimp":
         result = await executeMailchimpTool(toolName, input);
+        break;
+      case "usps":
+        result = await executeUspsTool(toolName, input);
         break;
       default:
         return JSON.stringify({ error: `Unsupported tool category: ${category}` });
