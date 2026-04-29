@@ -162,7 +162,9 @@ export function getBillingSuspendable(): Instance[] {
 }
 
 export function deleteInstance(id: string): void {
-  updateInstance(id, { status: "deleted" });
+  // Negate the port so it releases the UNIQUE constraint for reuse
+  // (port column is NOT NULL, so we can't set it to NULL)
+  db.prepare("UPDATE instances SET status = 'deleted', port = -ABS(port), updated_at = datetime('now') WHERE id = ? AND port > 0").run(id);
 }
 
 // --- Slack installations ---
