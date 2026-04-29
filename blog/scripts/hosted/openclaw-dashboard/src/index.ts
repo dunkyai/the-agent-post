@@ -22,6 +22,12 @@ function start() {
   const { startScheduler, stopScheduler, getActiveTaskCount } = require("./services/scheduler");
   startScheduler();
 
+  // Agnost analytics
+  try {
+    const { startAgnost } = require("./services/agnost");
+    startAgnost();
+  } catch {}
+
   const server = app.listen(PORT, () => {
     console.log(`OpenClaw dashboard running on port ${PORT}`);
   });
