@@ -119,6 +119,7 @@ deploy_instance() {
       -e PLAN="$INST_PLAN" \\
       -e CLAMD_HOST="host.docker.internal" \\
       -e CLAMD_PORT="3310" \\
+      -e AGNOST_ORG_ID="${AGNOST_ORG_ID:-}" \\
       $([ "$ID" = "cb1d6d97" ] && echo '-e SKIP_AUTH=true') \\
       $IMAGE
 EOF
