@@ -111,6 +111,13 @@ export function getInstanceBySubscription(subscriptionId: string): Instance | nu
   return row ? rowToInstance(row) : null;
 }
 
+export function getInstancesByEmail(email: string): Instance[] {
+  const rows = db
+    .prepare("SELECT * FROM instances WHERE LOWER(email) = LOWER(?) AND status = 'running' ORDER BY created_at DESC")
+    .all(email) as Record<string, unknown>[];
+  return rows.map(rowToInstance);
+}
+
 export function listInstances(): Instance[] {
   const rows = db.prepare("SELECT * FROM instances WHERE status != 'deleted' ORDER BY created_at DESC").all() as Record<string, unknown>[];
   return rows.map(rowToInstance);
