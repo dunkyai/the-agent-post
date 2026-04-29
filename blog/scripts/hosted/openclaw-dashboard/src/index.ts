@@ -229,6 +229,19 @@ async function reconnectIntegrations() {
     console.error("Failed to reconnect Mailchimp:", err instanceof Error ? err.message : err);
   }
 
+  // USPS
+  try {
+    const usps = getIntegration("usps");
+    if (usps && usps.status === "connected") {
+      const config = JSON.parse(decrypt(usps.config));
+      const { startUsps } = require("./services/usps");
+      startUsps(config);
+      console.log("USPS reconnected");
+    }
+  } catch (err: unknown) {
+    console.error("Failed to reconnect USPS:", err instanceof Error ? err.message : err);
+  }
+
   // Gamma
   try {
     const gamma = getIntegration("gamma");
