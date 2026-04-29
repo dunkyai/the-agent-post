@@ -228,6 +228,48 @@ async function handleStripeEvent(event: StripeWebhookEvent): Promise<void> {
       break;
     }
 
+    case "invoice.upcoming": {
+      // Fires ~3 days before renewal — send the customer a heads-up email
+      const upcomingSubId = obj.subscription as string;
+      if (!upcomingSubId) return;
+      const upcomingInstance = store.getInstanceBySubscription(upcomingSubId);
+      if (!upcomingInstance) return;
+
+      const amountDue = ((obj.amount_due as number) || 0) / 100;
+      const periodEnd = obj.period_end as number;
+      const renewDate = periodEnd
+        ? new Date(periodEnd * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+        : "soon";
+
+      const resendKey = process.env.RESEND_API_KEY;
+      if (resendKey) {
+        try {
+          await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              from: "Dunky <noreply@dunky.ai>",
+              reply_to: "elizabeth@hustlefundvc.com",
+              to: upcomingInstance.email,
+              subject: "Your Dunky subscription renews " + renewDate,
+              html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
+  <h2 style="color: #1a1a1a; font-size: 20px; margin-bottom: 16px;">Subscription renewal reminder</h2>
+  <p style="color: #444; font-size: 15px; line-height: 1.6; margin-bottom: 16px;">Your Dunky subscription will renew on <strong>${renewDate}</strong> for <strong>$${amountDue.toFixed(2)}</strong>.</p>
+  <p style="color: #444; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">No action is needed — your payment method will be charged automatically. If you'd like to manage your subscription or cancel, you can do so from your dashboard.</p>
+  <a href="https://${upcomingInstance.subdomain}.dunky.ai/getting-started" style="display: inline-block; background: #6c5ce7; color: #fff; text-decoration: none; padding: 12px 32px; border-radius: 6px; font-size: 15px; font-weight: 500;">Open Dashboard</a>
+  <p style="color: #888; font-size: 13px; margin-top: 32px; line-height: 1.5;">If you have any questions, just reply to this email.</p>
+  <p style="color: #bbb; font-size: 12px; margin-top: 24px;">— Dunky</p>
+</div>`,
+            }),
+          });
+          console.log(`[stripe] Renewal reminder sent to ${upcomingInstance.email} for ${renewDate} ($${amountDue.toFixed(2)})`);
+        } catch (err) {
+          console.error(`[stripe] Failed to send renewal reminder to ${upcomingInstance.email}:`, err);
+        }
+      }
+      break;
+    }
+
     case "invoice.payment_failed": {
       const subscriptionId = obj.subscription as string;
       if (!subscriptionId) return;
