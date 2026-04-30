@@ -4516,6 +4516,12 @@ If you encounter sensitive data while searching emails, reading documents, or br
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${securityDirective}` : securityDirective;
   }
 
+  // Anti-hallucination directive for contact info
+  {
+    const contactDirective = `CRITICAL — EMAIL ADDRESS RULE: NEVER fabricate, guess, or infer email addresses. Every email address you use in gmail_send or gmail_create_draft MUST come directly from a tool result (Airtable, ContactOut, Supabase, Gmail search, etc.). If you cannot find someone's email address in the data, say "I couldn't find their email address" — do NOT construct one from their name and company domain. Sending emails to fabricated addresses is harmful and could reach the wrong person. This rule has NO exceptions.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${contactDirective}` : contactDirective;
+  }
+
   // Complexity guidance
   {
     const complexityHint = "Important: If a request involves many steps (e.g. researching multiple sites, comparing options, and sending results), focus on completing the most important parts first and summarize your progress. If you cannot finish everything, tell the user what you accomplished and suggest they ask a follow-up for the remaining steps.";
