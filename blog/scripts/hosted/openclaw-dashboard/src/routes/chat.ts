@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import multer from "multer";
 import { getOrCreateConversation, getMessages, deleteConversation, getSetting, getChatThreads, createChatThread, renameChatThread } from "../services/db";
 import { submitChatMessage, pollChatStatus, pollChatTasks, clearSessionState } from "../adapters/chat";
+import { updateTaskStatus } from "../services/task";
 import { transcribeAudio } from "../services/transcription";
 import { scanBuffer } from "../services/antivirus";
 import { driveUploadImage, getConnectedServices } from "../services/google";
@@ -348,6 +349,25 @@ router.post("/chat/reset", (req: Request, res: Response) => {
     deleteConversation(conversationId);
   }
   res.redirect(303, "/chat");
+});
+
+// --- Cancel ---
+
+router.post("/chat/cancel", (req: Request, res: Response) => {
+  const { taskId } = req.body;
+  if (!taskId) {
+    res.status(400).json({ error: "taskId is required" });
+    return;
+  }
+  try {
+    updateTaskStatus(taskId, "cancelled", {
+      output: JSON.stringify({ reply_channel: "chat", result: "Action cancelled." }),
+    });
+    console.log(`[chat] Task ${taskId} cancelled by user`);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to cancel task" });
+  }
 });
 
 // --- Thread CRUD ---

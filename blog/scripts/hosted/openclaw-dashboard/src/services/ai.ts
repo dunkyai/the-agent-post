@@ -4,6 +4,7 @@ import {
   deleteScheduledJob, addMemory, getAllMemories, getRelevantMemories, deleteMemory, getMemory, findDuplicateMemory, getMonthlyTaskCount,
 } from "./db";
 import { validateToolInput, checkActionClaims } from "./tool-schemas";
+import { isTaskCancelled } from "./task";
 import { postProcessResponse } from "./post-process";
 import { decrypt } from "./encryption";
 import { getNextRun, isValidCron, describeCron } from "./cron";
@@ -3324,7 +3325,8 @@ export async function callAnthropic(
   maxTokens: number,
   onStatus?: StatusCallback,
   onToolCall?: ToolCallCallback,
-  sourceContext?: SourceContext
+  sourceContext?: SourceContext,
+  taskId?: string
 ): Promise<AIResponse> {
   const tools: any[] = [
     { type: "web_search_20250305", name: "web_search" },
@@ -3400,6 +3402,13 @@ export async function callAnthropic(
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     if (round > 0 && round % 10 === 0) console.log(`Tool loop round ${round}/${MAX_TOOL_ROUNDS}`);
+
+    // Check for cancellation before each round
+    if (taskId && isTaskCancelled(taskId)) {
+      console.log(`[ai] Task ${taskId} cancelled at round ${round}`);
+      return { role: "assistant", content: "Action cancelled." };
+    }
+
     onStatus?.(getThinkingMessage(round));
 
     // Compact prior tool results to prevent context overflow:

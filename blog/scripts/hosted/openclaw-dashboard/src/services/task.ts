@@ -15,6 +15,7 @@ import {
   getExecutionLog as dbGetLog,
   deactivateOldTasks as dbDeactivate,
   markStuckTasksFailed as dbMarkStuck,
+  getDb,
 } from "./db";
 
 function deserializeTask(row: any): Task {
@@ -74,6 +75,11 @@ export function getTaskExecutionLog(taskId: string): ExecutionLogEntry[] {
     timestamp: r.created_at,
     duration_ms: r.duration_ms,
   }));
+}
+
+export function isTaskCancelled(taskId: string): boolean {
+  const row = getDb().prepare("SELECT status FROM tasks WHERE task_id = ?").get(taskId) as { status: string } | undefined;
+  return row?.status === "cancelled";
 }
 
 export function getPendingTasks(): Task[] {

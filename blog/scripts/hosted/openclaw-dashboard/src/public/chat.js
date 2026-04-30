@@ -227,7 +227,7 @@
     var thinking = document.createElement("div");
     thinking.className = "chat-message assistant thinking-indicator";
     thinking.setAttribute("data-task-id", taskId || "pending");
-    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><div class="thinking-top"><span class="thinking-dots"><span></span><span></span><span></span></span> <span class="thinking-text">Thinking...</span></div><div class="thinking-skeleton"><div class="thinking-skeleton-line"></div><div class="thinking-skeleton-line"></div><div class="thinking-skeleton-line"></div></div><div class="thinking-progress"><div class="thinking-progress-bar"></div></div></div>';
+    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><div class="thinking-top"><span class="thinking-dots"><span></span><span></span><span></span></span> <span class="thinking-text">Thinking...</span><button class="cancel-btn" title="Cancel" onclick="cancelTask(this)">Stop</button></div><div class="thinking-skeleton"><div class="thinking-skeleton-line"></div><div class="thinking-skeleton-line"></div><div class="thinking-skeleton-line"></div></div><div class="thinking-progress"><div class="thinking-progress-bar"></div></div></div>';
     messages.appendChild(thinking);
     scrollToBottom();
     return thinking;
@@ -497,6 +497,26 @@
         errorEl.textContent = err.message || "Connection error";
       });
   });
+
+  // Cancel a running task
+  window.cancelTask = function(btn) {
+    var indicator = btn.closest(".thinking-indicator");
+    var taskId = indicator ? indicator.getAttribute("data-task-id") : null;
+    if (!taskId || taskId === "pending") return;
+    btn.disabled = true;
+    btn.textContent = "Stopping...";
+    fetch("/chat/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId: taskId }),
+    }).then(function() {
+      if (indicator) indicator.remove();
+      addMessage("assistant", "Action cancelled.");
+    }).catch(function() {
+      btn.disabled = false;
+      btn.textContent = "Stop";
+    });
+  };
 
   // Expose for audio recording and file upload integration
   window.addUserMessage = function(text) { addMessage("user", text); };

@@ -311,7 +311,8 @@ export async function processTask(
       maxTokens,
       onStatus,
       onToolCallLog,
-      sourceContext
+      sourceContext,
+      taskId
     );
 
     // Hallucination guard: if the AI made zero tool calls but claims it performed an action,
