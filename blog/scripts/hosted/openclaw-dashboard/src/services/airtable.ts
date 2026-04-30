@@ -51,17 +51,20 @@ export function buildAirtableOAuthUrl(): string {
 
 // --- Lifecycle ---
 
-export function startAirtable(config: AirtableConfig): void {
+export function startAirtable(config: AirtableConfig, skipEagerRefresh = false): void {
   airtableConfig = config;
   console.log("Airtable connected");
 
   // Eagerly refresh token on boot to avoid stale tokens after redeploy
-  const expiry = new Date(config.token_expiry).getTime();
-  const oneHour = 60 * 60 * 1000;
-  if (Date.now() > expiry - oneHour) {
-    refreshAccessToken().catch(err => {
-      console.error("Airtable token refresh on boot failed:", err instanceof Error ? err.message : err);
-    });
+  // Skip when called from OAuth webhook (token is brand new)
+  if (!skipEagerRefresh) {
+    const expiry = new Date(config.token_expiry).getTime();
+    const tenMinutes = 10 * 60 * 1000;
+    if (Date.now() > expiry - tenMinutes) {
+      refreshAccessToken().catch(err => {
+        console.error("Airtable token refresh on boot failed:", err instanceof Error ? err.message : err);
+      });
+    }
   }
 }
 
