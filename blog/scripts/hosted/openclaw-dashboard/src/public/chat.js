@@ -427,6 +427,47 @@
     existingBubbles[i].innerHTML = renderMarkdown(raw);
   }
 
+  // --- Prompt history (arrow up/down to cycle) ---
+  var HISTORY_KEY = "chatPromptHistory:" + (window.__chatConfig?.threadId || "global");
+  var promptHistory = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+  var historyIndex = -1;
+  var savedInput = "";
+
+  function pushHistory(text) {
+    if (!text.trim()) return;
+    // Don't add duplicates at the end
+    if (promptHistory.length > 0 && promptHistory[promptHistory.length - 1] === text) return;
+    promptHistory.push(text);
+    // Keep last 50
+    if (promptHistory.length > 50) promptHistory = promptHistory.slice(-50);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(promptHistory));
+    historyIndex = -1;
+  }
+
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowUp" && !e.shiftKey) {
+      if (promptHistory.length === 0) return;
+      e.preventDefault();
+      if (historyIndex === -1) {
+        savedInput = input.value;
+        historyIndex = promptHistory.length - 1;
+      } else if (historyIndex > 0) {
+        historyIndex--;
+      }
+      input.value = promptHistory[historyIndex];
+    } else if (e.key === "ArrowDown" && !e.shiftKey) {
+      if (historyIndex === -1) return;
+      e.preventDefault();
+      if (historyIndex < promptHistory.length - 1) {
+        historyIndex++;
+        input.value = promptHistory[historyIndex];
+      } else {
+        historyIndex = -1;
+        input.value = savedInput;
+      }
+    }
+  });
+
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     // If recording, stop it — onstop will attach the file and re-trigger submit
@@ -443,6 +484,7 @@
     var text = input.value.trim();
     if (!text) return;
 
+    pushHistory(text);
     addMessage("user", text);
     input.value = "";
     errorEl.textContent = "";
