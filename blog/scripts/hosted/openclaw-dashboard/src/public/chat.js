@@ -433,6 +433,18 @@
   var historyIndex = -1;
   var savedInput = "";
 
+  // Seed history from existing messages on page load if empty
+  if (promptHistory.length === 0) {
+    var existingUserMsgs = messages.querySelectorAll(".chat-message.user .bubble");
+    for (var h = 0; h < existingUserMsgs.length; h++) {
+      var msgText = (existingUserMsgs[h].textContent || "").trim();
+      if (msgText) promptHistory.push(msgText);
+    }
+    if (promptHistory.length > 0) {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(promptHistory));
+    }
+  }
+
   function pushHistory(text) {
     if (!text.trim()) return;
     // Don't add duplicates at the end
