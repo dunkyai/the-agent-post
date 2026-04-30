@@ -54,6 +54,15 @@ export function buildAirtableOAuthUrl(): string {
 export function startAirtable(config: AirtableConfig): void {
   airtableConfig = config;
   console.log("Airtable connected");
+
+  // Eagerly refresh token on boot to avoid stale tokens after redeploy
+  const expiry = new Date(config.token_expiry).getTime();
+  const oneHour = 60 * 60 * 1000;
+  if (Date.now() > expiry - oneHour) {
+    refreshAccessToken().catch(err => {
+      console.error("Airtable token refresh on boot failed:", err instanceof Error ? err.message : err);
+    });
+  }
 }
 
 export function stopAirtable(): void {
