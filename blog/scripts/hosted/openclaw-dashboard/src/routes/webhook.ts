@@ -235,7 +235,7 @@ router.post("/webhook/airtable/tokens", async (req: Request, res: Response) => {
 
     const config = encrypt(JSON.stringify(configData));
     upsertIntegration("airtable", config, "connected");
-    startAirtable(configData);
+    startAirtable(configData, true); // skip eager refresh — token is brand new
 
     console.log("Airtable connected via OAuth");
     res.json({ ok: true });
