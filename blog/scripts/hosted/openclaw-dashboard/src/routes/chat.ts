@@ -374,7 +374,12 @@ router.post("/chat/cancel", (req: Request, res: Response) => {
 
 router.post("/chat/threads", (req: Request, res: Response) => {
   const threadId = createChatThread();
-  res.redirect(303, `/chat?thread=${threadId}`);
+  // If JSON requested, return the thread ID; otherwise redirect
+  if (req.headers.accept?.includes("application/json")) {
+    res.json({ threadId });
+  } else {
+    res.redirect(303, `/chat?thread=${threadId}`);
+  }
 });
 
 router.get("/chat/threads/api", (req: Request, res: Response) => {
