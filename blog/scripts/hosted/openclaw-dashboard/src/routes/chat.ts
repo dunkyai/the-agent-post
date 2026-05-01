@@ -12,9 +12,9 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
 async function generateThreadTitle(conversationId: string, messages: { role: string; content: string }[]): Promise<void> {
   try {
     const summary = messages
-      .filter(m => m.role === "user")
-      .map(m => m.content.slice(0, 100))
-      .join(" | ");
+      .map(m => `${m.role === "user" ? "User" : "Assistant"}: ${m.content.slice(0, 80)}`)
+      .slice(0, 8)
+      .join("\n");
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -28,7 +28,7 @@ async function generateThreadTitle(conversationId: string, messages: { role: str
         max_tokens: 30,
         messages: [{
           role: "user",
-          content: `Generate a short title (max 6 words) for this conversation. Return ONLY the title, no quotes or explanation.\n\nMessages:\n${summary}`,
+          content: `Generate a short title (max 6 words) describing the TOPIC of this conversation. Ignore greetings like "Hi Warren" — focus on what was actually discussed or requested. Return ONLY the title, no quotes or explanation.\n\nConversation:\n${summary}`,
         }],
       }),
     });
@@ -99,6 +99,22 @@ router.get("/chat", (req: Request, res: Response) => {
 
   const agentName = getSetting("agent_name") || "Agent";
   const userName = getSetting("user_name") || "You";
+
+  // Background: re-title threads with generic/stale titles
+  const GENERIC_PATTERNS = /^(hi|hey|hello|new conversation|undefined)/i;
+  for (const t of threads) {
+    const tid = t.external_id.replace("chat:", "");
+    const needsRetitle = !t.title || GENERIC_PATTERNS.test(t.title) || t.title.length < 5;
+    if (needsRetitle) {
+      const convId = getOrCreateConversation("dashboard", t.external_id);
+      const msgs = getMessages(convId);
+      if (msgs.length >= 2) {
+        generateThreadTitle(convId, msgs.slice(0, 10));
+      }
+    }
+  }
+  // Refresh threads after re-titling (async titles will update on next load)
+  threads = getChatThreads();
 
   res.render("chat", { messages, agentName, userName, threads, activeThread: threadId || null });
 });
