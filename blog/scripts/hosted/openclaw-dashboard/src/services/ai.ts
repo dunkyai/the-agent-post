@@ -4262,7 +4262,7 @@ CRITICAL Supabase query rules:
 
   // Inject Airtable context
   if (isAirtableRunning()) {
-    const airtableContext = "You are connected to Airtable. You can list bases, list tables, and read/create/update records using the airtable_* tools. Use airtable_list_bases first to discover available bases, then airtable_list_tables to see table schemas.";
+    const airtableContext = "You are connected to Airtable and it is working. You can list bases, list tables, and read/create/update records using the airtable_* tools. Use airtable_list_bases first to discover available bases, then airtable_list_tables to see table schemas. IMPORTANT: Always attempt the API call — do not assume connection issues based on prior conversations or past errors. The connection has been verified as active right now.";
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${airtableContext}` : airtableContext;
   }
 
@@ -4523,6 +4523,49 @@ SHOWING IMAGES: When the user asks you to find or show an image, use the find_im
 - Then embed directly: ![description](https://example.com/image.jpg)
 The chat supports rendering images from URLs. Do NOT use the browser to navigate to image pages and take screenshots — just embed the URL directly.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${browserContext}` : browserContext;
+  }
+
+  // Inject live integration status — prevents AI from assuming tools are broken
+  {
+    const connectedServices: string[] = [];
+    if (isSlackRunning()) connectedServices.push("Slack");
+    try {
+      const emailIntegration = getIntegration("email");
+      if (emailIntegration && emailIntegration.status === "connected") connectedServices.push("Email/LobsterMail");
+    } catch {}
+    const googleServices = getConnectedServices();
+    if (googleServices) {
+      const gSvcs: string[] = [];
+      if (googleServices.includes("gmail")) gSvcs.push("Gmail");
+      if (googleServices.includes("calendar")) gSvcs.push("Calendar");
+      if (googleServices.includes("drive")) gSvcs.push("Drive");
+      if (googleServices.includes("docs")) gSvcs.push("Docs");
+      if (googleServices.includes("sheets")) gSvcs.push("Sheets");
+      if (googleServices.includes("contacts")) gSvcs.push("Contacts");
+      connectedServices.push(`Google (${gSvcs.join(", ")})`);
+    }
+    if (isSupabaseRunning()) connectedServices.push("Supabase");
+    if (isAirtableRunning()) connectedServices.push("Airtable");
+    if (isNotionRunning()) connectedServices.push("Notion");
+    if (isBufferRunning()) connectedServices.push("Buffer");
+    if (isTwitterRunning()) connectedServices.push("Twitter/X");
+    if (isLumaRunning()) connectedServices.push("Luma");
+    if (isBeehiivRunning()) connectedServices.push("Beehiiv");
+    if (isGranolaRunning()) connectedServices.push("Granola");
+    if (isContactOutRunning()) connectedServices.push("ContactOut");
+    if (isMailchimpRunning()) connectedServices.push("Mailchimp");
+    if (isUspsRunning()) connectedServices.push("USPS");
+    if (isAgreeRunning()) connectedServices.push("Agree.com");
+    if (isGammaRunning()) connectedServices.push("Gamma");
+    if (isWordPressRunning()) connectedServices.push("WordPress");
+
+    if (connectedServices.length > 0) {
+      const statusBlock = `[LIVE INTEGRATION STATUS — VERIFIED AT REQUEST TIME]
+The following integrations are CONNECTED and operational right now: ${connectedServices.join(", ")}.
+
+CRITICAL TOOL-USE RULE: When the user asks you to do something that requires a tool, you MUST call the tool. NEVER claim a tool is broken, disconnected, or unavailable without actually attempting the call first. NEVER say "the integration seems to have lost access" or "you may need to reconnect" based on memories of past errors — past errors do not predict current state. The integrations listed above have been verified as connected at the time of this request. If a tool call fails, show the user the actual error message from the tool — do not fabricate or assume errors.`;
+      systemPrompt = systemPrompt ? `${systemPrompt}\n\n${statusBlock}` : statusBlock;
+    }
   }
 
   // Security: never leak sensitive data
