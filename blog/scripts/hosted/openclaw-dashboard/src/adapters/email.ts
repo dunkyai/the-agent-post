@@ -756,7 +756,15 @@ INSTRUCTIONS:
 - ${deliveryInstructions}
 - You have access to all your tools. Use them as needed to fulfill the request.
 - Do NOT send any emails yourself — your output text will be delivered automatically.
-- Do NOT create Gmail drafts — the system will handle delivery.`;
+- Do NOT create Gmail drafts — the system will handle delivery.
+
+CRITICAL OUTPUT FORMAT:
+Your final response MUST be a JSON object with this structure:
+{"email_body": "your response text here", "summary": "one-line summary of what you did"}
+
+The "email_body" field is EXACTLY what will be sent to the user — no narration, no thought process, no tool descriptions. Write it as a professional email reply.
+The "summary" field is for internal logging only.
+Do NOT include any text outside the JSON object.`;
 
   const task = createTask({
     raw_input: structuredRequest.request,
@@ -816,8 +824,26 @@ export async function onEmailTaskComplete(task: Task): Promise<void> {
       return;
     }
 
-    const result = task.output.result || "";
+    const rawResult = task.output.result || "";
     const channel = delivery?.channel || "email";
+
+    // Extract email_body from structured JSON output
+    // Falls back to raw result if JSON parsing fails
+    let result = rawResult;
+    try {
+      // Try to find JSON in the response (may have markdown code fences)
+      const jsonMatch = rawResult.match(/\{[\s\S]*"email_body"[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.email_body) {
+          result = parsed.email_body;
+          console.log(`[email-adapter] Extracted email_body from structured output (summary: ${parsed.summary || "none"})`);
+        }
+      }
+    } catch {
+      // JSON parse failed — use raw result, strip any obvious narration
+      console.log(`[email-adapter] Could not parse structured output — using raw response`);
+    }
 
     // Check if the AI already sent an email or created a draft during task execution.
     // If so, skip adapter-level delivery to avoid duplicate emails.
