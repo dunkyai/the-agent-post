@@ -3622,7 +3622,7 @@ export async function callAnthropic(
         const toolOutputStr = typeof result === "string" ? result : JSON.stringify(result);
         onToolCall?.(toolBlock.name, toolBlock.input, toolOutputStr.slice(0, 2000), toolDurationMs);
         toolNamesCalled.push(toolBlock.name);
-        toolCallRecords.push({ name: toolBlock.name, input: toolBlock.input, output: toolOutputStr.slice(0, 500) });
+        toolCallRecords.push({ name: toolBlock.name, input: toolBlock.input, output: toolOutputStr.slice(0, 2000) });
 
         // Save the latest screenshot so we can include it in the final response
         if (toolBlock.name === "browser_screenshot" && Array.isArray(result)) {

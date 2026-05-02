@@ -69,10 +69,16 @@ export async function verifyResponse(
         max_tokens: 200,
         messages: [{
           role: "user",
-          content: `You are a verification agent. Check if the AI's response accurately describes what it actually did. Look for:
-1. Claims of actions not in the tool log (hallucination)
-2. Wrong recipients, wrong content, or wrong details
-3. Missing actions that the user requested but weren't performed
+          content: `You are a verification agent. Check if the AI's response accurately describes what it actually did. ONLY flag serious issues:
+1. Claims of actions not in the tool log (hallucination — the AI said it did something but never called the tool)
+2. Wrong recipients (emailed/messaged the wrong person)
+3. Missing actions that the user explicitly requested but weren't performed
+
+Do NOT flag:
+- Minor formatting differences
+- Truncated text in tool output summaries (the output shown here may be abbreviated)
+- Content style preferences
+- Anything that is merely a nitpick rather than a real error
 
 User's request: "${userInput.slice(0, 300)}"
 
