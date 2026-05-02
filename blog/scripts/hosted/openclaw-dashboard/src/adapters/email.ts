@@ -192,10 +192,19 @@ export async function processIncomingEmail(ctx: EmailThreadContext): Promise<voi
             reply_mode: ctx.replyMode,
           });
           // Build structured request from previous triage + new context
+          // Auto-download attachments from the latest message
+          const latestMsg = ctx.threadMessages[ctx.threadMessages.length - 1];
+          let attachmentContent = "";
+          if (latestMsg?.attachments?.length) {
+            for (const att of latestMsg.attachments) {
+              attachmentContent += await downloadAndScanAttachment(latestMsg.messageId, att, ctx.accountId);
+            }
+          }
+
           const prevTriage = existingState.triage_result ? JSON.parse(existingState.triage_result) : {};
           const structured: StructuredRequest = {
             original_sender: ctx.latestSender,
-            request: `Follow-up to previous request. The user provided additional information. Previous context: ${prevTriage.request_summary || "see thread"}. Process the new information and complete the original request.`,
+            request: `Follow-up to previous request. The user provided additional information. Previous context: ${prevTriage.request_summary || "see thread"}. Process the new information and complete the original request.${attachmentContent}`,
             context: prevTriage.thread_context_summary || "",
             thread_subject: ctx.subject,
             thread_participants: [ctx.latestSender],
