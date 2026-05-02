@@ -15,9 +15,11 @@ import {
 import {
   gmailCreateDraft,
   gmailSend,
+  gmailGetAttachment,
   getGoogleAccounts,
 } from "../services/google";
 import { getProvider, getApiKey } from "../services/ai";
+import { scanBuffer } from "../services/antivirus";
 
 // --- Types ---
 
@@ -58,7 +60,7 @@ export interface EmailThreadContext {
     body: string;
     timestamp: string;
     messageId: string;
-    attachments?: Array<{ filename: string; mimeType: string; size: number }>;
+    attachments?: Array<{ filename: string; mimeType: string; size: number; attachmentId: string }>;
   }>;
   ownEmail: string;
   replyMode: "draft" | "send";
@@ -358,7 +360,7 @@ async function triageEmail(
   ctx: EmailThreadContext,
   existingState?: EmailThreadStateRow
 ): Promise<TriageResult> {
-  const threadContext = buildThreadContext(ctx);
+  const threadContext = await buildThreadContext(ctx);
 
   // Build previous triage context if re-triaging
   let previousContext = "";
@@ -512,27 +514,89 @@ async function callTriageAI(
 
 // --- Thread Context Builder ---
 
-function buildThreadContext(ctx: EmailThreadContext): string {
+const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024; // 5MB
+const TEXT_MIME_TYPES = [
+  "text/plain", "text/csv", "text/html", "text/markdown",
+  "application/json", "application/xml", "text/xml",
+  "application/csv", "text/tab-separated-values",
+  "application/pdf",
+];
+
+async function downloadAndScanAttachment(
+  messageId: string,
+  attachment: { filename: string; mimeType: string; size: number; attachmentId: string },
+  accountId: string
+): Promise<string> {
+  // Size check
+  if (attachment.size > MAX_ATTACHMENT_SIZE) {
+    return `\n[Attachment: ${attachment.filename} — Unfortunately, I can't process this file because it exceeds the 5MB limit (${Math.round(attachment.size / 1024 / 1024)}MB).]`;
+  }
+
+  try {
+    const result = JSON.parse(await gmailGetAttachment(messageId, attachment.attachmentId, accountId));
+    if (result.error) {
+      return `\n[Attachment: ${attachment.filename} — Failed to download: ${result.error}]`;
+    }
+
+    // Get the raw bytes for virus scanning
+    const rawBytes = result.content_base64
+      ? Buffer.from(result.content_base64, "base64")
+      : Buffer.from(result.content || "", "utf-8");
+
+    // Virus scan
+    const scanResult = await scanBuffer(rawBytes, attachment.filename);
+    if (!scanResult.safe) {
+      console.error(`[email] Malware detected in attachment ${attachment.filename}: ${scanResult.threat}`);
+      return `\n[Attachment: ${attachment.filename} — BLOCKED: malware detected (${scanResult.threat})]`;
+    }
+
+    // Return text content
+    if (result.content) {
+      const content = result.content.length > 20000
+        ? result.content.slice(0, 20000) + "\n[... truncated ...]"
+        : result.content;
+      return `\n[Attachment: ${attachment.filename}]\n${content}`;
+    }
+
+    // For binary files we can't display, just note it was scanned
+    return `\n[Attachment: ${attachment.filename} (${attachment.mimeType}, ${Math.round(attachment.size / 1024)}KB) — downloaded and scanned, but content is binary. Use gmail_get_attachment to access it.]`;
+  } catch (err) {
+    return `\n[Attachment: ${attachment.filename} — Error: ${err instanceof Error ? err.message : "download failed"}]`;
+  }
+}
+
+async function buildThreadContext(ctx: EmailThreadContext): Promise<string> {
   const messages = ctx.threadMessages.slice(-MAX_THREAD_MESSAGES);
   // Reverse so newest is first
   const reversed = [...messages].reverse();
 
-  return reversed
-    .map((msg, i) => {
-      let body = msg.body;
-      if (body.length > MAX_MESSAGE_BODY_LENGTH) {
-        body = body.slice(0, MAX_MESSAGE_BODY_LENGTH) + "\n[... truncated ...]";
-      }
-      const attachmentInfo = msg.attachments?.length
-        ? `\nAttachments: ${msg.attachments.map(a => `${a.filename} (${a.mimeType}, ${Math.round(a.size / 1024)}KB)`).join(", ")}`
-        : "";
-      return `--- Message ${i + 1} of ${reversed.length}${i === 0 ? " (latest)" : ""} ---
-From: ${msg.from}
-Date: ${msg.timestamp}${attachmentInfo}
+  const parts: string[] = [];
+  for (let i = 0; i < reversed.length; i++) {
+    const msg = reversed[i];
+    let body = msg.body;
+    if (body.length > MAX_MESSAGE_BODY_LENGTH) {
+      body = body.slice(0, MAX_MESSAGE_BODY_LENGTH) + "\n[... truncated ...]";
+    }
 
-${body}`;
-    })
-    .join("\n\n");
+    // Auto-download attachments on the latest message
+    let attachmentContent = "";
+    if (i === 0 && msg.attachments?.length) {
+      for (const att of msg.attachments) {
+        attachmentContent += await downloadAndScanAttachment(msg.messageId, att, ctx.accountId);
+      }
+    } else if (msg.attachments?.length) {
+      // Older messages: just list metadata
+      attachmentContent = `\nAttachments: ${msg.attachments.map(a => `${a.filename} (${a.mimeType}, ${Math.round(a.size / 1024)}KB)`).join(", ")}`;
+    }
+
+    parts.push(`--- Message ${i + 1} of ${reversed.length}${i === 0 ? " (latest)" : ""} ---
+From: ${msg.from}
+Date: ${msg.timestamp}${attachmentContent}
+
+${body}`);
+  }
+
+  return parts.join("\n\n");
 }
 
 // --- Build Structured Request ---

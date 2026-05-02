@@ -2173,13 +2173,14 @@ async function pollGmail(): Promise<void> {
     }
 
     // Helper to extract attachment metadata from email parts
-    function extractAttachments(part: any): Array<{ filename: string; mimeType: string; size: number }> {
-      const attachments: Array<{ filename: string; mimeType: string; size: number }> = [];
+    function extractAttachments(part: any): Array<{ filename: string; mimeType: string; size: number; attachmentId: string }> {
+      const attachments: Array<{ filename: string; mimeType: string; size: number; attachmentId: string }> = [];
       if (part.filename && part.body?.attachmentId) {
         attachments.push({
           filename: part.filename,
           mimeType: part.mimeType || "application/octet-stream",
           size: part.body.size || 0,
+          attachmentId: part.body.attachmentId,
         });
       }
       if (part.parts) {
