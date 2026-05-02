@@ -150,8 +150,9 @@ export async function processTask(
     // Get conversation history
     const MAX_HISTORY = 30;
     const KEEP_RECENT = 6; // Keep last N messages raw, summarize the rest
+    const EMPTY_RESPONSE = "Sorry, I wasn't able to generate a response. Could you try again?";
     let history = getMessages(conversationId).filter(
-      (m) => m.content && m.content.trim()
+      (m) => m.content && m.content.trim() && m.content !== EMPTY_RESPONSE
     );
 
     // Extract sticky context from full history before truncating

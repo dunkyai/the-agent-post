@@ -3401,6 +3401,7 @@ export async function callAnthropic(
   const MAX_REPEAT_CALLS = 2; // allow same tool+input at most twice
   let lastScreenshot: string | null = null; // track the most recent screenshot base64
   let lastTwitterResult: string | null = null; // track last twitter tool result for fallback
+  let emptyRetried = false; // track if we already retried an empty response
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     if (round > 0 && round % 10 === 0) console.log(`Tool loop round ${round}/${MAX_TOOL_ROUNDS}`);
@@ -3651,14 +3652,17 @@ export async function callAnthropic(
 
     // Handle empty responses — retry once with a nudge to respond with text
     const contentTypes = (data.content || []).map((b: any) => b.type);
-    if (!contentTypes.includes("text") && round > 0) {
+    if (!contentTypes.includes("text") && !emptyRetried) {
+      emptyRetried = true;
       console.log(`Empty response — stop_reason: ${data.stop_reason}, content types: [${contentTypes.join(", ")}], round: ${round}, messages: ${apiMessages.length}. Retrying with nudge.`);
-      apiMessages.push({ role: "assistant", content: data.content || [] });
-      apiMessages.push({ role: "user", content: [{ type: "text", text: "Please respond to the user with a text message summarizing what you did." }] } as any);
+      if (data.content?.length) {
+        apiMessages.push({ role: "assistant", content: data.content });
+      }
+      apiMessages.push({ role: "user", content: [{ type: "text", text: "Please respond to the user with a text message. Do not return an empty response." }] } as any);
       continue; // retry the loop
     }
     if (!contentTypes.includes("text")) {
-      console.log(`Empty response — stop_reason: ${data.stop_reason}, content types: [${contentTypes.join(", ")}], round: ${round}, messages: ${apiMessages.length}`);
+      console.log(`Empty response after retry — stop_reason: ${data.stop_reason}, content types: [${contentTypes.join(", ")}], round: ${round}, messages: ${apiMessages.length}`);
     }
 
     const parts: string[] = [];
