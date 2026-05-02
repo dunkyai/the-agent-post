@@ -168,13 +168,45 @@ export async function processIncomingEmail(ctx: EmailThreadContext): Promise<voi
         return;
       }
 
-      // If delivered/dismissed/failed but NEW message, start fresh triage
+      // If delivered/dismissed/failed but NEW message in thread
       if (
         existingState.state === "delivered" ||
         existingState.state === "dismissed" ||
         existingState.state === "not_a_request" ||
         existingState.state === "failed"
       ) {
+        // If the thread was previously "delivered" (AI responded), treat follow-ups
+        // as continuations — don't re-triage, go straight to processing.
+        // This handles the case where the AI asked for more info and the user replied
+        // with data but no explicit question.
+        if (existingState.state === "delivered") {
+          console.log(`[email-adapter] Follow-up in delivered thread ${threadId}, processing as continuation`);
+          upsertEmailThreadState(threadId, accountId, {
+            state: "processing",
+            latest_message_id: latestMessageId,
+            latest_sender: ctx.latestSender,
+            all_recipients: ctx.allRecipients,
+            message_id_header: ctx.messageIdHeader,
+            reply_mode: ctx.replyMode,
+          });
+          // Build structured request from previous triage + new context
+          const prevTriage = existingState.triage_result ? JSON.parse(existingState.triage_result) : {};
+          const structured: StructuredRequest = {
+            original_sender: ctx.latestSender,
+            request: `Follow-up to previous request. The user provided additional information. Previous context: ${prevTriage.request_summary || "see thread"}. Process the new information and complete the original request.`,
+            context: prevTriage.thread_context_summary || "",
+            thread_subject: ctx.subject,
+            thread_participants: [ctx.latestSender],
+            delivery: { channel: "email", details: {} },
+            account_id: accountId,
+          };
+          const task = createEmailTask(ctx, structured);
+          upsertEmailThreadState(threadId, accountId, { task_id: task.task_id });
+          console.log(`[email-adapter] Continuation task ${task.task_id} created for thread ${threadId}`);
+          markGmailThreadProcessed(threadId, latestMessageId, accountId);
+          return;
+        }
+
         console.log(`[email-adapter] New message in previously processed thread ${threadId}, re-triaging`);
         upsertEmailThreadState(threadId, accountId, {
           state: "triaging",
