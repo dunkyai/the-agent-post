@@ -841,9 +841,13 @@ export async function onEmailTaskComplete(task: Task): Promise<void> {
         }
       }
     } catch {
-      // JSON parse failed — use raw result, strip any obvious narration
+      // JSON parse failed — use raw result
       console.log(`[email-adapter] Could not parse structured output — using raw response`);
     }
+
+    // Always post-process email body to strip narration, regardless of JSON extraction
+    const { postProcessResponse } = require("../services/post-process");
+    result = postProcessResponse(result);
 
     // Check if the AI already sent an email or created a draft during task execution.
     // If so, skip adapter-level delivery to avoid duplicate emails.

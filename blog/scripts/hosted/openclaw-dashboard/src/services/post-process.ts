@@ -102,10 +102,11 @@ export function postProcessResponse(text: string): string {
 
   // Strip AI narration / thought process lines (should never be in user-facing responses)
   const narrationPatterns = [
-    /^(Now )?let me (save|download|extract|open|read|check|look|search|find|get|fetch|process|analyze|review|examine)\b/i,
-    /^I('ll| will) (now )?(save|download|extract|open|read|check|look|search|find|get|fetch|process|analyze|review|examine)\b/i,
-    /^(First|Next|Then),? (I('ll| will|'ll) |let me )/i,
-    /^I need to (save|download|extract|open|read|check|look)\b/i,
+    /^(Now )?(let me|I('ll| will| need to| should| can)) (now )?(save|download|extract|open|read|check|look|search|find|get|fetch|process|analyze|review|examine|convert|parse|access|retrieve|pull up|take a look)\b/i,
+    /^(First|Next|Then|Now),? (I('ll| will|'ll| need to) |let me )/i,
+    /^(Let me |I('ll| will) )(try|attempt|go ahead|proceed|start|begin|work on|handle)\b/i,
+    /^(Now )?I('m going to| am going to| will now| shall)\b/i,
+    /^(Alright|OK|Okay),? (let me|I('ll| will))\b/i,
   ];
   const lines = processed.split("\n");
   processed = lines.filter(line => {
