@@ -143,9 +143,9 @@
           <% for (const acct of googleAccounts) { %>
             <% const missingServices = allAvailableServices.filter(s => !acct.services.includes(s)); %>
             <div style="padding: 12px 0; border-bottom: 1px solid var(--rule-light);">
-              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                <code style="font-size: 14px; padding: 4px 8px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px;"><%= acct.email %></code>
-                <form method="POST" action="/integrations/google/disconnect" style="margin: 0;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px;">
+                <code style="font-size: 14px; padding: 4px 8px; background: var(--bg); border: 1px solid var(--rule-light); border-radius: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;"><%= acct.email %></code>
+                <form method="POST" action="/integrations/google/disconnect" style="margin: 0; flex-shrink: 0;">
                   <input type="hidden" name="account" value="<%= acct.email %>">
                   <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
                 </form>
@@ -726,6 +726,87 @@
           <p style="font-size: 13px; color: var(--text-secondary);">
             Each email lookup counts as 1 message credit from your monthly limit.
           </p>
+        </div>
+      </details>
+
+      <!-- Mailchimp -->
+      <details class="integration-tile">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #FFE01B;"><span style="font-size: 18px;">&#128028;</span></span>
+          <div class="integration-tile-info">
+            <h3>Mailchimp</h3>
+            <p>Email marketing — create campaigns, manage subscribers, view reports</p>
+          </div>
+          <span class="status-badge status-<%= mailchimp.status === 'connected' ? 'connected' : 'disconnected' %>">
+            <%= mailchimp.status === 'connected' ? 'Connected' : 'Not connected' %>
+          </span>
+        </summary>
+        <div class="integration-body">
+          <% if (mailchimp.status === 'connected') { %>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+              Your agent can create and send email campaigns, manage subscribers, and view campaign performance reports.
+            </p>
+            <form method="POST" action="/integrations/mailchimp/disconnect" onsubmit="return confirm('Disconnect Mailchimp?')">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+            </form>
+          <% } else { %>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+              Connect Mailchimp to let your agent create email campaigns, manage subscribers, and view reports.
+            </p>
+            <% if (mailchimp.error_message) { %>
+              <p style="color: var(--danger); font-size: 13px; margin-bottom: 8px;"><%= mailchimp.error_message %></p>
+            <% } %>
+            <form method="POST" action="/integrations/mailchimp/connect">
+              <div class="form-group">
+                <label for="mailchimp_api_key">API Key</label>
+                <input type="password" id="mailchimp_api_key" name="api_key" placeholder="Your Mailchimp API key (ends with -us1, -us6, etc.)" required>
+                <div class="hint">Find your API key at Mailchimp > Account > Extras > API Keys</div>
+              </div>
+              <button type="submit" class="btn btn-sm">Connect</button>
+            </form>
+          <% } %>
+        </div>
+      </details>
+
+      <!-- USPS -->
+      <details class="integration-tile">
+        <summary class="integration-tile-summary">
+          <span class="integration-icon" style="background: #004B87;"><span style="font-size: 14px; color: #fff; font-weight: bold;">USPS</span></span>
+          <div class="integration-tile-info">
+            <h3>USPS</h3>
+            <p>Schedule free package pickups — your mail carrier picks up at your door</p>
+          </div>
+          <span class="status-badge status-<%= usps.status === 'connected' ? 'connected' : 'disconnected' %>">
+            <%= usps.status === 'connected' ? 'Connected' : 'Not connected' %>
+          </span>
+        </summary>
+        <div class="integration-body">
+          <% if (usps.status === 'connected') { %>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+              Your agent can check pickup availability, schedule pickups, view details, and cancel pickups.
+            </p>
+            <form method="POST" action="/integrations/usps/disconnect" onsubmit="return confirm('Disconnect USPS?')">
+              <button type="submit" class="btn btn-danger btn-sm">Disconnect</button>
+            </form>
+          <% } else { %>
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+              Connect USPS to schedule free package pickups. Register at <a href="https://developers.usps.com" target="_blank" style="color: var(--accent);">developers.usps.com</a> to get your API credentials.
+            </p>
+            <% if (usps.error_message) { %>
+              <p style="color: var(--danger); font-size: 13px; margin-bottom: 8px;"><%= usps.error_message %></p>
+            <% } %>
+            <form method="POST" action="/integrations/usps/connect">
+              <div class="form-group">
+                <label>Client ID</label>
+                <input type="text" name="client_id" placeholder="Your USPS Consumer Key" required>
+              </div>
+              <div class="form-group">
+                <label>Client Secret</label>
+                <input type="password" name="client_secret" placeholder="Your USPS Consumer Secret" required>
+              </div>
+              <button type="submit" class="btn btn-sm">Connect</button>
+            </form>
+          <% } %>
         </div>
       </details>
 

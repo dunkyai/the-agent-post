@@ -35,6 +35,10 @@ export function startScheduler(): void {
   tickInterval = setInterval(() => tick(), TICK_INTERVAL_MS);
 }
 
+export function getActiveTaskCount(): number {
+  return activeTasks.size;
+}
+
 export function stopScheduler(): void {
   if (tickInterval) {
     clearInterval(tickInterval);

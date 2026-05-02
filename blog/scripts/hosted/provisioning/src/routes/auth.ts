@@ -28,6 +28,73 @@ router.get("/magic-link", (req, res) => {
   res.redirect(302, callbackUrl);
 });
 
+// POST /auth/login — public endpoint: user enters email, gets magic link for their instance
+router.post("/login", async (req, res) => {
+  const email = (req.body?.email || "").trim().toLowerCase();
+
+  if (!email) {
+    res.status(400).json({ message: "Email is required" });
+    return;
+  }
+
+  // Always return success to prevent email enumeration
+  const successMsg = "If you have an account, you'll receive a sign-in link shortly.";
+
+  try {
+    const instances = store.getInstancesByEmail(email);
+    if (instances.length === 0) {
+      res.json({ message: successMsg });
+      return;
+    }
+
+    // Rate limit: max 3 magic links per email per 15 minutes
+    const recentCount = store.countRecentMagicLinksForInstance(instances[0].id, 15 * 60 * 1000);
+    if (recentCount >= 3) {
+      res.json({ message: successMsg });
+      return;
+    }
+
+    // Send magic link for each instance (usually just one)
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!resendKey) {
+      console.error("[auth/login] RESEND_API_KEY not set");
+      res.json({ message: successMsg });
+      return;
+    }
+
+    for (const instance of instances) {
+      const magicToken = store.createMagicLinkToken(instance.id);
+      const magicLink = `https://api.dunky.ai/auth/magic-link?token=${magicToken}`;
+
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${resendKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: "Dunky <noreply@dunky.ai>",
+          reply_to: "elizabeth@hustlefundvc.com",
+          to: instance.email,
+          subject: "Sign in to your Dunky dashboard",
+          html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
+  <h2 style="color: #1a1a1a; font-size: 20px; margin-bottom: 16px;">Sign in to your dashboard</h2>
+  <p style="color: #444; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">Click the button below to sign in. This link can only be used once and expires in 24 hours.</p>
+  <a href="${magicLink}" style="display: inline-block; background: #6c5ce7; color: #fff; text-decoration: none; padding: 12px 32px; border-radius: 6px; font-size: 15px; font-weight: 500;">Sign in to Dunky</a>
+  <p style="color: #888; font-size: 13px; margin-top: 32px; line-height: 1.5;">If you didn't request this link, you can safely ignore this email.</p>
+  <p style="color: #bbb; font-size: 12px; margin-top: 24px;">— Dunky</p>
+</div>`,
+        }),
+      });
+      console.log(`[auth/login] Magic link sent to ${instance.email} for instance ${instance.id}`);
+    }
+  } catch (err) {
+    console.error("[auth/login] Error:", err instanceof Error ? err.message : err);
+  }
+
+  res.json({ message: successMsg });
+});
+
 function errorPage(title: string, message: string): string {
   return `<!DOCTYPE html>
 <html>

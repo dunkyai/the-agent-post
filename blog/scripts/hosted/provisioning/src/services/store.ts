@@ -111,6 +111,13 @@ export function getInstanceBySubscription(subscriptionId: string): Instance | nu
   return row ? rowToInstance(row) : null;
 }
 
+export function getInstancesByEmail(email: string): Instance[] {
+  const rows = db
+    .prepare("SELECT * FROM instances WHERE LOWER(email) = LOWER(?) AND status = 'running' ORDER BY created_at DESC")
+    .all(email) as Record<string, unknown>[];
+  return rows.map(rowToInstance);
+}
+
 export function listInstances(): Instance[] {
   const rows = db.prepare("SELECT * FROM instances WHERE status != 'deleted' ORDER BY created_at DESC").all() as Record<string, unknown>[];
   return rows.map(rowToInstance);
@@ -155,7 +162,9 @@ export function getBillingSuspendable(): Instance[] {
 }
 
 export function deleteInstance(id: string): void {
-  updateInstance(id, { status: "deleted" });
+  // Negate the port so it releases the UNIQUE constraint for reuse
+  // (port column is NOT NULL, so we can't set it to NULL)
+  db.prepare("UPDATE instances SET status = 'deleted', port = -ABS(port), updated_at = datetime('now') WHERE id = ? AND port > 0").run(id);
 }
 
 // --- Slack installations ---

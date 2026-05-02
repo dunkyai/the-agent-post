@@ -19,12 +19,54 @@ function start() {
   reconnectIntegrations();
 
   // Start job scheduler
-  const { startScheduler } = require("./services/scheduler");
+  const { startScheduler, stopScheduler, getActiveTaskCount } = require("./services/scheduler");
   startScheduler();
 
-  app.listen(PORT, () => {
+  // Agnost analytics
+  try {
+    const { startAgnost } = require("./services/agnost");
+    startAgnost();
+  } catch {}
+
+  const server = app.listen(PORT, () => {
     console.log(`OpenClaw dashboard running on port ${PORT}`);
   });
+
+  // Graceful shutdown — finish active tasks before exiting
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[shutdown] ${signal} received, starting graceful shutdown...`);
+
+    // Stop accepting new connections
+    server.close(() => {
+      console.log("[shutdown] HTTP server closed");
+    });
+
+    // Stop picking up new tasks
+    stopScheduler();
+    console.log("[shutdown] Scheduler stopped");
+
+    // Wait for active tasks to finish (max 30 seconds)
+    const maxWait = 30_000;
+    const start = Date.now();
+    while (getActiveTaskCount() > 0 && Date.now() - start < maxWait) {
+      console.log(`[shutdown] Waiting for ${getActiveTaskCount()} active task(s)...`);
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+
+    if (getActiveTaskCount() > 0) {
+      console.log(`[shutdown] ${getActiveTaskCount()} task(s) still running after ${maxWait / 1000}s, forcing exit`);
+    } else {
+      console.log("[shutdown] All tasks completed, exiting cleanly");
+    }
+
+    process.exit(0);
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
 async function reconnectIntegrations() {
@@ -214,6 +256,32 @@ async function reconnectIntegrations() {
     }
   } catch (err: unknown) {
     console.error("Failed to reconnect Agree.com:", err instanceof Error ? err.message : err);
+  }
+
+  // Mailchimp
+  try {
+    const mailchimp = getIntegration("mailchimp");
+    if (mailchimp && mailchimp.status === "connected") {
+      const config = JSON.parse(decrypt(mailchimp.config));
+      const { startMailchimp } = require("./services/mailchimp");
+      startMailchimp(config);
+      console.log(`Mailchimp reconnected (${config.account_name || config.server})`);
+    }
+  } catch (err: unknown) {
+    console.error("Failed to reconnect Mailchimp:", err instanceof Error ? err.message : err);
+  }
+
+  // USPS
+  try {
+    const usps = getIntegration("usps");
+    if (usps && usps.status === "connected") {
+      const config = JSON.parse(decrypt(usps.config));
+      const { startUsps } = require("./services/usps");
+      startUsps(config);
+      console.log("USPS reconnected");
+    }
+  } catch (err: unknown) {
+    console.error("Failed to reconnect USPS:", err instanceof Error ? err.message : err);
   }
 
   // Gamma

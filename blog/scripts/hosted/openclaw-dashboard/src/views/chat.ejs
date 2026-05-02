@@ -100,10 +100,12 @@
 .thread-item:hover { background: var(--bg, #fff); }
 .thread-item.active { background: var(--bg, #fff); font-weight: 500; }
 .thread-title {
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
   padding-right: 20px;
+  line-height: 1.3;
 }
 .thread-meta {
   font-size: 11px;
@@ -502,6 +504,12 @@
         var ind = document.getElementById('uploadingIndicator');
         if (ind) ind.remove();
         if (data.ok) {
+          // Show Drive upload notification if images were saved
+          if (data.driveUrls && data.driveUrls.length > 0) {
+            if (window.addSystemMessage) {
+              window.addSystemMessage('Your ' + data.driveUrls.length + ' image(s) have been saved to Google Drive so I can reference them later in this conversation.');
+            }
+          }
           if (window.startPolling) window.startPolling(data.taskId);
         } else {
           document.getElementById('chatError').textContent = data.error || 'Upload failed';

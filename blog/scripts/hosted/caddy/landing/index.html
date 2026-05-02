@@ -63,6 +63,17 @@
       transition: background 0.2s;
     }
     .nav-cta:hover { background: var(--purple-dark); }
+    .nav-signin { color: var(--text-secondary); text-decoration: none; font-size: 14px; font-weight: 500; padding: 8px 16px; }
+    .nav-signin:hover { color: var(--text); }
+    .login-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+    .login-card { background: #fff; border-radius: 16px; padding: 40px; max-width: 400px; width: 90%; text-align: center; }
+    .login-card h2 { font-size: 20px; margin-bottom: 8px; }
+    .login-card p { color: var(--text-secondary); font-size: 14px; margin-bottom: 24px; }
+    .login-card input { width: 100%; padding: 12px 16px; border: 1px solid #E7E5E4; border-radius: 8px; font-size: 14px; margin-bottom: 12px; font-family: inherit; }
+    .login-card input:focus { outline: none; border-color: var(--purple); }
+    .login-card button { width: 100%; padding: 12px; background: var(--purple); color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .login-card button:hover { background: var(--purple-dark); }
+    .login-card .login-msg { font-size: 13px; margin-top: 12px; color: var(--purple); }
 
     /* Hero — side by side */
     .hero {
@@ -329,6 +340,7 @@
   <nav>
     <div class="container">
       <a href="/" class="logo">dunky.ai</a>
+      <a href="#" class="nav-signin" onclick="document.getElementById('loginModal').style.display='flex';return false;">Sign In</a>
       <a href="#get-started" class="nav-cta">Get Started</a>
     </div>
   </nav>
@@ -440,6 +452,43 @@ function handleSignup(form) {
   });
 
   return false;
+}
+</script>
+<div id="loginModal" class="login-modal" onclick="if(event.target===this)this.style.display='none'">
+  <div class="login-card">
+    <h2>Sign in to Dunky</h2>
+    <p>Enter your email and we'll send you a magic link.</p>
+    <form id="loginForm" onsubmit="submitLogin(event)">
+      <input type="email" id="loginEmail" placeholder="you@company.com" required autofocus>
+      <button type="submit" id="loginBtn">Send Sign-In Link</button>
+    </form>
+    <div id="loginMsg" class="login-msg" style="display:none;"></div>
+  </div>
+</div>
+<script>
+async function submitLogin(e) {
+  e.preventDefault();
+  var btn = document.getElementById("loginBtn");
+  var msg = document.getElementById("loginMsg");
+  var email = document.getElementById("loginEmail").value.trim();
+  btn.disabled = true;
+  btn.textContent = "Sending...";
+  msg.style.display = "none";
+  try {
+    var res = await fetch("https://api.dunky.ai/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email })
+    });
+    var data = await res.json();
+    msg.textContent = data.message || "Check your email for the sign-in link.";
+    msg.style.display = "block";
+  } catch (err) {
+    msg.textContent = "Something went wrong. Please try again.";
+    msg.style.display = "block";
+  }
+  btn.disabled = false;
+  btn.textContent = "Send Sign-In Link";
 }
 </script>
 </body>

@@ -61,6 +61,20 @@
 
     // Split into paragraphs by double newlines
     var blocks = html.split(/\n{2,}/);
+
+    // Merge consecutive ordered list blocks into one
+    var mergedBlocks = [];
+    for (var b = 0; b < blocks.length; b++) {
+      var blk = blocks[b].trim();
+      if (!blk) continue;
+      if (/^\d+\.\s/.test(blk) && mergedBlocks.length > 0 && /^\d+\.\s/.test(mergedBlocks[mergedBlocks.length - 1])) {
+        mergedBlocks[mergedBlocks.length - 1] += "\n" + blk;
+      } else {
+        mergedBlocks.push(blk);
+      }
+    }
+    blocks = mergedBlocks;
+
     var out = [];
     for (var i = 0; i < blocks.length; i++) {
       var block = blocks[i].trim();
@@ -195,7 +209,10 @@
     var bubble = document.createElement("div");
     bubble.className = "bubble";
     if (role === "user") {
-      bubble.textContent = content;
+      // Escape HTML but auto-link URLs
+      var escaped = content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      escaped = escaped.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+      bubble.innerHTML = escaped;
     } else {
       bubble.innerHTML = renderMarkdown(content);
     }
@@ -210,7 +227,7 @@
     var thinking = document.createElement("div");
     thinking.className = "chat-message assistant thinking-indicator";
     thinking.setAttribute("data-task-id", taskId || "pending");
-    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><div class="thinking-top"><span class="thinking-dots"><span></span><span></span><span></span></span> <span class="thinking-text">Thinking...</span></div><div class="thinking-skeleton"><div class="thinking-skeleton-line"></div><div class="thinking-skeleton-line"></div><div class="thinking-skeleton-line"></div></div><div class="thinking-progress"><div class="thinking-progress-bar"></div></div></div>';
+    thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><div class="thinking-top"><span class="thinking-dots"><span></span><span></span><span></span></span> <span class="thinking-text">Thinking...</span><button class="cancel-btn" title="Cancel" onclick="cancelTask(this)">Stop</button></div><div class="thinking-skeleton"><div class="thinking-skeleton-line"></div><div class="thinking-skeleton-line"></div><div class="thinking-skeleton-line"></div></div><div class="thinking-progress"><div class="thinking-progress-bar"></div></div><a href="/chat/threads" class="parallel-link" onclick="event.preventDefault();fetch(\'/chat/threads\',{method:\'POST\',redirect:\'follow\'}).then(function(r){if(r.redirected){window.open(r.url,\'_blank\')}else{return r.text().then(function(){window.open(\'/chat\',\'_blank\')})}});">Start another task in a new conversation &rarr;</a></div>';
     messages.appendChild(thinking);
     scrollToBottom();
     return thinking;
@@ -410,6 +427,59 @@
     existingBubbles[i].innerHTML = renderMarkdown(raw);
   }
 
+  // --- Prompt history (arrow up/down to cycle) ---
+  var HISTORY_KEY = "chatPromptHistory:" + (window.__chatConfig?.threadId || "global");
+  var promptHistory = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+  var historyIndex = -1;
+  var savedInput = "";
+
+  // Seed history from existing messages on page load if empty
+  if (promptHistory.length === 0) {
+    var existingUserMsgs = messages.querySelectorAll(".chat-message.user .bubble");
+    for (var h = 0; h < existingUserMsgs.length; h++) {
+      var msgText = (existingUserMsgs[h].textContent || "").trim();
+      if (msgText) promptHistory.push(msgText);
+    }
+    if (promptHistory.length > 0) {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(promptHistory));
+    }
+  }
+
+  function pushHistory(text) {
+    if (!text.trim()) return;
+    // Don't add duplicates at the end
+    if (promptHistory.length > 0 && promptHistory[promptHistory.length - 1] === text) return;
+    promptHistory.push(text);
+    // Keep last 50
+    if (promptHistory.length > 50) promptHistory = promptHistory.slice(-50);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(promptHistory));
+    historyIndex = -1;
+  }
+
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowUp" && !e.shiftKey) {
+      if (promptHistory.length === 0) return;
+      e.preventDefault();
+      if (historyIndex === -1) {
+        savedInput = input.value;
+        historyIndex = promptHistory.length - 1;
+      } else if (historyIndex > 0) {
+        historyIndex--;
+      }
+      input.value = promptHistory[historyIndex];
+    } else if (e.key === "ArrowDown" && !e.shiftKey) {
+      if (historyIndex === -1) return;
+      e.preventDefault();
+      if (historyIndex < promptHistory.length - 1) {
+        historyIndex++;
+        input.value = promptHistory[historyIndex];
+      } else {
+        historyIndex = -1;
+        input.value = savedInput;
+      }
+    }
+  });
+
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     // If recording, stop it — onstop will attach the file and re-trigger submit
@@ -426,6 +496,7 @@
     var text = input.value.trim();
     if (!text) return;
 
+    pushHistory(text);
     addMessage("user", text);
     input.value = "";
     errorEl.textContent = "";
@@ -481,8 +552,36 @@
       });
   });
 
+  // Cancel a running task
+  window.cancelTask = function(btn) {
+    var indicator = btn.closest(".thinking-indicator");
+    var taskId = indicator ? indicator.getAttribute("data-task-id") : null;
+    if (!taskId || taskId === "pending") return;
+    btn.disabled = true;
+    btn.textContent = "Stopping...";
+    fetch("/chat/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId: taskId }),
+    }).then(function() {
+      if (indicator) indicator.remove();
+      addMessage("assistant", "Action cancelled.");
+    }).catch(function() {
+      btn.disabled = false;
+      btn.textContent = "Stop";
+    });
+  };
+
   // Expose for audio recording and file upload integration
   window.addUserMessage = function(text) { addMessage("user", text); };
+  window.addSystemMessage = function(text) {
+    var div = document.createElement("div");
+    div.className = "chat-system-message message-appear";
+    div.style.cssText = "text-align:center;font-size:12px;color:var(--text-secondary);padding:8px 16px;font-style:italic;";
+    div.textContent = text;
+    messages.appendChild(div);
+    scrollToBottom();
+  };
   window.startPolling = function(taskId) {
     var thinking = createThinkingIndicator(taskId || "unknown");
     if (taskId) {

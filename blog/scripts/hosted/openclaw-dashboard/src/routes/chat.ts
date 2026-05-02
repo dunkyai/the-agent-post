@@ -2,8 +2,10 @@ import { Router, Request, Response } from "express";
 import multer from "multer";
 import { getOrCreateConversation, getMessages, deleteConversation, getSetting, getChatThreads, createChatThread, renameChatThread } from "../services/db";
 import { submitChatMessage, pollChatStatus, pollChatTasks, clearSessionState } from "../adapters/chat";
+import { updateTaskStatus } from "../services/task";
 import { transcribeAudio } from "../services/transcription";
 import { scanBuffer } from "../services/antivirus";
+import { driveUploadImage, getConnectedServices } from "../services/google";
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 // Generate a better thread title using AI after enough messages
@@ -120,15 +122,15 @@ router.post("/chat/message", (req: Request, res: Response) => {
       console.log(`[chat] Auto-created thread ${activeThreadId}`);
     }
 
-    // Auto-title the thread from the first message if untitled
+    // Auto-title the thread from the first message
     const threadConvId = getOrCreateConversation("dashboard", `chat:${activeThreadId}`);
     const existingMessages = getMessages(threadConvId);
     if (existingMessages.length === 0) {
-      const title = message.trim().slice(0, 50) + (message.trim().length > 50 ? "..." : "");
-      renameChatThread(threadConvId, title);
+      // Generate a good title with AI immediately (async, don't block)
+      generateThreadTitle(threadConvId, [{ role: "user", content: message }]);
     }
 
-    // After 5 messages, generate a better title using AI
+    // After 5 messages, regenerate title with more context
     if (existingMessages.length === 4) {
       generateThreadTitle(threadConvId, existingMessages.concat([{ role: "user", content: message } as any]));
     }
@@ -275,16 +277,39 @@ router.post("/chat/upload", upload.array("files", 10), async (req: Request, res:
     for (const a of attachments.filter(a => a.type === "text")) {
       parts.push(a.content);
     }
-    const fullMessage = parts.join("\n\n") || "Please analyze the attached files.";
-
     // Pass image attachments as metadata for Claude vision
     const imageAttachments = attachments.filter(a => a.type === "image");
 
-    const threadId = req.body?.threadId as string | undefined;
-    const { taskId } = submitChatMessage(sessionId, fullMessage, imageAttachments.length > 0 ? imageAttachments : undefined, threadId);
-    console.log(`[chat] Upload: ${files?.length || 0} files, ${imageAttachments.length} images, message=${message.length} chars`);
+    // Auto-upload images to Google Drive for persistence
+    const driveUrls: string[] = [];
+    const googleServices = getConnectedServices();
+    if (imageAttachments.length > 0 && googleServices?.includes("drive")) {
+      for (const img of imageAttachments) {
+        try {
+          const result = JSON.parse(await driveUploadImage(img.content, img.name, img.mimeType));
+          if (result.success && result.publicUrl) {
+            driveUrls.push(result.publicUrl);
+            console.log(`[chat] Auto-uploaded ${img.name} to Drive: ${result.publicUrl}`);
+          }
+        } catch (err) {
+          console.error(`[chat] Failed to auto-upload ${img.name} to Drive:`, err);
+        }
+      }
+    }
 
-    res.json({ ok: true, taskId, fileCount: files?.length || 0 });
+    // Add Drive URLs to the message context so the AI knows about them
+    if (driveUrls.length > 0) {
+      const driveNote = `\n\n[Your ${driveUrls.length} image(s) have been saved to Google Drive for safekeeping: ${driveUrls.join(", ")}]`;
+      parts.push(driveNote);
+    }
+
+    const fullMessageWithDrive = parts.join("\n\n") || "Please analyze the attached files.";
+
+    const threadId = req.body?.threadId as string | undefined;
+    const { taskId } = submitChatMessage(sessionId, fullMessageWithDrive, imageAttachments.length > 0 ? imageAttachments : undefined, threadId);
+    console.log(`[chat] Upload: ${files?.length || 0} files, ${imageAttachments.length} images, ${driveUrls.length} uploaded to Drive`);
+
+    res.json({ ok: true, taskId, fileCount: files?.length || 0, driveUrls: driveUrls.length > 0 ? driveUrls : undefined });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Upload failed";
     console.error("Chat upload error:", msg);
@@ -324,6 +349,25 @@ router.post("/chat/reset", (req: Request, res: Response) => {
     deleteConversation(conversationId);
   }
   res.redirect(303, "/chat");
+});
+
+// --- Cancel ---
+
+router.post("/chat/cancel", (req: Request, res: Response) => {
+  const { taskId } = req.body;
+  if (!taskId) {
+    res.status(400).json({ error: "taskId is required" });
+    return;
+  }
+  try {
+    updateTaskStatus(taskId, "cancelled", {
+      output: JSON.stringify({ reply_channel: "chat", result: "Action cancelled." }),
+    });
+    console.log(`[chat] Task ${taskId} cancelled by user`);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to cancel task" });
+  }
 });
 
 // --- Thread CRUD ---
