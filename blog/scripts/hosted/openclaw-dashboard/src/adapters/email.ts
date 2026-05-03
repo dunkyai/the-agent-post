@@ -192,12 +192,14 @@ export async function processIncomingEmail(ctx: EmailThreadContext): Promise<voi
             reply_mode: ctx.replyMode,
           });
           // Build structured request from previous triage + new context
-          // Auto-download attachments from the latest message
-          const latestMsg = ctx.threadMessages[ctx.threadMessages.length - 1];
+          // Auto-download attachments from ALL messages in the thread (not just latest)
+          // so the AI has access to attachments from earlier messages
           let attachmentContent = "";
-          if (latestMsg?.attachments?.length) {
-            for (const att of latestMsg.attachments) {
-              attachmentContent += await downloadAndScanAttachment(latestMsg.messageId, att, ctx.accountId);
+          for (const msg of ctx.threadMessages) {
+            if (msg.attachments?.length) {
+              for (const att of msg.attachments) {
+                attachmentContent += await downloadAndScanAttachment(msg.messageId, att, ctx.accountId);
+              }
             }
           }
 
