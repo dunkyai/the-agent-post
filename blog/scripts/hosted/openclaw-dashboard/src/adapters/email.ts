@@ -845,9 +845,52 @@ export async function onEmailTaskComplete(task: Task): Promise<void> {
       console.log(`[email-adapter] Could not parse structured output — using raw response`);
     }
 
-    // Always post-process email body to strip narration, regardless of JSON extraction
+    // Post-process to strip known narration patterns
     const { postProcessResponse } = require("../services/post-process");
     result = postProcessResponse(result);
+
+    // Use Haiku to extract clean email content — catches narration that regex misses
+    try {
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (apiKey && result.length > 20) {
+        const cleanRes = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 2000,
+            messages: [{
+              role: "user",
+              content: `Extract ONLY the email reply from the following AI response. Remove any:
+- Internal narration ("Let me check...", "Now I need to...", "I'll process...")
+- Tool descriptions or thought process
+- Technical explanations about what the AI is doing
+- Anything that isn't the actual message to send to the recipient
+
+If the entire response is narration with no actual email content, write a brief professional response that addresses the user's request based on the context.
+
+AI response to clean:
+${result}`,
+            }],
+          }),
+        });
+        if (cleanRes.ok) {
+          const cleanData: any = await cleanRes.json();
+          const cleaned = (cleanData.content?.[0]?.text || "").trim();
+          if (cleaned && cleaned.length > 10) {
+            console.log(`[email-adapter] Haiku cleaned email body (${result.length} → ${cleaned.length} chars)`);
+            result = cleaned;
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[email-adapter] Haiku cleaning failed:", err instanceof Error ? err.message : err);
+      // Non-critical — fall through with regex-cleaned version
+    }
 
     // Check if the AI already sent an email or created a draft during task execution.
     // If so, skip adapter-level delivery to avoid duplicate emails.
