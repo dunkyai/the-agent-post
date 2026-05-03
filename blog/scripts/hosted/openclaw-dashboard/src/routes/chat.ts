@@ -12,9 +12,9 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
 async function generateThreadTitle(conversationId: string, messages: { role: string; content: string }[]): Promise<void> {
   try {
     const summary = messages
-      .filter(m => m.role === "user")
-      .map(m => m.content.slice(0, 100))
-      .join(" | ");
+      .map(m => `${m.role === "user" ? "User" : "Assistant"}: ${m.content.slice(0, 80)}`)
+      .slice(0, 8)
+      .join("\n");
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -28,7 +28,7 @@ async function generateThreadTitle(conversationId: string, messages: { role: str
         max_tokens: 30,
         messages: [{
           role: "user",
-          content: `Generate a short title (max 6 words) for this conversation. Return ONLY the title, no quotes or explanation.\n\nMessages:\n${summary}`,
+          content: `Generate a short title (max 6 words) describing the TOPIC of this conversation. Ignore greetings like "Hi Warren" — focus on what was actually discussed or requested. Return ONLY the title, no quotes or explanation.\n\nConversation:\n${summary}`,
         }],
       }),
     });
@@ -100,7 +100,24 @@ router.get("/chat", (req: Request, res: Response) => {
   const agentName = getSetting("agent_name") || "Agent";
   const userName = getSetting("user_name") || "You";
 
-  res.render("chat", { messages, agentName, userName, threads, activeThread: threadId || null });
+  // Background: re-title threads with generic/stale titles
+  const GENERIC_PATTERNS = /^(hi|hey|hello|new conversation|undefined)/i;
+  for (const t of threads) {
+    const tid = t.external_id.replace("chat:", "");
+    const needsRetitle = !t.title || GENERIC_PATTERNS.test(t.title) || t.title.length < 5;
+    if (needsRetitle) {
+      const convId = getOrCreateConversation("dashboard", t.external_id);
+      const msgs = getMessages(convId);
+      if (msgs.length >= 2) {
+        generateThreadTitle(convId, msgs.slice(0, 10));
+      }
+    }
+  }
+  // Refresh threads after re-titling (async titles will update on next load)
+  threads = getChatThreads();
+
+  const activeThreadTitle = threadId ? (threads.find(t => t.external_id === `chat:${threadId}`)?.title || null) : null;
+  res.render("chat", { messages, agentName, userName, threads, activeThread: threadId || null, activeThreadTitle });
 });
 
 // POST: submit a message — creates a task, returns immediately
@@ -320,16 +337,20 @@ router.post("/chat/upload", upload.array("files", 10), async (req: Request, res:
 // GET: check if there's an in-flight task (for resuming after page navigation)
 router.get("/chat/pending", (req: Request, res: Response) => {
   const sessionId = req.cookies?.openclaw_session || "anon";
+  const threadId = req.query.thread as string | undefined;
   const result = pollChatStatus(sessionId);
   if (!result.done || result.status !== "idle") {
     res.json(result);
     return;
   }
-  // Check DB for processing/pending tasks from chat
+  // Check DB for processing/pending tasks from chat — filter by thread if specified
   const db = require("../services/db");
-  const row = db.getDb()
-    .prepare("SELECT task_id, status FROM tasks WHERE active = 1 AND status IN ('pending', 'processing') AND input LIKE '%\"source_channel\":\"chat\"%' ORDER BY created_at DESC LIMIT 1")
-    .get() as { task_id: string; status: string } | undefined;
+  let query = "SELECT task_id, status FROM tasks WHERE active = 1 AND status IN ('pending', 'processing') AND input LIKE '%\"source_channel\":\"chat\"%'";
+  if (threadId) {
+    query += ` AND conversation_id IN (SELECT id FROM conversations WHERE external_id = 'chat:${threadId.replace(/'/g, "''")}')`;
+  }
+  query += " ORDER BY created_at DESC LIMIT 1";
+  const row = db.getDb().prepare(query).get() as { task_id: string; status: string } | undefined;
   if (row) {
     res.json({ status: "Processing...", done: false, taskId: row.task_id, resumed: true });
   } else {
@@ -374,7 +395,12 @@ router.post("/chat/cancel", (req: Request, res: Response) => {
 
 router.post("/chat/threads", (req: Request, res: Response) => {
   const threadId = createChatThread();
-  res.redirect(303, `/chat?thread=${threadId}`);
+  // If JSON requested, return the thread ID; otherwise redirect
+  if (req.headers.accept?.includes("application/json")) {
+    res.json({ threadId });
+  } else {
+    res.redirect(303, `/chat?thread=${threadId}`);
+  }
 });
 
 router.get("/chat/threads/api", (req: Request, res: Response) => {

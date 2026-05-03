@@ -384,6 +384,15 @@ function sanitizeHeader(value: string): string {
   return value.replace(/[\r\n]/g, "");
 }
 
+// MIME encode subject for non-ASCII characters (RFC 2047)
+function encodeSubject(subject: string): string {
+  const cleaned = subject.replace(/[\r\n]/g, "");
+  // If all ASCII, no encoding needed
+  if (/^[\x20-\x7E]*$/.test(cleaned)) return cleaned;
+  // UTF-8 Base64 encoding for non-ASCII subjects
+  return `=?UTF-8?B?${Buffer.from(cleaned, "utf-8").toString("base64")}?=`;
+}
+
 export async function gmailSend(to: string, subject: string, body: string, accountId?: string, from?: string, cc?: string, threadId?: string, inReplyTo?: string): Promise<string> {
   // If we have a threadId but no In-Reply-To, try to fetch it from the thread
   let resolvedInReplyTo = inReplyTo;
@@ -415,7 +424,7 @@ export async function gmailSend(to: string, subject: string, body: string, accou
 
   const emailHeaders = [
     `To: ${sanitizeHeader(to)}`,
-    `Subject: ${sanitizeHeader(subject)}`,
+    `Subject: ${encodeSubject(subject)}`,
     `Content-Type: text/plain; charset="UTF-8"`,
   ];
   if (from) emailHeaders.unshift(`From: ${sanitizeHeader(from)}`);
@@ -476,7 +485,7 @@ export async function gmailCreateDraft(to: string, subject: string, body: string
 
   const emailHeaders = [
     `To: ${sanitizeHeader(to)}`,
-    `Subject: ${sanitizeHeader(subject)}`,
+    `Subject: ${encodeSubject(subject)}`,
     `Content-Type: text/plain; charset="UTF-8"`,
   ];
   if (from) emailHeaders.unshift(`From: ${sanitizeHeader(from)}`);
@@ -2164,13 +2173,14 @@ async function pollGmail(): Promise<void> {
     }
 
     // Helper to extract attachment metadata from email parts
-    function extractAttachments(part: any): Array<{ filename: string; mimeType: string; size: number }> {
-      const attachments: Array<{ filename: string; mimeType: string; size: number }> = [];
+    function extractAttachments(part: any): Array<{ filename: string; mimeType: string; size: number; attachmentId: string }> {
+      const attachments: Array<{ filename: string; mimeType: string; size: number; attachmentId: string }> = [];
       if (part.filename && part.body?.attachmentId) {
         attachments.push({
           filename: part.filename,
           mimeType: part.mimeType || "application/octet-stream",
           size: part.body.size || 0,
+          attachmentId: part.body.attachmentId,
         });
       }
       if (part.parts) {

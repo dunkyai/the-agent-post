@@ -5,6 +5,7 @@ import {
 } from "./db";
 import { validateToolInput, checkActionClaims } from "./tool-schemas";
 import { isTaskCancelled } from "./task";
+import { hasHighStakesActions, verifyResponse } from "./verify";
 import { postProcessResponse } from "./post-process";
 import { decrypt } from "./encryption";
 import { getNextRun, isValidCron, describeCron } from "./cron";
@@ -3396,9 +3397,11 @@ export async function callAnthropic(
   const MAX_TOOL_ROUNDS = 50;
   const toolCallLog: string[] = []; // track tool+input fingerprints for loop detection
   const toolNamesCalled: string[] = []; // track tool names for hallucination check
+  const toolCallRecords: { name: string; input: any; output: string }[] = []; // full records for verification
   const MAX_REPEAT_CALLS = 2; // allow same tool+input at most twice
   let lastScreenshot: string | null = null; // track the most recent screenshot base64
   let lastTwitterResult: string | null = null; // track last twitter tool result for fallback
+  let emptyRetried = false; // track if we already retried an empty response
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     if (round > 0 && round % 10 === 0) console.log(`Tool loop round ${round}/${MAX_TOOL_ROUNDS}`);
@@ -3620,6 +3623,7 @@ export async function callAnthropic(
         const toolOutputStr = typeof result === "string" ? result : JSON.stringify(result);
         onToolCall?.(toolBlock.name, toolBlock.input, toolOutputStr.slice(0, 2000), toolDurationMs);
         toolNamesCalled.push(toolBlock.name);
+        toolCallRecords.push({ name: toolBlock.name, input: toolBlock.input, output: toolOutputStr.slice(0, 2000) });
 
         // Save the latest screenshot so we can include it in the final response
         if (toolBlock.name === "browser_screenshot" && Array.isArray(result)) {
@@ -3648,14 +3652,17 @@ export async function callAnthropic(
 
     // Handle empty responses — retry once with a nudge to respond with text
     const contentTypes = (data.content || []).map((b: any) => b.type);
-    if (!contentTypes.includes("text") && round > 0) {
+    if (!contentTypes.includes("text") && !emptyRetried) {
+      emptyRetried = true;
       console.log(`Empty response — stop_reason: ${data.stop_reason}, content types: [${contentTypes.join(", ")}], round: ${round}, messages: ${apiMessages.length}. Retrying with nudge.`);
-      apiMessages.push({ role: "assistant", content: data.content || [] });
-      apiMessages.push({ role: "user", content: [{ type: "text", text: "Please respond to the user with a text message summarizing what you did." }] } as any);
+      if (data.content?.length) {
+        apiMessages.push({ role: "assistant", content: data.content });
+      }
+      apiMessages.push({ role: "user", content: [{ type: "text", text: "Please respond to the user with a text message. Do not return an empty response." }] } as any);
       continue; // retry the loop
     }
     if (!contentTypes.includes("text")) {
-      console.log(`Empty response — stop_reason: ${data.stop_reason}, content types: [${contentTypes.join(", ")}], round: ${round}, messages: ${apiMessages.length}`);
+      console.log(`Empty response after retry — stop_reason: ${data.stop_reason}, content types: [${contentTypes.join(", ")}], round: ${round}, messages: ${apiMessages.length}`);
     }
 
     const parts: string[] = [];
@@ -3705,12 +3712,20 @@ export async function callAnthropic(
     }
 
     // Check for hallucinated action claims
-    const finalText = text.trim();
+    let finalText = text.trim();
     if (finalText && toolNamesCalled.length > 0) {
       const hallucinationWarning = checkActionClaims(finalText, toolNamesCalled);
       if (hallucinationWarning) {
         console.warn(`[hallucination-check] ${hallucinationWarning}`);
-        // Don't block — log for now. Could add retry logic later.
+      }
+    }
+
+    // Haiku verification on high-stakes actions (async, appends warning if issues found)
+    if (finalText && hasHighStakesActions(toolNamesCalled)) {
+      const lastUserMsg = [...messages].reverse().find(m => m.role === "user")?.content || "";
+      const verifyIssue = await verifyResponse(lastUserMsg, finalText, toolCallRecords);
+      if (verifyIssue) {
+        finalText += `\n\n⚠️ *Verification note: ${verifyIssue}*`;
       }
     }
 
@@ -4251,7 +4266,7 @@ CRITICAL Supabase query rules:
 
   // Inject Airtable context
   if (isAirtableRunning()) {
-    const airtableContext = "You are connected to Airtable. You can list bases, list tables, and read/create/update records using the airtable_* tools. Use airtable_list_bases first to discover available bases, then airtable_list_tables to see table schemas.";
+    const airtableContext = "You are connected to Airtable and it is working. You can list bases, list tables, and read/create/update records using the airtable_* tools. Use airtable_list_bases first to discover available bases, then airtable_list_tables to see table schemas. IMPORTANT: Always attempt the API call — do not assume connection issues based on prior conversations or past errors. The connection has been verified as active right now.";
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${airtableContext}` : airtableContext;
   }
 
@@ -4512,6 +4527,49 @@ SHOWING IMAGES: When the user asks you to find or show an image, use the find_im
 - Then embed directly: ![description](https://example.com/image.jpg)
 The chat supports rendering images from URLs. Do NOT use the browser to navigate to image pages and take screenshots — just embed the URL directly.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${browserContext}` : browserContext;
+  }
+
+  // Inject live integration status — prevents AI from assuming tools are broken
+  {
+    const connectedServices: string[] = [];
+    if (isSlackRunning()) connectedServices.push("Slack");
+    try {
+      const emailIntegration = getIntegration("email");
+      if (emailIntegration && emailIntegration.status === "connected") connectedServices.push("Email/LobsterMail");
+    } catch {}
+    const googleServices = getConnectedServices();
+    if (googleServices) {
+      const gSvcs: string[] = [];
+      if (googleServices.includes("gmail")) gSvcs.push("Gmail");
+      if (googleServices.includes("calendar")) gSvcs.push("Calendar");
+      if (googleServices.includes("drive")) gSvcs.push("Drive");
+      if (googleServices.includes("docs")) gSvcs.push("Docs");
+      if (googleServices.includes("sheets")) gSvcs.push("Sheets");
+      if (googleServices.includes("contacts")) gSvcs.push("Contacts");
+      connectedServices.push(`Google (${gSvcs.join(", ")})`);
+    }
+    if (isSupabaseRunning()) connectedServices.push("Supabase");
+    if (isAirtableRunning()) connectedServices.push("Airtable");
+    if (isNotionRunning()) connectedServices.push("Notion");
+    if (isBufferRunning()) connectedServices.push("Buffer");
+    if (isTwitterRunning()) connectedServices.push("Twitter/X");
+    if (isLumaRunning()) connectedServices.push("Luma");
+    if (isBeehiivRunning()) connectedServices.push("Beehiiv");
+    if (isGranolaRunning()) connectedServices.push("Granola");
+    if (isContactOutRunning()) connectedServices.push("ContactOut");
+    if (isMailchimpRunning()) connectedServices.push("Mailchimp");
+    if (isUspsRunning()) connectedServices.push("USPS");
+    if (isAgreeRunning()) connectedServices.push("Agree.com");
+    if (isGammaRunning()) connectedServices.push("Gamma");
+    if (isWordPressRunning()) connectedServices.push("WordPress");
+
+    if (connectedServices.length > 0) {
+      const statusBlock = `[LIVE INTEGRATION STATUS — VERIFIED AT REQUEST TIME]
+The following integrations are CONNECTED and operational right now: ${connectedServices.join(", ")}.
+
+CRITICAL TOOL-USE RULE: When the user asks you to do something that requires a tool, you MUST call the tool. NEVER claim a tool is broken, disconnected, or unavailable without actually attempting the call first. NEVER say "the integration seems to have lost access" or "you may need to reconnect" based on memories of past errors — past errors do not predict current state. The integrations listed above have been verified as connected at the time of this request. If a tool call fails, show the user the actual error message from the tool — do not fabricate or assume errors.`;
+      systemPrompt = systemPrompt ? `${systemPrompt}\n\n${statusBlock}` : statusBlock;
+    }
   }
 
   // Security: never leak sensitive data

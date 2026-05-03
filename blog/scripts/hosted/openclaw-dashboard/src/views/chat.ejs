@@ -27,7 +27,12 @@
       <!-- Chat Area -->
       <div class="chat-container" style="flex: 1;">
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px 12px;">
-          <h2 style="margin: 0;">Chat</h2>
+          <% if (activeThread && activeThreadTitle) { %>
+            <h2 class="thread-title-editable" id="threadTitleEditable" title="Click to rename" style="margin: 0; cursor: pointer; border-bottom: 1px dashed transparent; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" onclick="startEditTitle()"><%= activeThreadTitle %></h2>
+            <input type="text" id="threadTitleInput" value="<%= activeThreadTitle %>" maxlength="80" style="display: none; margin: 0; font-size: inherit; font-weight: 700; font-family: inherit; border: 1px solid var(--border, #e0e0e0); border-radius: 6px; padding: 2px 8px; max-width: 70%; background: var(--bg, #fff); color: var(--text, #333);" onblur="saveTitle()" onkeydown="if(event.key==='Enter'){event.preventDefault();saveTitle()}if(event.key==='Escape'){cancelEditTitle()}">
+          <% } else { %>
+            <h2 style="margin: 0;">Chat</h2>
+          <% } %>
           <% if (activeThread) { %>
             <form method="POST" action="/chat/reset" style="margin: 0;" onsubmit="return confirm('Delete this conversation and start fresh?');">
               <input type="hidden" name="threadId" value="<%= activeThread %>">
@@ -72,6 +77,9 @@
   </div>
 </div>
 <style>
+.thread-title-editable:hover {
+  border-bottom-color: var(--text-secondary, #999) !important;
+}
 .thread-sidebar {
   width: 220px;
   min-width: 220px;
@@ -522,5 +530,49 @@
       });
   };
 })();
+
+<% if (activeThread) { %>
+function startEditTitle() {
+  var h2 = document.getElementById('threadTitleEditable');
+  var input = document.getElementById('threadTitleInput');
+  if (!h2 || !input) return;
+  h2.style.display = 'none';
+  input.style.display = 'block';
+  input.focus();
+  input.select();
+}
+
+function cancelEditTitle() {
+  var h2 = document.getElementById('threadTitleEditable');
+  var input = document.getElementById('threadTitleInput');
+  if (!h2 || !input) return;
+  input.value = h2.textContent;
+  input.style.display = 'none';
+  h2.style.display = 'block';
+}
+
+function saveTitle() {
+  var h2 = document.getElementById('threadTitleEditable');
+  var input = document.getElementById('threadTitleInput');
+  if (!h2 || !input) return;
+  var newTitle = input.value.trim();
+  if (!newTitle || newTitle === h2.textContent) {
+    cancelEditTitle();
+    return;
+  }
+  fetch('/chat/threads/<%= activeThread %>', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: newTitle })
+  }).then(function() {
+    h2.textContent = newTitle;
+    input.style.display = 'none';
+    h2.style.display = 'block';
+    // Update sidebar title too
+    var sidebar = document.querySelector('.thread-item.active .thread-title');
+    if (sidebar) sidebar.textContent = newTitle;
+  });
+}
+<% } %>
 </script>
 <%- include('partials/foot') %>

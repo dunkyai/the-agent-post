@@ -15,9 +15,11 @@ import {
 import {
   gmailCreateDraft,
   gmailSend,
+  gmailGetAttachment,
   getGoogleAccounts,
 } from "../services/google";
 import { getProvider, getApiKey } from "../services/ai";
+import { scanBuffer } from "../services/antivirus";
 
 // --- Types ---
 
@@ -58,7 +60,7 @@ export interface EmailThreadContext {
     body: string;
     timestamp: string;
     messageId: string;
-    attachments?: Array<{ filename: string; mimeType: string; size: number }>;
+    attachments?: Array<{ filename: string; mimeType: string; size: number; attachmentId: string }>;
   }>;
   ownEmail: string;
   replyMode: "draft" | "send";
@@ -168,13 +170,54 @@ export async function processIncomingEmail(ctx: EmailThreadContext): Promise<voi
         return;
       }
 
-      // If delivered/dismissed/failed but NEW message, start fresh triage
+      // If delivered/dismissed/failed but NEW message in thread
       if (
         existingState.state === "delivered" ||
         existingState.state === "dismissed" ||
         existingState.state === "not_a_request" ||
         existingState.state === "failed"
       ) {
+        // If the thread was previously "delivered" (AI responded), treat follow-ups
+        // as continuations — don't re-triage, go straight to processing.
+        // This handles the case where the AI asked for more info and the user replied
+        // with data but no explicit question.
+        if (existingState.state === "delivered") {
+          console.log(`[email-adapter] Follow-up in delivered thread ${threadId}, processing as continuation`);
+          upsertEmailThreadState(threadId, accountId, {
+            state: "processing",
+            latest_message_id: latestMessageId,
+            latest_sender: ctx.latestSender,
+            all_recipients: ctx.allRecipients,
+            message_id_header: ctx.messageIdHeader,
+            reply_mode: ctx.replyMode,
+          });
+          // Build structured request from previous triage + new context
+          // Auto-download attachments from the latest message
+          const latestMsg = ctx.threadMessages[ctx.threadMessages.length - 1];
+          let attachmentContent = "";
+          if (latestMsg?.attachments?.length) {
+            for (const att of latestMsg.attachments) {
+              attachmentContent += await downloadAndScanAttachment(latestMsg.messageId, att, ctx.accountId);
+            }
+          }
+
+          const prevTriage = existingState.triage_result ? JSON.parse(existingState.triage_result) : {};
+          const structured: StructuredRequest = {
+            original_sender: ctx.latestSender,
+            request: `Follow-up to previous request. The user provided additional information. Previous context: ${prevTriage.request_summary || "see thread"}. Process the new information and complete the original request.${attachmentContent}`,
+            context: prevTriage.thread_context_summary || "",
+            thread_subject: ctx.subject,
+            thread_participants: [ctx.latestSender],
+            delivery: { channel: "email", details: {} },
+            account_id: accountId,
+          };
+          const task = createEmailTask(ctx, structured);
+          upsertEmailThreadState(threadId, accountId, { task_id: task.task_id });
+          console.log(`[email-adapter] Continuation task ${task.task_id} created for thread ${threadId}`);
+          markGmailThreadProcessed(threadId, latestMessageId, accountId);
+          return;
+        }
+
         console.log(`[email-adapter] New message in previously processed thread ${threadId}, re-triaging`);
         upsertEmailThreadState(threadId, accountId, {
           state: "triaging",
@@ -326,7 +369,7 @@ async function triageEmail(
   ctx: EmailThreadContext,
   existingState?: EmailThreadStateRow
 ): Promise<TriageResult> {
-  const threadContext = buildThreadContext(ctx);
+  const threadContext = await buildThreadContext(ctx);
 
   // Build previous triage context if re-triaging
   let previousContext = "";
@@ -480,27 +523,89 @@ async function callTriageAI(
 
 // --- Thread Context Builder ---
 
-function buildThreadContext(ctx: EmailThreadContext): string {
+const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024; // 5MB
+const TEXT_MIME_TYPES = [
+  "text/plain", "text/csv", "text/html", "text/markdown",
+  "application/json", "application/xml", "text/xml",
+  "application/csv", "text/tab-separated-values",
+  "application/pdf",
+];
+
+async function downloadAndScanAttachment(
+  messageId: string,
+  attachment: { filename: string; mimeType: string; size: number; attachmentId: string },
+  accountId: string
+): Promise<string> {
+  // Size check
+  if (attachment.size > MAX_ATTACHMENT_SIZE) {
+    return `\n[Attachment: ${attachment.filename} — Unfortunately, I can't process this file because it exceeds the 5MB limit (${Math.round(attachment.size / 1024 / 1024)}MB).]`;
+  }
+
+  try {
+    const result = JSON.parse(await gmailGetAttachment(messageId, attachment.attachmentId, accountId));
+    if (result.error) {
+      return `\n[Attachment: ${attachment.filename} — Failed to download: ${result.error}]`;
+    }
+
+    // Get the raw bytes for virus scanning
+    const rawBytes = result.content_base64
+      ? Buffer.from(result.content_base64, "base64")
+      : Buffer.from(result.content || "", "utf-8");
+
+    // Virus scan
+    const scanResult = await scanBuffer(rawBytes, attachment.filename);
+    if (!scanResult.safe) {
+      console.error(`[email] Malware detected in attachment ${attachment.filename}: ${scanResult.threat}`);
+      return `\n[Attachment: ${attachment.filename} — BLOCKED: malware detected (${scanResult.threat})]`;
+    }
+
+    // Return text content
+    if (result.content) {
+      const content = result.content.length > 20000
+        ? result.content.slice(0, 20000) + "\n[... truncated ...]"
+        : result.content;
+      return `\n[Attachment: ${attachment.filename}]\n${content}`;
+    }
+
+    // For binary files we can't display, just note it was scanned
+    return `\n[Attachment: ${attachment.filename} (${attachment.mimeType}, ${Math.round(attachment.size / 1024)}KB) — downloaded and scanned, but content is binary. Use gmail_get_attachment to access it.]`;
+  } catch (err) {
+    return `\n[Attachment: ${attachment.filename} — Error: ${err instanceof Error ? err.message : "download failed"}]`;
+  }
+}
+
+async function buildThreadContext(ctx: EmailThreadContext): Promise<string> {
   const messages = ctx.threadMessages.slice(-MAX_THREAD_MESSAGES);
   // Reverse so newest is first
   const reversed = [...messages].reverse();
 
-  return reversed
-    .map((msg, i) => {
-      let body = msg.body;
-      if (body.length > MAX_MESSAGE_BODY_LENGTH) {
-        body = body.slice(0, MAX_MESSAGE_BODY_LENGTH) + "\n[... truncated ...]";
-      }
-      const attachmentInfo = msg.attachments?.length
-        ? `\nAttachments: ${msg.attachments.map(a => `${a.filename} (${a.mimeType}, ${Math.round(a.size / 1024)}KB)`).join(", ")}`
-        : "";
-      return `--- Message ${i + 1} of ${reversed.length}${i === 0 ? " (latest)" : ""} ---
-From: ${msg.from}
-Date: ${msg.timestamp}${attachmentInfo}
+  const parts: string[] = [];
+  for (let i = 0; i < reversed.length; i++) {
+    const msg = reversed[i];
+    let body = msg.body;
+    if (body.length > MAX_MESSAGE_BODY_LENGTH) {
+      body = body.slice(0, MAX_MESSAGE_BODY_LENGTH) + "\n[... truncated ...]";
+    }
 
-${body}`;
-    })
-    .join("\n\n");
+    // Auto-download attachments on the latest message
+    let attachmentContent = "";
+    if (i === 0 && msg.attachments?.length) {
+      for (const att of msg.attachments) {
+        attachmentContent += await downloadAndScanAttachment(msg.messageId, att, ctx.accountId);
+      }
+    } else if (msg.attachments?.length) {
+      // Older messages: just list metadata
+      attachmentContent = `\nAttachments: ${msg.attachments.map(a => `${a.filename} (${a.mimeType}, ${Math.round(a.size / 1024)}KB)`).join(", ")}`;
+    }
+
+    parts.push(`--- Message ${i + 1} of ${reversed.length}${i === 0 ? " (latest)" : ""} ---
+From: ${msg.from}
+Date: ${msg.timestamp}${attachmentContent}
+
+${body}`);
+  }
+
+  return parts.join("\n\n");
 }
 
 // --- Build Structured Request ---
@@ -651,7 +756,15 @@ INSTRUCTIONS:
 - ${deliveryInstructions}
 - You have access to all your tools. Use them as needed to fulfill the request.
 - Do NOT send any emails yourself — your output text will be delivered automatically.
-- Do NOT create Gmail drafts — the system will handle delivery.`;
+- Do NOT create Gmail drafts — the system will handle delivery.
+
+CRITICAL OUTPUT FORMAT:
+Your final response MUST be a JSON object with this structure:
+{"email_body": "your response text here", "summary": "one-line summary of what you did"}
+
+The "email_body" field is EXACTLY what will be sent to the user — no narration, no thought process, no tool descriptions. Write it as a professional email reply.
+The "summary" field is for internal logging only.
+Do NOT include any text outside the JSON object.`;
 
   const task = createTask({
     raw_input: structuredRequest.request,
@@ -711,8 +824,73 @@ export async function onEmailTaskComplete(task: Task): Promise<void> {
       return;
     }
 
-    const result = task.output.result || "";
+    const rawResult = task.output.result || "";
     const channel = delivery?.channel || "email";
+
+    // Extract email_body from structured JSON output
+    // Falls back to raw result if JSON parsing fails
+    let result = rawResult;
+    try {
+      // Try to find JSON in the response (may have markdown code fences)
+      const jsonMatch = rawResult.match(/\{[\s\S]*"email_body"[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.email_body) {
+          result = parsed.email_body;
+          console.log(`[email-adapter] Extracted email_body from structured output (summary: ${parsed.summary || "none"})`);
+        }
+      }
+    } catch {
+      // JSON parse failed — use raw result
+      console.log(`[email-adapter] Could not parse structured output — using raw response`);
+    }
+
+    // Post-process to strip known narration patterns
+    const { postProcessResponse } = require("../services/post-process");
+    result = postProcessResponse(result);
+
+    // Use Haiku to extract clean email content — catches narration that regex misses
+    try {
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (apiKey && result.length > 20) {
+        const cleanRes = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 2000,
+            messages: [{
+              role: "user",
+              content: `Extract ONLY the email reply from the following AI response. Remove any:
+- Internal narration ("Let me check...", "Now I need to...", "I'll process...")
+- Tool descriptions or thought process
+- Technical explanations about what the AI is doing
+- Anything that isn't the actual message to send to the recipient
+
+If the entire response is narration with no actual email content, write a brief professional response that addresses the user's request based on the context.
+
+AI response to clean:
+${result}`,
+            }],
+          }),
+        });
+        if (cleanRes.ok) {
+          const cleanData: any = await cleanRes.json();
+          const cleaned = (cleanData.content?.[0]?.text || "").trim();
+          if (cleaned && cleaned.length > 10) {
+            console.log(`[email-adapter] Haiku cleaned email body (${result.length} → ${cleaned.length} chars)`);
+            result = cleaned;
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[email-adapter] Haiku cleaning failed:", err instanceof Error ? err.message : err);
+      // Non-critical — fall through with regex-cleaned version
+    }
 
     // Check if the AI already sent an email or created a draft during task execution.
     // If so, skip adapter-level delivery to avoid duplicate emails.

@@ -100,6 +100,21 @@ export function postProcessResponse(text: string): string {
     processed = rule.apply(processed);
   }
 
+  // Strip AI narration / thought process lines (should never be in user-facing responses)
+  const narrationPatterns = [
+    /^(Now )?(let me|I('ll| will| need to| should| can)) (now )?(save|download|extract|open|read|check|look|search|find|get|fetch|process|analyze|review|examine|convert|parse|access|retrieve|pull up|take a look)\b/i,
+    /^(First|Next|Then|Now),? (I('ll| will|'ll| need to) |let me )/i,
+    /^(Let me |I('ll| will) )(try|attempt|go ahead|proceed|start|begin|work on|handle)\b/i,
+    /^(Now )?I('m going to| am going to| will now| shall)\b/i,
+    /^(Alright|OK|Okay),? (let me|I('ll| will))\b/i,
+  ];
+  const lines = processed.split("\n");
+  processed = lines.filter(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return true; // keep blank lines
+    return !narrationPatterns.some(p => p.test(trimmed));
+  }).join("\n");
+
   // Apply phrase blocklist (case-insensitive replacement)
   for (const phrase of blockedPhrases) {
     const regex = new RegExp(`\\b${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
