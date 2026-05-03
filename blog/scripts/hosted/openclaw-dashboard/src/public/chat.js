@@ -593,7 +593,7 @@
   scrollToBottom();
 
   // Check for in-flight tasks on page load (resume after navigation)
-  fetch("/chat/pending")
+  fetch("/chat/pending?thread=" + encodeURIComponent(window.__chatConfig?.threadId || ""))
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (!data.done) {
