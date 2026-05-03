@@ -116,7 +116,8 @@ router.get("/chat", (req: Request, res: Response) => {
   // Refresh threads after re-titling (async titles will update on next load)
   threads = getChatThreads();
 
-  res.render("chat", { messages, agentName, userName, threads, activeThread: threadId || null });
+  const activeThreadTitle = threadId ? (threads.find(t => t.external_id === `chat:${threadId}`)?.title || null) : null;
+  res.render("chat", { messages, agentName, userName, threads, activeThread: threadId || null, activeThreadTitle });
 });
 
 // POST: submit a message — creates a task, returns immediately
