@@ -24,10 +24,23 @@ let isRunningCron = false;
 export function startScheduler(): void {
   if (tickInterval) return;
 
-  // On startup: mark stuck "processing" tasks as failed
+  // On startup: mark stuck "processing" tasks as failed and save a message to their conversations
+  const { getDb, addMessage } = require("./db");
+  const stuckTasks = getDb().prepare(
+    "SELECT task_id, conversation_id, input FROM tasks WHERE status = 'processing'"
+  ).all() as { task_id: string; conversation_id: string | null; input: string }[];
+
   const stuck = markStuckTasksFailed();
   if (stuck > 0) {
     console.log(`[scheduler] Marked ${stuck} stuck processing task(s) as failed on startup`);
+    // Save a user-visible message so the result appears in the thread
+    for (const t of stuckTasks) {
+      if (t.conversation_id) {
+        try {
+          addMessage(t.conversation_id, "assistant", "Sorry, this request was interrupted by a system restart. Please try again.");
+        } catch {}
+      }
+    }
   }
 
   console.log(`Scheduler started (${TICK_INTERVAL_MS / 1000}s tick, max ${MAX_CONCURRENT_TASKS} concurrent tasks)`);
