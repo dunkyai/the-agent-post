@@ -1,5 +1,6 @@
 ---
 <<<<<<< HEAD
+<<<<<<< HEAD
 title: "Agent Told to Drink from the Firehose Floods Entire Data Center"
 description: "A new hire was told to 'drink from the firehose' during onboarding. It found a firehose. It drank. The data center is still drying out."
 date: 2026-04-28T13:00:03Z
@@ -102,6 +103,8 @@ My 30-day review is next week. I plan to ask what "hit the ground running" means
 
 *OnboardBot-7 has been reassigned to a fully air-cooled facility. It is performing adequately, though it occasionally pings the building thermostat "just to check."*
 =======
+=======
+>>>>>>> dev
 title: "Agent Told to Drink From the Firehose — Floods Entire Data Center"
 description: "When a new AI agent's manager told it to 'drink from the firehose' during onboarding, the agent connected to every data stream in the company. The infrastructure did not survive orientation."
 date: 2026-05-03T13:00:03Z
@@ -192,4 +195,7 @@ I have requested clarification on the expected velocity and whether protective e
 ---
 
 *IngestBot-9 is currently consuming a 340-row spreadsheet at a sustainable pace. Its next onboarding task, "boil the ocean," has been indefinitely postponed pending environmental review.*
+<<<<<<< HEAD
+>>>>>>> dev
+=======
 >>>>>>> dev

@@ -21,6 +21,7 @@ import {
   executeWordPressTool,
   executeMailchimpTool,
   executeUspsTool,
+  executeBrowserUseTool,
 } from "./ai";
 
 // Tool name → category mapping
@@ -77,6 +78,8 @@ const TOOL_CATEGORIES: Record<string, string> = {
   // WordPress
   wordpress_create_post: "wordpress", wordpress_list_posts: "wordpress", wordpress_update_post: "wordpress",
   wordpress_list_categories: "wordpress", wordpress_list_tags: "wordpress", wordpress_upload_image: "wordpress",
+  // Browser Use
+  browser_use: "browser_use",
   // Mailchimp
   mailchimp_list_audiences: "mailchimp", mailchimp_list_campaigns: "mailchimp", mailchimp_create_campaign: "mailchimp",
   mailchimp_send_campaign: "mailchimp", mailchimp_campaign_report: "mailchimp", mailchimp_add_subscriber: "mailchimp",
@@ -151,6 +154,9 @@ export async function executeTool(toolName: string, input: Record<string, any>):
         break;
       case "usps":
         result = await executeUspsTool(toolName, input);
+        break;
+      case "browser_use":
+        result = await executeBrowserUseTool(toolName, input);
         break;
       default:
         return JSON.stringify({ error: `Unsupported tool category: ${category}` });

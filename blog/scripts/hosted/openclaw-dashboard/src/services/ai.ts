@@ -82,6 +82,7 @@ import {
   isGammaRunning,
   gammaCreatePresentation, gammaGetGeneration, gammaListThemes, gammaListFolders,
 } from "./gamma";
+import { isBrowserUseAvailable, browserUseRun } from "./browser-use";
 import {
   isWordPressRunning, getWordPressSiteName,
   wordPressCreatePost, wordPressListPosts, wordPressUpdatePost,
@@ -2335,6 +2336,38 @@ async function executeWordPressTool(toolName: string, input: any): Promise<strin
 
 export { executeWordPressTool };
 
+// --- Browser Use Tool (AI-controlled browser for form filling) ---
+
+const BROWSER_USE_TOOLS = [
+  {
+    name: "browser_use",
+    description: "Use an AI-controlled browser to interact with a website. Best for: filling out forms, clicking through multi-step flows, handling dynamic pages, or any task where you need to interact with a website like a human would. Provide clear natural language instructions for what to do. This is slower and more expensive than browse_webpage — only use it when you need to fill forms, click buttons, or navigate complex flows.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        task: { type: "string", description: "Natural language description of what to do on the website. Be specific about what to fill in, click, or navigate." },
+        url: { type: "string", description: "Starting URL to navigate to (optional — can also be included in the task)" },
+      },
+      required: ["task"],
+    },
+  },
+];
+
+async function executeBrowserUseTool(toolName: string, input: any): Promise<string> {
+  try {
+    switch (toolName) {
+      case "browser_use":
+        return await browserUseRun({ task: input.task, url: input.url });
+      default:
+        return JSON.stringify({ error: `Unknown Browser Use tool: ${toolName}` });
+    }
+  } catch (err) {
+    return JSON.stringify({ error: err instanceof Error ? err.message : "Browser Use operation failed" });
+  }
+}
+
+export { executeBrowserUseTool };
+
 // --- Public Google Doc Tool (no OAuth needed) ---
 
 const PUBLIC_GDOC_TOOLS = [
@@ -3303,6 +3336,7 @@ const TOOL_STATUS_MAP: Record<string, string | ((input: any) => string)> = {
   wordpress_list_categories: "Fetching WordPress categories...",
   wordpress_list_tags: "Fetching WordPress tags...",
   wordpress_upload_image: "Uploading image to WordPress...",
+  browser_use: "Using browser to interact with website...",
 };
 
 // --- Anthropic API with tool use loop ---
@@ -3366,6 +3400,7 @@ export async function callAnthropic(
   if (isAgreeRunning()) tools.push(...AGREE_TOOLS);
   if (isGammaRunning()) tools.push(...GAMMA_TOOLS);
   if (isWordPressRunning()) tools.push(...WORDPRESS_TOOLS);
+  if (isBrowserUseAvailable()) tools.push(...BROWSER_USE_TOOLS);
 
   // Conditionally add Google tools based on connected services
   const googleServices = getConnectedServices();
@@ -3615,6 +3650,8 @@ export async function callAnthropic(
           result = await executeGammaTool(toolBlock.name, toolBlock.input);
         } else if (wordpressToolNames.includes(toolBlock.name)) {
           result = await executeWordPressTool(toolBlock.name, toolBlock.input);
+        } else if (toolBlock.name === "browser_use") {
+          result = await executeBrowserUseTool(toolBlock.name, toolBlock.input);
         } else {
           result = executeSchedulingTool(toolBlock.name, toolBlock.input, sourceContext);
         }
@@ -3780,6 +3817,7 @@ export async function callOpenAI(
   if (isAgreeRunning()) customTools.push(...AGREE_TOOLS);
   if (isGammaRunning()) customTools.push(...GAMMA_TOOLS);
   if (isWordPressRunning()) customTools.push(...WORDPRESS_TOOLS);
+  if (isBrowserUseAvailable()) customTools.push(...BROWSER_USE_TOOLS);
   const googleServices = getConnectedServices();
   if (googleServices) {
     if (googleServices.includes("gmail")) {
@@ -3965,6 +4003,8 @@ export async function callOpenAI(
           result = await executeGammaTool(toolName, toolInput);
         } else if (wordpressToolNames.includes(toolName)) {
           result = await executeWordPressTool(toolName, toolInput);
+        } else if (toolName === "browser_use") {
+          result = await executeBrowserUseTool(toolName, toolInput);
         } else {
           result = executeSchedulingTool(toolName, toolInput, sourceContext);
         }
@@ -4490,6 +4530,19 @@ Workflow for creating a post:
 
 IMPORTANT: Always create as draft first unless the user explicitly asks to publish immediately.`;
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${wpContext}` : wpContext;
+  }
+
+  // Inject Browser Use context
+  if (isBrowserUseAvailable()) {
+    const buContext = `You have access to the browser_use tool for AI-controlled browser interactions.
+
+WHEN TO USE browser_use vs browse_webpage/browser_click:
+- Use browse_webpage for simple page reading and content extraction
+- Use browser_use for: filling out forms, submitting applications, multi-step web flows, sites that block bots (like Google Forms), any task requiring human-like browser interaction
+- IMPORTANT: If a task involves filling out a form or submitting data on a website, ALWAYS use browser_use — do NOT attempt with browse_webpage/browser_click/browser_type as these will be blocked by most form sites
+
+The browser_use tool takes a natural language task description. Be specific about what to fill in and click.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${buContext}` : buContext;
   }
 
   // Inject long-term memories (skip for scheduled jobs to prevent memory contamination)
