@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "adm-zip": "^0.5.17",
     "better-sqlite3": "^11.7.0",
     "clamscan": "^2.4.0",
     "cookie-parser": "^1.4.7",
@@ -22,6 +23,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
     "@types/better-sqlite3": "^7.6.12",
     "@types/cookie-parser": "^1.4.7",
     "@types/express": "^5.0.0",

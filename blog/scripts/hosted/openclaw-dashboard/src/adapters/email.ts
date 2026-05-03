@@ -192,12 +192,14 @@ export async function processIncomingEmail(ctx: EmailThreadContext): Promise<voi
             reply_mode: ctx.replyMode,
           });
           // Build structured request from previous triage + new context
-          // Auto-download attachments from the latest message
-          const latestMsg = ctx.threadMessages[ctx.threadMessages.length - 1];
+          // Auto-download attachments from ALL messages in the thread (not just latest)
+          // so the AI has access to attachments from earlier messages
           let attachmentContent = "";
-          if (latestMsg?.attachments?.length) {
-            for (const att of latestMsg.attachments) {
-              attachmentContent += await downloadAndScanAttachment(latestMsg.messageId, att, ctx.accountId);
+          for (const msg of ctx.threadMessages) {
+            if (msg.attachments?.length) {
+              for (const att of msg.attachments) {
+                attachmentContent += await downloadAndScanAttachment(msg.messageId, att, ctx.accountId);
+              }
             }
           }
 
@@ -565,6 +567,32 @@ async function downloadAndScanAttachment(
         ? result.content.slice(0, 20000) + "\n[... truncated ...]"
         : result.content;
       return `\n[Attachment: ${attachment.filename}]\n${content}`;
+    }
+
+    // Extract text from .docx files (ZIP containing XML)
+    const isDocx = attachment.filename?.toLowerCase().endsWith(".docx") ||
+      attachment.mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    if (isDocx && rawBytes.length > 0) {
+      try {
+        const AdmZip = require("adm-zip");
+        const zip = new AdmZip(rawBytes);
+        const docXml = zip.readAsText("word/document.xml");
+        if (docXml) {
+          // Strip XML tags, keep text
+          let text = docXml
+            .replace(/<w:p[^>]*>/g, "\n")
+            .replace(/<w:tab\/>/g, "\t")
+            .replace(/<[^>]+>/g, "")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
+          if (text.length > 20000) {
+            text = text.slice(0, 20000) + "\n[... truncated ...]";
+          }
+          return `\n[Attachment: ${attachment.filename}]\n${text}`;
+        }
+      } catch (docxErr) {
+        console.error(`[email] Failed to parse docx ${attachment.filename}:`, docxErr);
+      }
     }
 
     // For binary files we can't display, just note it was scanned
