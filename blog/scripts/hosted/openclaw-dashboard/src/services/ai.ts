@@ -4532,6 +4532,19 @@ IMPORTANT: Always create as draft first unless the user explicitly asks to publi
     systemPrompt = systemPrompt ? `${systemPrompt}\n\n${wpContext}` : wpContext;
   }
 
+  // Inject Browser Use context
+  if (isBrowserUseAvailable()) {
+    const buContext = `You have access to the browser_use tool for AI-controlled browser interactions.
+
+WHEN TO USE browser_use vs browse_webpage/browser_click:
+- Use browse_webpage for simple page reading and content extraction
+- Use browser_use for: filling out forms, submitting applications, multi-step web flows, sites that block bots (like Google Forms), any task requiring human-like browser interaction
+- IMPORTANT: If a task involves filling out a form or submitting data on a website, ALWAYS use browser_use — do NOT attempt with browse_webpage/browser_click/browser_type as these will be blocked by most form sites
+
+The browser_use tool takes a natural language task description. Be specific about what to fill in and click.`;
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${buContext}` : buContext;
+  }
+
   // Inject long-term memories (skip for scheduled jobs to prevent memory contamination)
   if (!options?.skipMemories) {
     try {
