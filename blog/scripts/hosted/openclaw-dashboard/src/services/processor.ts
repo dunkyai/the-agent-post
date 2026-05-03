@@ -1,5 +1,4 @@
 import type { Task } from "../types/task";
-import { trackTask } from "./agnost";
 import {
   getTaskById,
   updateTaskStatus,
@@ -368,27 +367,6 @@ export async function processTask(
         tool_calls_count: toolCallsCount,
       }),
     });
-
-    // Track in Agnost (fire and forget)
-    const execLog = require("./task").getTaskExecutionLog(taskId);
-    trackTask({
-      taskId,
-      sessionId: task.input.metadata?.sessionId as string || taskId,
-      source: task.input.source_channel || "unknown",
-      agentName: getSetting("agent_name") || undefined,
-      userInput: task.input.raw_input || "",
-      aiOutput: response.content || "",
-      success: !hallucinationCaught,
-      durationMs,
-      model,
-      toolCalls: execLog.map((e: any) => ({
-        tool: e.tool,
-        input: e.input,
-        output: e.output?.slice(0, 500),
-        durationMs: e.duration_ms,
-        success: !e.output?.includes('"error"'),
-      })),
-    }).catch(() => {});
 
     return getTaskById(taskId)!;
   } catch (err: any) {
