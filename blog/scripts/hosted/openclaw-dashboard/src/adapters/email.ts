@@ -567,6 +567,32 @@ async function downloadAndScanAttachment(
       return `\n[Attachment: ${attachment.filename}]\n${content}`;
     }
 
+    // Extract text from .docx files (ZIP containing XML)
+    const isDocx = attachment.filename?.toLowerCase().endsWith(".docx") ||
+      attachment.mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    if (isDocx && rawBytes.length > 0) {
+      try {
+        const AdmZip = require("adm-zip");
+        const zip = new AdmZip(rawBytes);
+        const docXml = zip.readAsText("word/document.xml");
+        if (docXml) {
+          // Strip XML tags, keep text
+          let text = docXml
+            .replace(/<w:p[^>]*>/g, "\n")
+            .replace(/<w:tab\/>/g, "\t")
+            .replace(/<[^>]+>/g, "")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
+          if (text.length > 20000) {
+            text = text.slice(0, 20000) + "\n[... truncated ...]";
+          }
+          return `\n[Attachment: ${attachment.filename}]\n${text}`;
+        }
+      } catch (docxErr) {
+        console.error(`[email] Failed to parse docx ${attachment.filename}:`, docxErr);
+      }
+    }
+
     // For binary files we can't display, just note it was scanned
     return `\n[Attachment: ${attachment.filename} (${attachment.mimeType}, ${Math.round(attachment.size / 1024)}KB) — downloaded and scanned, but content is binary. Use gmail_get_attachment to access it.]`;
   } catch (err) {
