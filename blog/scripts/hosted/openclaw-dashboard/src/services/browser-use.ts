@@ -42,7 +42,6 @@ export async function browserUseRun(input: {
       },
       body: JSON.stringify({
         task: fullTask,
-        model: input.model || "claude-sonnet-4-6",
         keepAlive: false,
       }),
     });
