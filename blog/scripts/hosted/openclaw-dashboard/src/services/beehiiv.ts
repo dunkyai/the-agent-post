@@ -148,14 +148,24 @@ export async function beehiivCreateDraft(input: {
 export async function beehiivListPosts(params?: {
   status?: string;
   limit?: number;
+  page?: number;
+  order_by?: string;
+  direction?: string;
+  content_tags?: string[];
 }): Promise<string> {
   if (!beehiivConfig) return JSON.stringify({ error: "Beehiiv is not connected" });
 
   try {
     const query = new URLSearchParams();
     if (params?.status) query.set("status", params.status);
-    query.set("limit", String(Math.min(params?.limit || 20, 50)));
-    query.set("expand[]", "stats");
+    query.set("limit", String(Math.min(params?.limit || 20, 100)));
+    if (params?.page) query.set("page", String(params.page));
+    query.set("order_by", params?.order_by || "publish_date");
+    query.set("direction", params?.direction || "desc");
+    if (params?.content_tags?.length) {
+      for (const tag of params.content_tags) query.append("content_tags[]", tag);
+    }
+    query.append("expand[]", "stats");
 
     const res = await fetch(
       `${BEEHIIV_API}/publications/${beehiivConfig.publication_id}/posts?${query.toString()}`,
@@ -189,6 +199,8 @@ export async function beehiivListPosts(params?: {
       posts,
       count: posts.length,
       total: json.total_results,
+      page: json.page || params?.page || 1,
+      total_pages: json.total_pages,
     });
   } catch (err) {
     return JSON.stringify({ error: err instanceof Error ? err.message : "Failed to list posts" });
