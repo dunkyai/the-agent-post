@@ -37,7 +37,7 @@ export async function browserUseRun(input: {
     const createRes = await fetch(`${BROWSER_USE_API}/sessions`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
+        "X-Browser-Use-API-Key": apiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -70,7 +70,7 @@ export async function browserUseRun(input: {
       await new Promise(r => setTimeout(r, pollInterval));
 
       const pollRes = await fetch(`${BROWSER_USE_API}/sessions/${sessionId}`, {
-        headers: { "Authorization": `Bearer ${apiKey}` },
+        headers: { "X-Browser-Use-API-Key": apiKey },
       });
 
       if (!pollRes.ok) continue;
@@ -112,7 +112,7 @@ export async function browserUseRun(input: {
     await fetch(`${BROWSER_USE_API}/sessions/${sessionId}/stop`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
+        "X-Browser-Use-API-Key": apiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ strategy: "session" }),
