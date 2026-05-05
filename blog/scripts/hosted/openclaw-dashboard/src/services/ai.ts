@@ -1592,12 +1592,16 @@ const BEEHIIV_TOOLS = [
   },
   {
     name: "beehiiv_list_posts",
-    description: "List newsletter posts from Beehiiv with optional status filter.",
+    description: "List newsletter posts from Beehiiv. Supports pagination — use page parameter to find older posts. Results are sorted by publish date (newest first) by default.",
     input_schema: {
       type: "object" as const,
       properties: {
         status: { type: "string", enum: ["draft", "confirmed", "archived"], description: "Filter by post status (default: all)" },
-        limit: { type: "number", description: "Max posts to return (default: 20, max: 50)" },
+        limit: { type: "number", description: "Max posts per page (default: 20, max: 100)" },
+        page: { type: "number", description: "Page number for pagination (default: 1). Use total_pages from the response to know how many pages exist." },
+        order_by: { type: "string", enum: ["publish_date", "created", "displayed_date"], description: "Sort field (default: publish_date)" },
+        direction: { type: "string", enum: ["asc", "desc"], description: "Sort direction (default: desc — newest first)" },
+        content_tags: { type: "array", items: { type: "string" }, description: "Filter by content tags" },
       },
     },
   },
@@ -1634,6 +1638,10 @@ export async function executeBeehiivTool(toolName: string, input: any): Promise<
         return await beehiivListPosts({
           status: input.status,
           limit: input.limit,
+          page: input.page,
+          order_by: input.order_by,
+          direction: input.direction,
+          content_tags: input.content_tags,
         });
       case "beehiiv_get_post":
         return await beehiivGetPost(input.post_id);
