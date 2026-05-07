@@ -338,11 +338,16 @@ router.post("/chat/upload", upload.array("files", 10), async (req: Request, res:
 router.get("/chat/pending", (req: Request, res: Response) => {
   const sessionId = req.cookies?.openclaw_session || "anon";
   const threadId = req.query.thread as string | undefined;
-  const result = pollChatStatus(sessionId);
-  if (!result.done || result.status !== "idle") {
-    res.json(result);
-    return;
+
+  // Only use in-memory poll shortcut when no thread filter — it doesn't track threads
+  if (!threadId) {
+    const result = pollChatStatus(sessionId);
+    if (!result.done || result.status !== "idle") {
+      res.json(result);
+      return;
+    }
   }
+
   // Check DB for processing/pending tasks from chat — filter by thread if specified
   const db = require("../services/db");
   let query = "SELECT task_id, status FROM tasks WHERE active = 1 AND status IN ('pending', 'processing') AND input LIKE '%\"source_channel\":\"chat\"%'";
