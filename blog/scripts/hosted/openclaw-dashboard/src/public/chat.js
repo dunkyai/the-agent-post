@@ -596,17 +596,11 @@
   fetch("/chat/pending?thread=" + encodeURIComponent(window.__chatConfig?.threadId || ""))
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      if (!data.done) {
+      if (!data.done && data.taskId) {
         console.log("[chat] Resuming in-flight task:", data.taskId);
-        input.disabled = true;
-        sendBtn.disabled = true;
-        sendBtn.textContent = "...";
-        var thinking = document.createElement("div");
-        thinking.className = "chat-message assistant thinking-indicator";
-        thinking.innerHTML = '<div class="avatar agent-avatar" title="' + agentName + '"><img src="/mascot.webp" alt="' + agentName + '" /></div><div class="bubble thinking-bubble"><span class="spinner"></span> <span class="thinking-text">' + (data.status || "Processing...") + '</span></div>';
-        messages.appendChild(thinking);
-        scrollToBottom();
-        pollForResult();
+        var thinking = createThinkingIndicator(data.taskId);
+        taskQueue.push({ taskId: data.taskId, thinkingEl: thinking, result: null });
+        pollForTask(data.taskId, thinking);
       }
     })
     .catch(function() {});
