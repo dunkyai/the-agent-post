@@ -69,8 +69,8 @@ export async function createContainer(opts: {
         "/home/openclaw/.doppler": "rw,noexec,nosuid,size=1048576",
       },
       Ulimits: [
-        { Name: "nofile", Soft: 4096, Hard: 8192 },
-        { Name: "nproc", Soft: 2048, Hard: 4096 },
+        { Name: "nofile", Soft: 8192, Hard: 16384 },
+        { Name: "nproc", Soft: 4096, Hard: 8192 },
       ],
       NetworkMode: `openclaw-net-${opts.name}`,
       ExtraHosts: ["host.docker.internal:host-gateway"],
