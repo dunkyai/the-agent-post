@@ -632,11 +632,14 @@
       .sidebar-brand h1 { font-size: 16px; }
       .sidebar-nav { display: flex; padding: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; flex: 1; white-space: nowrap; scrollbar-width: none; }
       .sidebar-nav::-webkit-scrollbar { display: none; }
-      .sidebar-nav a { padding: 12px 14px; font-size: 13px; flex-shrink: 0; }
+      .sidebar-nav a { padding: 12px 10px; font-size: 12px; flex-shrink: 0; }
       .sidebar-footer { padding: 8px 16px; border-top: none; flex-shrink: 0; }
-      .btn-logout { padding: 4px 12px; }
-      .main { padding: 20px 16px; }
+      .btn-logout { padding: 4px 12px; font-size: 12px; }
+      .main { padding: 12px 8px; overflow-x: hidden; }
       .integration-grid { grid-template-columns: 1fr; }
+      .chat-message .bubble { max-width: calc(100vw - 80px); }
+      .chat-container { overflow: hidden; }
+      .chat-messages { padding: 12px 8px; }
     }
 
     /* Tool call visibility in chat */
